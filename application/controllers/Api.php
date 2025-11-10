@@ -112,8 +112,26 @@ class Api extends CI_Controller {
         
         $token = null;
 
-        // Try to get token from Authorization header
+        // Try multiple methods to get Authorization header (Apache compatibility)
+        // Method 1: Direct HTTP_AUTHORIZATION
         $auth_header = $this->input->server('HTTP_AUTHORIZATION');
+        
+        // Method 2: REDIRECT_HTTP_AUTHORIZATION (Apache sometimes uses this)
+        if (!$auth_header) {
+            $auth_header = $this->input->server('REDIRECT_HTTP_AUTHORIZATION');
+        }
+        
+        // Method 3: From $_SERVER directly
+        if (!$auth_header && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $auth_header = $_SERVER['HTTP_AUTHORIZATION'];
+        }
+        
+        // Method 4: From $_SERVER REDIRECT
+        if (!$auth_header && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $auth_header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        }
+        
+        // Extract token from header
         if ($auth_header && preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
             $token = $matches[1];
         }
@@ -128,8 +146,22 @@ class Api extends CI_Controller {
                 }
             }
         }
+        
+        // Final fallback: check $_SERVER for Authorization
+        if (!$token && isset($_SERVER['Authorization'])) {
+            $auth_header = $_SERVER['Authorization'];
+            if (preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
+                $token = $matches[1];
+            }
+        }
 
         if (!$token) {
+            // Log for debugging (remove in production)
+            log_message('debug', 'No token found. Headers: ' . print_r($this->input->request_headers(), true));
+            log_message('debug', 'SERVER vars: ' . print_r(array(
+                'HTTP_AUTHORIZATION' => isset($_SERVER['HTTP_AUTHORIZATION']) ? 'SET' : 'NOT SET',
+                'REDIRECT_HTTP_AUTHORIZATION' => isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? 'SET' : 'NOT SET',
+            ), true));
             $this->error('Token not provided', 401);
             return false;
         }

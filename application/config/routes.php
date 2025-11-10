@@ -61,3 +61,6 @@ $route['api/auth/login'] = 'auth/login';
 $route['api/auth/logout'] = 'auth/logout';
 $route['api/patients'] = 'patients/index';
 $route['api/patients/(:num)'] = 'patients/get/$1';
+$route['api/doctors'] = 'doctors/index';
+$route['api/doctors/(:num)'] = 'doctors/get/$1';
+$route['api/doctors/(:num)/schedule'] = 'doctors/schedule/$1';

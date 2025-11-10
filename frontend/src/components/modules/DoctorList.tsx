@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -14,97 +14,85 @@ import {
   Clock,
   Users,
   Star,
-  Stethoscope
+  Stethoscope,
+  Loader2
 } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { api, Doctor } from '../../services/api';
+import { DoctorSchedule } from './DoctorSchedule';
 
-interface Doctor {
-  id: string;
-  name: string;
-  specialty: string;
-  phone: string;
-  email: string;
-  experience: number;
-  patients: number;
-  rating: number;
-  status: 'Available' | 'Busy' | 'Off Duty';
-  schedule: string;
+interface DoctorListProps {
+  onViewDoctor?: (doctorId: string) => void;
+  onAddDoctor?: () => void;
+  onEditDoctor?: (doctorId: string) => void;
 }
 
-const mockDoctors: Doctor[] = [
-  {
-    id: 'D001',
-    name: 'Dr. Michael Chen',
-    specialty: 'Cardiology',
-    phone: '+1 234-567-1001',
-    email: 'michael.chen@hospital.com',
-    experience: 15,
-    patients: 245,
-    rating: 4.8,
-    status: 'Available',
-    schedule: '9:00 AM - 5:00 PM'
-  },
-  {
-    id: 'D002',
-    name: 'Dr. Sarah Williams',
-    specialty: 'Pediatrics',
-    phone: '+1 234-567-1002',
-    email: 'sarah.williams@hospital.com',
-    experience: 12,
-    patients: 189,
-    rating: 4.9,
-    status: 'Busy',
-    schedule: '8:00 AM - 4:00 PM'
-  },
-  {
-    id: 'D003',
-    name: 'Dr. Robert Johnson',
-    specialty: 'Orthopedics',
-    phone: '+1 234-567-1003',
-    email: 'robert.johnson@hospital.com',
-    experience: 20,
-    patients: 312,
-    rating: 4.7,
-    status: 'Available',
-    schedule: '10:00 AM - 6:00 PM'
-  },
-  {
-    id: 'D004',
-    name: 'Dr. Emily Davis',
-    specialty: 'Dermatology',
-    phone: '+1 234-567-1004',
-    email: 'emily.davis@hospital.com',
-    experience: 8,
-    patients: 156,
-    rating: 4.6,
-    status: 'Off Duty',
-    schedule: '9:00 AM - 3:00 PM'
-  },
-  {
-    id: 'D005',
-    name: 'Dr. James Wilson',
-    specialty: 'Neurology',
-    phone: '+1 234-567-1005',
-    email: 'james.wilson@hospital.com',
-    experience: 18,
-    patients: 278,
-    rating: 4.9,
-    status: 'Available',
-    schedule: '8:00 AM - 5:00 PM'
-  }
-];
-
-export function DoctorList() {
+export function DoctorList({ onViewDoctor, onAddDoctor, onEditDoctor }: DoctorListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
 
-  const filteredDoctors = mockDoctors.filter(doctor => {
-    const matchesSearch = doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doctor.specialty.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doctor.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || doctor.status.toLowerCase().replace(' ', '') === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  useEffect(() => {
+    loadDoctors();
+  }, [searchTerm, filterStatus]);
+
+  const loadDoctors = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const filters: { search?: string; status?: string } = {};
+      if (searchTerm) filters.search = searchTerm;
+      if (filterStatus !== 'all') {
+        // Map frontend filter values to backend status values
+        const statusMap: Record<string, string> = {
+          'available': 'Available',
+          'busy': 'Busy',
+          'offduty': 'Off Duty'
+        };
+        filters.status = statusMap[filterStatus] || filterStatus;
+      }
+      
+      const data = await api.getDoctors(filters);
+      setDoctors(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load doctors');
+      console.error('Error loading doctors:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleView = (doctor: Doctor) => {
+    if (onViewDoctor) {
+      onViewDoctor(doctor.id.toString());
+    }
+  };
+
+  const handleEdit = (doctor: Doctor) => {
+    if (onEditDoctor) {
+      onEditDoctor(doctor.id.toString());
+    }
+  };
+
+  const handleAdd = () => {
+    if (onAddDoctor) {
+      onAddDoctor();
+    }
+  };
+
+  const handleSchedule = (doctor: Doctor) => {
+    setSelectedDoctor(doctor);
+    setShowScheduleDialog(true);
+  };
+
+  const handleScheduleSuccess = () => {
+    setShowScheduleDialog(false);
+    setSelectedDoctor(null);
+    loadDoctors();
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -132,11 +120,27 @@ export function DoctorList() {
     ));
   };
 
+  const formatTime = (time: string) => {
+    if (!time) return 'N/A';
+    try {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour % 12 || 12;
+      return `${displayHour}:${minutes} ${ampm}`;
+    } catch {
+      return time;
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl text-gray-900">Doctor Management</h1>
-        <Button className="bg-blue-500 hover:bg-blue-600">
+        <Button 
+          className="bg-blue-500 hover:bg-blue-600"
+          onClick={handleAdd}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add Doctor
         </Button>
@@ -193,98 +197,150 @@ export function DoctorList() {
         </CardContent>
       </Card>
 
+      {/* Error Message */}
+      {error && (
+        <Card className="border-0 shadow-sm border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-red-800">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      )}
+
       {/* Doctor Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDoctors.map((doctor) => (
-          <Card key={doctor.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-12 h-12">
-                    <AvatarFallback className="bg-blue-100 text-blue-700">
-                      {doctor.name.split(' ').slice(-2).map(n => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="text-lg text-gray-900">{doctor.name}</h3>
-                    <p className="text-sm text-gray-600">{doctor.specialty}</p>
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {doctors.map((doctor) => (
+            <Card key={doctor.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-12 h-12">
+                      <AvatarFallback className="bg-blue-100 text-blue-700">
+                        {doctor.name.split(' ').slice(-2).map(n => n[0]).join('')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="text-lg text-gray-900">{doctor.name}</h3>
+                      <p className="text-sm text-gray-600">{doctor.specialty}</p>
+                    </div>
+                  </div>
+                  <Badge className={getStatusColor(doctor.status)}>
+                    {doctor.status}
+                  </Badge>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Experience</span>
+                    <span className="text-sm text-gray-900">{doctor.experience} years</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Patients</span>
+                    <div className="flex items-center gap-1">
+                      <Users className="w-3 h-3 text-gray-400" />
+                      <span className="text-sm text-gray-900">{doctor.patients || 0}</span>
+                    </div>
+                  </div>
+
+                  {doctor.rating !== undefined && doctor.rating > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Rating</span>
+                      <div className="flex items-center gap-1">
+                        {renderStars(doctor.rating)}
+                        <span className="text-sm text-gray-600 ml-1">{doctor.rating}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1 text-sm text-gray-600">
+                    <Clock className="w-3 h-3" />
+                    {formatTime(doctor.schedule_start)} - {formatTime(doctor.schedule_end)}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-gray-600">
+                      <Phone className="w-3 h-3" />
+                      {doctor.phone}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-600">
+                      <Mail className="w-3 h-3" />
+                      {doctor.email}
+                    </div>
                   </div>
                 </div>
-                <Badge className={getStatusColor(doctor.status)}>
-                  {doctor.status}
-                </Badge>
-              </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Experience</span>
-                  <span className="text-sm text-gray-900">{doctor.experience} years</span>
+                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleView(doctor)}
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    View
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleEdit(doctor)}
+                  >
+                    <Edit className="w-3 h-3 mr-1" />
+                    Edit
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleSchedule(doctor)}
+                  >
+                    <Stethoscope className="w-3 h-3 mr-1" />
+                    Schedule
+                  </Button>
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Patients</span>
-                  <div className="flex items-center gap-1">
-                    <Users className="w-3 h-3 text-gray-400" />
-                    <span className="text-sm text-gray-900">{doctor.patients}</span>
-                  </div>
-                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Rating</span>
-                  <div className="flex items-center gap-1">
-                    {renderStars(doctor.rating)}
-                    <span className="text-sm text-gray-600 ml-1">{doctor.rating}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 text-sm text-gray-600">
-                  <Clock className="w-3 h-3" />
-                  {doctor.schedule}
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-xs text-gray-600">
-                    <Phone className="w-3 h-3" />
-                    {doctor.phone}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-600">
-                    <Mail className="w-3 h-3" />
-                    {doctor.email}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Eye className="w-3 h-3 mr-1" />
-                  View
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Edit className="w-3 h-3 mr-1" />
-                  Edit
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Stethoscope className="w-3 h-3 mr-1" />
-                  Schedule
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {filteredDoctors.length === 0 && (
+      {!loading && !error && doctors.length === 0 && (
         <Card className="border-0 shadow-sm">
           <CardContent className="p-12 text-center">
             <Stethoscope className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg text-gray-900 mb-2">No doctors found</h3>
             <p className="text-gray-600 mb-4">Try adjusting your search or filter criteria.</p>
-            <Button className="bg-blue-500 hover:bg-blue-600">
+            <Button 
+              className="bg-blue-500 hover:bg-blue-600"
+              onClick={handleAdd}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add New Doctor
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Schedule Dialog - Keep this as dialog since it's a quick action */}
+      {selectedDoctor && (
+        <DoctorSchedule
+          open={showScheduleDialog}
+          onOpenChange={setShowScheduleDialog}
+          doctor={selectedDoctor}
+          onSuccess={() => {
+            setShowScheduleDialog(false);
+            setSelectedDoctor(null);
+            loadDoctors();
+          }}
+        />
       )}
     </div>
   );

@@ -162,6 +162,85 @@ class ApiService {
     });
     return data;
   }
+
+  // Doctor endpoints
+  async getDoctors(filters?: { search?: string; status?: string; specialty?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.specialty) params.append('specialty', filters.specialty);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/doctors?${queryString}` : '/api/doctors';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Doctor[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getDoctor(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: Doctor;
+    }>(`/api/doctors/${id}`);
+    return data.data;
+  }
+
+  async createDoctor(doctorData: CreateDoctorData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Doctor;
+      message: string;
+    }>('/api/doctors', {
+      method: 'POST',
+      body: JSON.stringify(doctorData),
+    });
+    return data.data;
+  }
+
+  async updateDoctor(id: string, doctorData: Partial<CreateDoctorData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Doctor;
+      message: string;
+    }>(`/api/doctors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(doctorData),
+    });
+    return data.data;
+  }
+
+  async deleteDoctor(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/doctors/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getDoctorSchedule(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSchedule[];
+    }>(`/api/doctors/${id}/schedule`);
+    return data.data || [];
+  }
+
+  async updateDoctorSchedule(id: string, schedule: DoctorSchedule[]) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSchedule[];
+      message: string;
+    }>(`/api/doctors/${id}/schedule`, {
+      method: 'PUT',
+      body: JSON.stringify({ schedule }),
+    });
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -196,6 +275,48 @@ export interface CreatePatientData {
   blood_group?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+}
+
+export interface Doctor {
+  id: number;
+  doctor_id: string;
+  name: string;
+  specialty: string;
+  phone: string;
+  email: string;
+  experience: number;
+  qualification?: string;
+  status: 'Available' | 'Busy' | 'Off Duty';
+  schedule_start: string;
+  schedule_end: string;
+  avatar?: string;
+  patients?: number;
+  rating?: number;
+  total_appointments?: number;
+  created_at: string;
+}
+
+export interface CreateDoctorData {
+  name: string;
+  specialty: string;
+  phone: string;
+  email: string;
+  experience?: number;
+  qualification?: string;
+  status?: 'Available' | 'Busy' | 'Off Duty';
+  schedule_start?: string;
+  schedule_end?: string;
+  avatar?: string;
+  schedule?: DoctorSchedule[]; // Optional schedule data for create/update
+}
+
+export interface DoctorSchedule {
+  id?: number;
+  doctor_id?: number;
+  day_of_week: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  start_time: string;
+  end_time: string;
+  is_available: boolean;
 }
 
 export const api = new ApiService();

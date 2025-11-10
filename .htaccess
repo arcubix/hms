@@ -1,6 +1,11 @@
 # Enable Rewrite Engine
 RewriteEngine On
 
+# Pass Authorization header to PHP (Apache sometimes strips it)
+# This is critical for API authentication
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+
 # CodeIgniter URL Rewriting
 # CORS is now handled by CodeIgniter hooks (application/hooks/Cors_hook.php)
 RewriteCond %{REQUEST_FILENAME} !-f

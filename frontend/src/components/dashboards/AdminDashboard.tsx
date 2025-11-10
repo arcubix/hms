@@ -29,6 +29,9 @@ import { AddHealthRecord } from '../modules/AddHealthRecord';
 import { AddPatientPage } from '../pages/AddPatientPage';
 import { EditPatientPage } from '../pages/EditPatientPage';
 import { ViewPatientPage } from '../pages/ViewPatientPage';
+import { AddDoctorPage } from '../pages/AddDoctorPage';
+import { EditDoctorPage } from '../pages/EditDoctorPage';
+import { ViewDoctorPage } from '../pages/ViewDoctorPage';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface AdminDashboardProps {
@@ -71,6 +74,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
+  const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -96,6 +101,26 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setPatientView('add-health');
   };
 
+  const handleViewDoctor = (doctorId: string) => {
+    setSelectedDoctorId(doctorId);
+    setDoctorView('view');
+  };
+
+  const handleEditDoctor = (doctorId: string) => {
+    setSelectedDoctorId(doctorId);
+    setDoctorView('edit');
+  };
+
+  const handleAddDoctor = () => {
+    setSelectedDoctorId(null);
+    setDoctorView('add');
+  };
+
+  const handleBackToDoctorList = () => {
+    setDoctorView('list');
+    setSelectedDoctorId(null);
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'patients':
@@ -119,7 +144,15 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           return <PatientList onViewProfile={handleViewProfile} onAddPatient={handleAddPatient} onEditPatient={handleEditPatient} />;
         }
       case 'doctors':
-        return <DoctorList />;
+        if (doctorView === 'add') {
+          return <AddDoctorPage onBack={handleBackToDoctorList} onSuccess={handleBackToDoctorList} />;
+        } else if (doctorView === 'edit' && selectedDoctorId) {
+          return <EditDoctorPage doctorId={selectedDoctorId} onBack={handleBackToDoctorList} onSuccess={handleBackToDoctorList} />;
+        } else if (doctorView === 'view' && selectedDoctorId) {
+          return <ViewDoctorPage doctorId={selectedDoctorId} onBack={handleBackToDoctorList} onEdit={handleEditDoctor} />;
+        } else {
+          return <DoctorList onViewDoctor={handleViewDoctor} onAddDoctor={handleAddDoctor} onEditDoctor={handleEditDoctor} />;
+        }
       case 'appointments':
         return <AppointmentList />;
       default:
