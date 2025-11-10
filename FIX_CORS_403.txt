@@ -1,0 +1,53 @@
+===========================================
+IMMEDIATE FIX FOR CORS 403 ERROR
+===========================================
+
+The 403 error on OPTIONS request means Apache is blocking it.
+
+QUICK FIX (Do this first):
+
+1. CREATE .htaccess FILE IN ROOT DIRECTORY
+   - Location: C:\xampp8\htdocs\hms\.htaccess
+   - Copy contents from: htaccess_final.txt
+   - File must be named exactly ".htaccess" (with dot)
+
+2. ENABLE APACHE MODULES
+   - Open: C:\xampp\apache\conf\httpd.conf
+   - Find and uncomment (remove #):
+     LoadModule rewrite_module modules/mod_rewrite.so
+     LoadModule headers_module modules/mod_headers.so
+   - Save and restart Apache
+
+3. RESTART APACHE
+   - Stop and Start Apache in XAMPP Control Panel
+
+4. TEST
+   - Open browser console
+   - Run: fetch('http://localhost/hms/api/auth/login', {method: 'OPTIONS'})
+   - Should return Status: 200 (not 403)
+
+===========================================
+WHAT WAS CHANGED
+===========================================
+
+✓ CORS Hook moved to pre_system (runs earliest)
+✓ Hook simplified to handle OPTIONS immediately
+✓ Api controller has OPTIONS fallback
+✓ CSRF excluded for API routes
+✓ .htaccess file created (copy from htaccess_final.txt)
+
+===========================================
+IF STILL NOT WORKING
+===========================================
+
+Check Apache error log:
+C:\xampp\apache\logs\error.log
+
+Common issues:
+- mod_rewrite not enabled
+- AllowOverride not set to All
+- .htaccess file not readable
+- File permissions issue
+
+===========================================
+

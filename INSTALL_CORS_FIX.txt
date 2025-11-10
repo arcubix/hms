@@ -1,0 +1,76 @@
+===========================================
+CORS 403 ERROR - INSTALLATION INSTRUCTIONS
+===========================================
+
+PROBLEM: Getting 403 error on OPTIONS preflight request
+
+SOLUTION: Handle CORS at Apache level before CodeIgniter processes it
+
+===========================================
+STEP 1: Create .htaccess File
+===========================================
+
+1. Copy the contents of "htaccess_final.txt"
+2. Create a new file named ".htaccess" (with the dot) in root directory
+3. Paste the contents
+4. Save the file
+
+Location: C:\xampp8\htdocs\hms\.htaccess
+
+===========================================
+STEP 2: Enable Apache Modules
+===========================================
+
+1. Open XAMPP Control Panel
+2. Click "Config" button next to Apache
+3. Select "httpd.conf"
+4. Find these lines and make sure they are NOT commented (no #):
+
+   LoadModule rewrite_module modules/mod_rewrite.so
+   LoadModule headers_module modules/mod_headers.so
+
+5. Save the file
+6. Restart Apache in XAMPP Control Panel
+
+===========================================
+STEP 3: Configure Directory Permissions
+===========================================
+
+In httpd.conf, find or add:
+
+<Directory "C:/xampp/htdocs/hms">
+    AllowOverride All
+    Require all granted
+    Options Indexes FollowSymLinks
+</Directory>
+
+Save and restart Apache.
+
+===========================================
+STEP 4: Test
+===========================================
+
+Open browser console and run:
+
+fetch('http://localhost/hms/api/auth/login', {
+  method: 'OPTIONS'
+}).then(r => console.log('Status:', r.status))
+
+Should return Status: 200
+
+===========================================
+VERIFICATION
+===========================================
+
+After applying fixes:
+1. Restart Apache
+2. Test OPTIONS request (should return 200)
+3. Test actual login (should work now)
+
+If still getting 403:
+- Check Apache error log: C:\xampp\apache\logs\error.log
+- Verify .htaccess file exists and is readable
+- Make sure mod_rewrite and mod_headers are enabled
+
+===========================================
+

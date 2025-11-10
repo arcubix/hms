@@ -1,0 +1,9 @@
+# Enable Rewrite Engine
+RewriteEngine On
+
+# CodeIgniter URL Rewriting
+# CORS is now handled by CodeIgniter hooks (application/hooks/Cors_hook.php)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php/$1 [L]
+
