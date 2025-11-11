@@ -91,7 +91,15 @@ class Patients extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
-                $patient = $this->Patient_model->get_by_id($id);
+                // Check if ID is numeric (database ID) or string (patient_id like P001)
+                $patient = null;
+                if (is_numeric($id)) {
+                    // Numeric ID - use get_by_id
+                    $patient = $this->Patient_model->get_by_id($id);
+                } else {
+                    // String ID (like P001) - use get_by_patient_id
+                    $patient = $this->Patient_model->get_by_patient_id($id);
+                }
                 
                 if (!$patient) {
                     $this->error('Patient not found', 404);

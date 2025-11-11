@@ -381,6 +381,121 @@ class ApiService {
     }>(`/api/appointments/patient/${patientId}`);
     return data.data || [];
   }
+
+  // Prescription endpoints
+  async getPrescriptions(filters?: {
+    patient_id?: number;
+    doctor_id?: number;
+    appointment_id?: number;
+    status?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.patient_id) params.append('patient_id', filters.patient_id.toString());
+    if (filters?.doctor_id) params.append('doctor_id', filters.doctor_id.toString());
+    if (filters?.appointment_id) params.append('appointment_id', filters.appointment_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/prescriptions?${queryString}` : '/api/prescriptions';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Prescription[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getPrescription(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: Prescription;
+    }>(`/api/prescriptions/${id}`);
+    return data.data;
+  }
+
+  async createPrescription(prescriptionData: CreatePrescriptionData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Prescription;
+      message: string;
+    }>('/api/prescriptions', {
+      method: 'POST',
+      body: JSON.stringify(prescriptionData),
+    });
+    return data.data;
+  }
+
+  async updatePrescription(id: string, prescriptionData: Partial<CreatePrescriptionData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Prescription;
+      message: string;
+    }>(`/api/prescriptions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(prescriptionData),
+    });
+    return data.data;
+  }
+
+  // Medicine endpoints
+  async getMedicines(filters?: {
+    search?: string;
+    category?: string;
+    status?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/medicines?${queryString}` : '/api/medicines';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Medicine[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getMedicine(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: Medicine;
+    }>(`/api/medicines/${id}`);
+    return data.data;
+  }
+
+  // Lab test endpoints
+  async getLabTests(filters?: {
+    search?: string;
+    test_type?: string;
+    category?: string;
+    status?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.test_type) params.append('test_type', filters.test_type);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/lab-tests?${queryString}` : '/api/lab-tests';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: LabTest[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getLabTest(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: LabTest;
+    }>(`/api/lab-tests/${id}`);
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -517,6 +632,100 @@ export interface AvailableDate {
   available_slots_count: number;
   total_slots: number;
   has_availability: boolean;
+}
+
+// Prescription interfaces
+export interface Medicine {
+  id: number;
+  medicine_code: string;
+  name: string;
+  generic_name?: string;
+  manufacturer?: string;
+  category?: string;
+  unit?: string;
+  strength?: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Discontinued';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LabTest {
+  id: number;
+  test_code: string;
+  test_name: string;
+  test_type?: string;
+  category?: string;
+  description?: string;
+  preparation_instructions?: string;
+  normal_range?: string;
+  duration?: string;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PrescriptionMedicine {
+  id?: number;
+  medicine_id?: number;
+  medicine_name: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  quantity?: number;
+  instructions?: string;
+  timing?: string;
+  status?: 'Pending' | 'Dispensed' | 'Cancelled';
+}
+
+export interface PrescriptionLabTest {
+  id?: number;
+  lab_test_id?: number;
+  test_name: string;
+  test_type?: string;
+  instructions?: string;
+  priority?: 'Normal' | 'Urgent' | 'Emergency';
+  status?: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+}
+
+export interface Prescription {
+  id: number;
+  prescription_number: string;
+  appointment_id?: number;
+  patient_id: number;
+  patient_name?: string;
+  patient_id_string?: string;
+  patient_phone?: string;
+  patient_email?: string;
+  doctor_id: number;
+  doctor_name?: string;
+  specialty?: string;
+  diagnosis?: string;
+  chief_complaint?: string;
+  clinical_notes?: string;
+  advice?: string;
+  follow_up_date?: string;
+  status: 'Draft' | 'Active' | 'Completed' | 'Cancelled';
+  medicines?: PrescriptionMedicine[];
+  lab_tests?: PrescriptionLabTest[];
+  appointment_date?: string;
+  appointment_number?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePrescriptionData {
+  appointment_id?: number;
+  patient_id: number;
+  doctor_id: number;
+  diagnosis?: string;
+  chief_complaint?: string;
+  clinical_notes?: string;
+  advice?: string;
+  follow_up_date?: string;
+  medicines?: PrescriptionMedicine[];
+  lab_tests?: PrescriptionLabTest[];
+  status?: 'Draft' | 'Active' | 'Completed' | 'Cancelled';
 }
 
 export const api = new ApiService();

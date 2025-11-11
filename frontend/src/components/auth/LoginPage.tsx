@@ -29,6 +29,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         name: data.user.name,
         email: data.user.email,
         role: data.user.role as User['role'],
+        doctor: data.doctor || undefined,
       });
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');

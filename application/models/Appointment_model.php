@@ -19,7 +19,7 @@ class Appointment_model extends CI_Model {
      * Get all appointments with filters
      */
     public function get_all($filters = []) {
-        $this->db->select('a.*, p.name as patient_name, p.patient_id, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
+        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
         $this->db->from('appointments a');
         $this->db->join('patients p', 'a.patient_id = p.id', 'left');
         $this->db->join('doctors d', 'a.doctor_doctor_id = d.id', 'left');
@@ -67,7 +67,7 @@ class Appointment_model extends CI_Model {
      * Get single appointment with details
      */
     public function get_by_id($id) {
-        $this->db->select('a.*, p.name as patient_name, p.patient_id, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
+        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
         $this->db->from('appointments a');
         $this->db->join('patients p', 'a.patient_id = p.id', 'left');
         $this->db->join('doctors d', 'a.doctor_doctor_id = d.id', 'left');
