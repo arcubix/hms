@@ -32,6 +32,7 @@ import { ViewPatientPage } from '../pages/ViewPatientPage';
 import { AddDoctorPage } from '../pages/AddDoctorPage';
 import { EditDoctorPage } from '../pages/EditDoctorPage';
 import { ViewDoctorPage } from '../pages/ViewDoctorPage';
+import { ScheduleAppointmentPage } from '../pages/ScheduleAppointmentPage';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface AdminDashboardProps {
@@ -76,6 +77,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
+  const [appointmentView, setAppointmentView] = useState<'list' | 'schedule'>('list');
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -121,6 +123,14 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setSelectedDoctorId(null);
   };
 
+  const handleAddAppointment = () => {
+    setAppointmentView('schedule');
+  };
+
+  const handleBackToAppointmentList = () => {
+    setAppointmentView('list');
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'patients':
@@ -154,7 +164,11 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           return <DoctorList onViewDoctor={handleViewDoctor} onAddDoctor={handleAddDoctor} onEditDoctor={handleEditDoctor} />;
         }
       case 'appointments':
-        return <AppointmentList />;
+        if (appointmentView === 'schedule') {
+          return <ScheduleAppointmentPage onBack={handleBackToAppointmentList} onSuccess={handleBackToAppointmentList} />;
+        } else {
+          return <AppointmentList onAddAppointment={handleAddAppointment} />;
+        }
       default:
         return (
           <div className="p-6 space-y-6">

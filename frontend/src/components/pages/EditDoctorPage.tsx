@@ -4,8 +4,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ArrowLeft, Save, Clock, Copy } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { api, Doctor, CreateDoctorData, DoctorSchedule } from '../../services/api';
+import { DoctorScheduleContent } from '../modules/DoctorScheduleContent';
 
 interface EditDoctorPageProps {
   doctorId: string;
@@ -90,51 +91,31 @@ export function EditDoctorPage({ doctorId, onBack, onSuccess }: EditDoctorPagePr
         schedule_end: data.schedule_end ? data.schedule_end.substring(0, 5) : '17:00'
       });
 
-      // Load schedule
+      // Load schedule - now supports multiple slots per day
       try {
         const scheduleData = await api.getDoctorSchedule(doctorId);
-        const daysMap = new Map(scheduleData.map(s => [s.day_of_week, s]));
         const defaultStart = data.schedule_start ? data.schedule_start.substring(0, 5) : '09:00';
         const defaultEnd = data.schedule_end ? data.schedule_end.substring(0, 5) : '17:00';
         
-        const fullSchedule = DAYS_OF_WEEK.map(day => {
-          const existing = daysMap.get(day);
-          if (existing) {
-            // Format existing schedule entry - ensure is_available is boolean and times are formatted
-            return {
-              ...existing,
-              start_time: existing.start_time ? existing.start_time.substring(0, 5) : defaultStart,
-              end_time: existing.end_time ? existing.end_time.substring(0, 5) : defaultEnd,
-              break_start: existing.break_start ? existing.break_start.substring(0, 5) : '',
-              break_end: existing.break_end ? existing.break_end.substring(0, 5) : '',
-              is_available: existing.is_available === true || existing.is_available === 1 || String(existing.is_available) === '1'
-            };
-          } else {
-            // No existing entry for this day
-            return {
-              day_of_week: day,
-              start_time: defaultStart,
-              end_time: defaultEnd,
-              break_start: '',
-              break_end: '',
-              max_appointments: null,
-              appointment_duration: 30,
-              notes: '',
-              is_available: false
-            };
-          }
-        });
-        setSchedule(fullSchedule);
+        // Format all schedule entries (multiple per day possible)
+        const formattedSchedule = scheduleData.map(slot => ({
+          ...slot,
+          start_time: slot.start_time ? slot.start_time.substring(0, 5) : defaultStart,
+          end_time: slot.end_time ? slot.end_time.substring(0, 5) : defaultEnd,
+          break_start: slot.break_start ? slot.break_start.substring(0, 5) : '',
+          break_end: slot.break_end ? slot.break_end.substring(0, 5) : '',
+          slot_order: slot.slot_order ?? 0,
+          slot_name: slot.slot_name || '',
+          max_appointments_per_slot: slot.max_appointments_per_slot ?? 1,
+          appointment_duration: slot.appointment_duration ?? 30,
+          is_available: slot.is_available === true || slot.is_available === 1 || String(slot.is_available) === '1'
+        }));
+        
+        setSchedule(formattedSchedule);
       } catch (scheduleErr) {
-        // If schedule doesn't exist, create default
-        const defaultStart = data.schedule_start ? data.schedule_start.substring(0, 5) : '09:00';
-        const defaultEnd = data.schedule_end ? data.schedule_end.substring(0, 5) : '17:00';
-        setSchedule(DAYS_OF_WEEK.map(day => ({
-          day_of_week: day,
-          start_time: defaultStart,
-          end_time: defaultEnd,
-          is_available: WEEKDAYS.includes(day)
-        })));
+        // If schedule doesn't exist, start with empty array
+        // User can add slots as needed
+        setSchedule([]);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load doctor');
@@ -202,11 +183,19 @@ export function EditDoctorPage({ doctorId, onBack, onSuccess }: EditDoctorPagePr
 
     try {
       // Format schedule data for backend - ensure times are in HH:MM format and remove extra fields
+      // Format schedule data for backend - ensure times are in HH:MM format
       const formattedSchedule = schedule.map(s => ({
         day_of_week: s.day_of_week,
         start_time: s.start_time.length === 5 ? s.start_time : s.start_time.substring(0, 5),
         end_time: s.end_time.length === 5 ? s.end_time : s.end_time.substring(0, 5),
-        is_available: s.is_available || false
+        is_available: s.is_available || false,
+        slot_order: s.slot_order ?? 0,
+        slot_name: s.slot_name && s.slot_name.trim() ? s.slot_name.trim() : null,
+        max_appointments_per_slot: s.max_appointments_per_slot ?? 1,
+        appointment_duration: s.appointment_duration ?? 30,
+        break_start: s.break_start && s.break_start.length > 0 ? s.break_start.substring(0, 5) : null,
+        break_end: s.break_end && s.break_end.length > 0 ? s.break_end.substring(0, 5) : null,
+        notes: s.notes && s.notes.trim() ? s.notes.trim() : null
       }));
 
       // Update doctor with schedule data
@@ -443,140 +432,17 @@ export function EditDoctorPage({ doctorId, onBack, onSuccess }: EditDoctorPagePr
               <div className="text-center py-4 text-gray-500">Loading schedule...</div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-lg font-semibold text-gray-700">Detailed Weekly Schedule</h3>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleAllDays(true)}
-                      disabled={loading}
-                    >
-                      Set All Available
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleAllDays(false)}
-                      disabled={loading}
-                    >
-                      Set All Unavailable
-                    </Button>
-                  </div>
-                </div>
-                
+                <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Detailed Weekly Schedule</h3>
                 <p className="text-sm text-gray-600">
-                  Configure availability and times for each day of the week. You can set different times for each day.
+                  Configure multiple time slots per day. You can add morning, afternoon, evening slots as needed.
                 </p>
-
-                {copyFromDay && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <p className="text-sm text-yellow-800">
-                      Click on a day to copy schedule from <strong>{copyFromDay}</strong>
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCopyFromDay(null)}
-                      className="mt-2"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  {schedule.map((daySchedule) => (
-                    <div
-                      key={daySchedule.day_of_week}
-                      className={`p-4 border rounded-lg transition-colors ${
-                        daySchedule.is_available 
-                          ? 'bg-green-50 border-green-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      } ${copyFromDay === daySchedule.day_of_week ? 'ring-2 ring-blue-500' : ''}`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={daySchedule.is_available}
-                            onChange={(e) => updateDaySchedule(daySchedule.day_of_week, 'is_available', e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                            disabled={loading}
-                          />
-                          <Label className="text-base font-medium text-gray-900">
-                            {daySchedule.day_of_week}
-                          </Label>
-                          {daySchedule.is_available && (
-                            <span className="text-xs text-green-600 font-medium">Available</span>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyClick(daySchedule.day_of_week)}
-                            className={copyFromDay === daySchedule.day_of_week ? 'bg-blue-100' : ''}
-                            title={copyFromDay === daySchedule.day_of_week ? 'Click another day to copy' : 'Copy this day'}
-                            disabled={loading}
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                          {daySchedule.is_available && WEEKDAYS.includes(daySchedule.day_of_week) && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToAllWeekdays(daySchedule.day_of_week)}
-                              title="Copy to all weekdays"
-                              disabled={loading}
-                            >
-                              <Copy className="w-3 h-3 mr-1" />
-                              All Weekdays
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {daySchedule.is_available && (
-                        <div className="grid grid-cols-2 gap-4 mt-3">
-                          <div className="space-y-2">
-                            <Label htmlFor={`start-${daySchedule.day_of_week}`} className="text-xs flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              Start Time
-                            </Label>
-                            <Input
-                              id={`start-${daySchedule.day_of_week}`}
-                              type="time"
-                              value={daySchedule.start_time}
-                              onChange={(e) => updateDaySchedule(daySchedule.day_of_week, 'start_time', e.target.value)}
-                              required={daySchedule.is_available}
-                              disabled={loading}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`end-${daySchedule.day_of_week}`} className="text-xs flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              End Time
-                            </Label>
-                            <Input
-                              id={`end-${daySchedule.day_of_week}`}
-                              type="time"
-                              value={daySchedule.end_time}
-                              onChange={(e) => updateDaySchedule(daySchedule.day_of_week, 'end_time', e.target.value)}
-                              required={daySchedule.is_available}
-                              disabled={loading}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <DoctorScheduleContent
+                  schedule={schedule}
+                  setSchedule={setSchedule}
+                  defaultStartTime={formData.schedule_start}
+                  defaultEndTime={formData.schedule_end}
+                  loading={loading}
+                />
               </div>
             )}
 

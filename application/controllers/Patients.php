@@ -39,7 +39,18 @@ class Patients extends Api {
                     return;
                 }
                 
-                $patients = $this->Patient_model->get_all();
+                // Get filters from query parameters
+                $filters = array();
+                
+                if ($this->input->get('search')) {
+                    $filters['search'] = $this->input->get('search');
+                }
+                
+                if ($this->input->get('phone')) {
+                    $filters['phone'] = $this->input->get('phone');
+                }
+                
+                $patients = $this->Patient_model->get_all($filters);
                 
                 if ($patients === false) {
                     log_message('error', 'Patient_model->get_all() returned false');

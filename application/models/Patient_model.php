@@ -9,10 +9,27 @@ class Patient_model extends CI_Model {
     }
 
     /**
-     * Get all patients
+     * Get all patients with optional filters
      */
-    public function get_all() {
+    public function get_all($filters = []) {
         $this->db->select('id, patient_id, name, email, phone, age, gender, date_of_birth, address, city, state, zip_code, blood_group, status, created_at');
+        
+        // Apply search filter (phone, name, or patient_id)
+        if (!empty($filters['search'])) {
+            $search = $this->db->escape_like_str($filters['search']);
+            $this->db->group_start();
+            $this->db->like('phone', $search);
+            $this->db->or_like('name', $search);
+            $this->db->or_like('patient_id', $search);
+            $this->db->group_end();
+        }
+        
+        // Apply phone filter (exact or partial match)
+        if (!empty($filters['phone'])) {
+            $phone = $this->db->escape_like_str($filters['phone']);
+            $this->db->like('phone', $phone);
+        }
+        
         $this->db->order_by('created_at', 'DESC');
         $query = $this->db->get('patients');
         return $query->result_array();

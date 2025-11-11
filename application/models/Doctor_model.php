@@ -136,10 +136,13 @@ class Doctor_model extends CI_Model {
 
     /**
      * Get doctor schedule
+     * Returns all time slots, allowing multiple slots per day
      */
     public function get_schedule($doctor_id) {
         $this->db->where('doctor_id', $doctor_id);
         $this->db->order_by('FIELD(day_of_week, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")');
+        $this->db->order_by('slot_order', 'ASC');
+        $this->db->order_by('start_time', 'ASC');
         $query = $this->db->get('doctor_schedules');
         return $query->result_array();
     }
@@ -175,8 +178,23 @@ class Doctor_model extends CI_Model {
                     'day_of_week' => $schedule['day_of_week'],
                     'start_time' => $start_time,
                     'end_time' => $end_time,
-                    'is_available' => isset($schedule['is_available']) ? (int)$schedule['is_available'] : 1
+                    'is_available' => isset($schedule['is_available']) ? (int)$schedule['is_available'] : 1,
+                    'slot_order' => isset($schedule['slot_order']) ? (int)$schedule['slot_order'] : 0,
+                    'slot_name' => isset($schedule['slot_name']) ? $schedule['slot_name'] : null,
+                    'max_appointments_per_slot' => isset($schedule['max_appointments_per_slot']) ? (int)$schedule['max_appointments_per_slot'] : 1,
+                    'appointment_duration' => isset($schedule['appointment_duration']) ? (int)$schedule['appointment_duration'] : 30,
+                    'break_start' => isset($schedule['break_start']) && !empty($schedule['break_start']) ? $schedule['break_start'] : null,
+                    'break_end' => isset($schedule['break_end']) && !empty($schedule['break_end']) ? $schedule['break_end'] : null,
+                    'notes' => isset($schedule['notes']) ? $schedule['notes'] : null
                 );
+                
+                // Convert break times to HH:MM:SS if needed
+                if ($insert_data['break_start'] && strlen($insert_data['break_start']) == 5) {
+                    $insert_data['break_start'] .= ':00';
+                }
+                if ($insert_data['break_end'] && strlen($insert_data['break_end']) == 5) {
+                    $insert_data['break_end'] .= ':00';
+                }
                 
                 $this->db->insert('doctor_schedules', $insert_data);
             }
