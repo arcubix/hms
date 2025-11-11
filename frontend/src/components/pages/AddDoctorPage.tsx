@@ -64,6 +64,13 @@ export function AddDoctorPage({ onBack, onSuccess }: AddDoctorPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const applyDefaultSchedule = () => {
+    setSchedule(prev => prev.map(s => ({
+      ...s,
+      start_time: formData.schedule_start,
+      end_time: formData.schedule_end
+    })));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

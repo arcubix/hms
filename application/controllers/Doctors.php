@@ -169,10 +169,17 @@ class Doctors extends Api {
                 return;
             }
 
-            // Check if email already exists
-            $existing = $this->db->get_where('doctors', array('email' => $data['email']))->row_array();
-            if ($existing) {
-                $this->error('Email already exists', 422, array('email' => 'This email is already registered.'));
+            // Check if email already exists in doctors table
+            $existing_doctor = $this->db->get_where('doctors', array('email' => $data['email']))->row_array();
+            if ($existing_doctor) {
+                $this->error('Email already exists', 422, array('email' => 'This email is already registered as a doctor.'));
+                return;
+            }
+            
+            // Check if email already exists in users table (but allow if it's a doctor role)
+            $existing_user = $this->db->get_where('users', array('email' => $data['email']))->row_array();
+            if ($existing_user && $existing_user['role'] !== 'doctor') {
+                $this->error('Email already exists', 422, array('email' => 'This email is already registered with a different role.'));
                 return;
             }
 
@@ -181,6 +188,11 @@ class Doctors extends Api {
             $data['created_by'] = $this->user['id'];
             $data['status'] = $data['status'] ?? 'Available';
             $data['experience'] = isset($data['experience']) ? (int)$data['experience'] : 0;
+            
+            // Handle password if provided (hash it)
+            if (isset($data['password']) && !empty($data['password'])) {
+                $data['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+            }
 
             // Extract schedule data if provided
             $schedule_data = isset($data['schedule']) ? $data['schedule'] : null;

@@ -12,6 +12,7 @@ class Auth extends Api {
     public function __construct() {
         parent::__construct();
         $this->load->model('User_model');
+        $this->load->model('Doctor_model');
     }
 
     /**
@@ -65,10 +66,35 @@ class Auth extends Api {
             // Remove password from response
             unset($user['password']);
 
-            $this->success(array(
+            // If user is a doctor, get doctor profile data
+            $doctor_profile = null;
+            if ($user['role'] === 'doctor') {
+                $doctor = $this->Doctor_model->get_by_user_id($user['id']);
+                if ($doctor) {
+                    $doctor_profile = array(
+                        'id' => $doctor['id'],
+                        'doctor_id' => $doctor['doctor_id'],
+                        'specialty' => $doctor['specialty'],
+                        'experience' => $doctor['experience'],
+                        'qualification' => $doctor['qualification'],
+                        'status' => $doctor['status'],
+                        'schedule_start' => $doctor['schedule_start'],
+                        'schedule_end' => $doctor['schedule_end']
+                    );
+                }
+            }
+
+            $response_data = array(
                 'token' => $token,
                 'user' => $user
-            ), 'Login successful');
+            );
+
+            // Add doctor profile if available
+            if ($doctor_profile) {
+                $response_data['doctor'] = $doctor_profile;
+            }
+
+            $this->success($response_data, 'Login successful');
         } catch (Exception $e) {
             log_message('error', 'Login error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);

@@ -12,7 +12,7 @@ class Doctor_model extends CI_Model {
      * Get all doctors with optional filters
      */
     public function get_all($filters = array()) {
-        $this->db->select('d.id, d.doctor_id, d.name, d.specialty, d.phone, d.email, d.experience, d.qualification, d.status, d.schedule_start, d.schedule_end, d.avatar, d.created_at');
+        $this->db->select('d.id, d.user_id, d.doctor_id, d.name, d.specialty, d.phone, d.email, d.experience, d.qualification, d.status, d.schedule_start, d.schedule_end, d.avatar, d.created_at');
         
         // Apply search filter
         if (!empty($filters['search'])) {
@@ -72,12 +72,50 @@ class Doctor_model extends CI_Model {
         $query = $this->db->get_where('doctors', array('doctor_id' => $doctor_id));
         return $query->row_array();
     }
+    
+    /**
+     * Get doctor by user_id
+     */
+    public function get_by_user_id($user_id) {
+        $query = $this->db->get_where('doctors', array('user_id' => $user_id));
+        return $query->row_array();
+    }
 
     /**
      * Create doctor
+     * Also creates a user account for the doctor
      */
     public function create($data) {
+        // Start transaction
+        $this->db->trans_start();
+        
+        // Create user account first
+        $user_data = array(
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => $data['password'] ?? password_hash('doctor123', PASSWORD_BCRYPT), // Default password
+            'role' => 'doctor',
+            'phone' => $data['phone'] ?? null,
+            'status' => 'active'
+        );
+        
+        // Check if user with this email already exists
+        $existing_user = $this->db->get_where('users', array('email' => $data['email']))->row_array();
+        if ($existing_user) {
+            // Use existing user
+            $user_id = $existing_user['id'];
+        } else {
+            // Create new user
+            if (!$this->db->insert('users', $user_data)) {
+                $this->db->trans_rollback();
+                return false;
+            }
+            $user_id = $this->db->insert_id();
+        }
+        
+        // Create doctor record with user_id
         $insert_data = array(
+            'user_id' => $user_id,
             'doctor_id' => $data['doctor_id'],
             'name' => $data['name'],
             'specialty' => $data['specialty'],
@@ -92,10 +130,21 @@ class Doctor_model extends CI_Model {
             'created_by' => $data['created_by'] ?? null
         );
 
-        if ($this->db->insert('doctors', $insert_data)) {
-            return $this->db->insert_id();
+        if (!$this->db->insert('doctors', $insert_data)) {
+            $this->db->trans_rollback();
+            return false;
         }
-        return false;
+        
+        $doctor_id = $this->db->insert_id();
+        
+        // Complete transaction
+        $this->db->trans_complete();
+        
+        if ($this->db->trans_status() === FALSE) {
+            return false;
+        }
+        
+        return $doctor_id;
     }
 
     /**

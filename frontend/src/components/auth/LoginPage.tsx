@@ -53,7 +53,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         <Card className="w-full max-w-md shadow-lg border-0">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-gray-900">Admin Login</CardTitle>
+            <CardTitle className="text-2xl text-gray-900">Login</CardTitle>
             <p className="text-gray-600">Sign in to access your dashboard</p>
           </CardHeader>
           <CardContent>
@@ -97,7 +97,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 {loading ? 'Logging in...' : 'Sign In'}
               </Button>
               <div className="text-center text-sm text-gray-500 mt-4">
-                <p>Default: admin@hospital.com / admin123</p>
+                <p className="mb-1">Admin: admin@hospital.com / admin123</p>
+                <p>Doctor: Use your registered email / doctor123</p>
               </div>
             </form>
           </CardContent>

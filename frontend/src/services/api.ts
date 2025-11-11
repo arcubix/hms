@@ -85,6 +85,16 @@ class ApiService {
           email: string;
           role: string;
         };
+        doctor?: {
+          id: number;
+          doctor_id: string;
+          specialty: string;
+          experience: number;
+          qualification?: string;
+          status: string;
+          schedule_start: string;
+          schedule_end: string;
+        };
       };
       message: string;
     }>('/api/auth/login', {
