@@ -66,43 +66,43 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Login Form */}
           <Card className="shadow-lg border-0">
-            <CardHeader className="text-center">
+          <CardHeader className="text-center">
               <CardTitle className="text-2xl text-gray-900">Sign In</CardTitle>
               <p className="text-gray-600">Access your dashboard</p>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                    {error}
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
                     placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="border-gray-200"
-                    required
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="border-gray-200"
-                    required
-                    disabled={loading}
-                  />
-                </div>
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="border-gray-200"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="border-gray-200"
+                  required
+                  disabled={loading}
+                />
+              </div>
                 <div className="space-y-2">
                   <Label>Role</Label>
                   <div className="grid grid-cols-2 gap-2">
@@ -124,21 +124,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     ))}
                   </div>
                 </div>
-                <Button 
-                  type="submit" 
-                  className="w-full bg-blue-500 hover:bg-blue-600" 
-                  disabled={loading}
-                >
-                  {loading ? 'Logging in...' : 'Sign In'}
-                </Button>
-                <div className="text-center text-sm text-gray-500 mt-4">
-                  <p className="mb-1">Admin: admin@hospital.com / admin123</p>
-                  <p>Doctor: Use your registered email / doctor123</p>
+              <Button 
+                type="submit" 
+                className="w-full bg-blue-500 hover:bg-blue-600" 
+                disabled={loading}
+              >
+                {loading ? 'Logging in...' : 'Sign In'}
+              </Button>
+              <div className="text-center text-sm text-gray-500 mt-4">
+                <p className="mb-1">Admin: admin@hospital.com / admin123</p>
+                <p>Doctor: Use your registered email / doctor123</p>
                   <p>Pharmacy: Use your registered email / password</p>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
           {/* Role Information */}
           <Card className="shadow-lg border-0">

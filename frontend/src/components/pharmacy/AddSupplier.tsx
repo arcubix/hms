@@ -439,13 +439,14 @@ export function AddSupplier() {
                   </CardTitle>
                   <CardDescription>Manage multiple brands from this supplier</CardDescription>
                 </div>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setIsBrandDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Brand
+                </Button>
                 <Dialog open={isBrandDialogOpen} onOpenChange={setIsBrandDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Brand
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Add New Brand</DialogTitle>
@@ -590,13 +591,14 @@ export function AddSupplier() {
                   </CardTitle>
                   <CardDescription>Set purchase targets and commission rates</CardDescription>
                 </div>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setIsTargetDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Target
+                </Button>
                 <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Target
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Add Medicine Target</DialogTitle>
@@ -825,13 +827,14 @@ export function AddSupplier() {
                   </CardTitle>
                   <CardDescription>Manage doctor referrals and preferred brands</CardDescription>
                 </div>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setIsDoctorDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Doctor
+                </Button>
                 <Dialog open={isDoctorDialogOpen} onOpenChange={setIsDoctorDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Doctor
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Add Doctor Relationship</DialogTitle>

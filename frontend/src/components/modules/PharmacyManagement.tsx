@@ -51,6 +51,13 @@ import {
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
 import { AddSupplier } from '../pharmacy/AddSupplier';
+import { StockAdjustments } from '../pharmacy/StockAdjustments';
+import { BarcodeManagement } from '../pharmacy/BarcodeManagement';
+import { StockMovements } from '../pharmacy/StockMovements';
+import { StockManagement } from '../pharmacy/StockManagement';
+import { PurchaseOrders } from '../pharmacy/PurchaseOrders';
+import { SalesHistory } from '../pharmacy/SalesHistory';
+import { RefundProcessing } from '../pharmacy/RefundProcessing';
 
 interface Medicine {
   id: string;
@@ -2077,7 +2084,9 @@ export function PharmacyManagement() {
       case 'add-sale':
         return <AdvancedPOS />;
       case 'sales':
-        return renderSales();
+        return <SalesHistory />;
+      case 'refunds':
+        return <RefundProcessing />;
       case 'medicine-list':
         return renderMedicineList();
       case 'suppliers':
@@ -2087,7 +2096,7 @@ export function PharmacyManagement() {
       case 'batches':
         return renderBatches();
       case 'purchase-orders':
-        return renderPurchaseOrders();
+        return <PurchaseOrders />;
       case 'create-po':
         return renderCreatePurchaseOrder();
       case 'expenses':
@@ -2099,9 +2108,17 @@ export function PharmacyManagement() {
       case 'reports':
         return renderReports();
       case 'stock-alert':
-        return renderStockAlert();
+        return <StockManagement defaultTab="low-stock" />;
       case 'expiring':
-        return renderExpiring();
+        return <StockManagement defaultTab="expiring" />;
+      case 'stock-adjustments':
+        return <StockAdjustments />;
+      case 'barcode-management':
+        return <BarcodeManagement />;
+      case 'stock-movements':
+        return <StockMovements />;
+      case 'stock-management':
+        return <StockManagement />;
       default:
         return renderDashboard();
     }
@@ -2155,6 +2172,11 @@ export function PharmacyManagement() {
                   label="Add New Sale"
                   active={activeSection === 'add-sale'}
                   onClick={() => setActiveSection('add-sale')}
+                />
+                <NavItem
+                  label="Returns & Refunds"
+                  active={activeSection === 'refunds'}
+                  onClick={() => setActiveSection('refunds')}
                 />
                 <NavItem
                   label="Expense"
@@ -2240,6 +2262,26 @@ export function PharmacyManagement() {
                   label="Expiring Medicines"
                   active={activeSection === 'expiring'}
                   onClick={() => setActiveSection('expiring')}
+                />
+                <NavItem
+                  label="Stock Management"
+                  active={activeSection === 'stock-management'}
+                  onClick={() => setActiveSection('stock-management')}
+                />
+                <NavItem
+                  label="Stock Adjustments"
+                  active={activeSection === 'stock-adjustments'}
+                  onClick={() => setActiveSection('stock-adjustments')}
+                />
+                <NavItem
+                  label="Barcode Management"
+                  active={activeSection === 'barcode-management'}
+                  onClick={() => setActiveSection('barcode-management')}
+                />
+                <NavItem
+                  label="Stock Movements"
+                  active={activeSection === 'stock-movements'}
+                  onClick={() => setActiveSection('stock-movements')}
                 />
               </nav>
             </div>

@@ -771,6 +771,806 @@ class ApiService {
     });
     return data.data;
   }
+
+  // ============================================
+  // PHARMACY API METHODS
+  // ============================================
+
+  // Stock Management
+  async getPharmacyStock(filters?: {
+    medicine_id?: number;
+    search?: string;
+    category?: string;
+    status?: string;
+    expiring_soon?: number;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.medicine_id) params.append('medicine_id', filters.medicine_id.toString());
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.expiring_soon) params.append('expiring_soon', filters.expiring_soon.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/stock?${queryString}` : '/api/pharmacy/stock';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: PharmacyStock[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getStockByMedicine(medicineId: number, includeExpired = false) {
+    const params = includeExpired ? '?include_expired=true' : '';
+    const data = await this.request<{
+      success: boolean;
+      data: PharmacyStock[];
+    }>(`/api/pharmacy/stock/medicine/${medicineId}${params}`);
+    return data.data || [];
+  }
+
+  async createStock(stockData: CreatePharmacyStockData) {
+    const data = await this.request<{
+      success: boolean;
+      data: PharmacyStock;
+      message: string;
+    }>('/api/pharmacy/stock', {
+      method: 'POST',
+      body: JSON.stringify(stockData),
+    });
+    return data.data;
+  }
+
+  async updateStock(id: number, stockData: Partial<CreatePharmacyStockData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: PharmacyStock;
+      message: string;
+    }>(`/api/pharmacy/stock/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(stockData),
+    });
+    return data.data;
+  }
+
+  async getLowStockAlerts() {
+    const data = await this.request<{
+      success: boolean;
+      data: LowStockAlert[];
+    }>('/api/pharmacy/stock/low-stock');
+    return data.data || [];
+  }
+
+  async getExpiringStock(days = 90) {
+    const data = await this.request<{
+      success: boolean;
+      data: ExpiringStock[];
+    }>(`/api/pharmacy/stock/expiring?days=${days}`);
+    return data.data || [];
+  }
+
+  async reserveStock(medicineId: number, quantity: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/stock/reserve', {
+      method: 'POST',
+      body: JSON.stringify({ medicine_id: medicineId, quantity }),
+    });
+    return data.data;
+  }
+
+  async releaseStock(medicineId: number, quantity: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>('/api/pharmacy/stock/release', {
+      method: 'POST',
+      body: JSON.stringify({ medicine_id: medicineId, quantity }),
+    });
+    return data;
+  }
+
+  async markExpiredStock() {
+    const data = await this.request<{
+      success: boolean;
+      data: { updated: number };
+      message: string;
+    }>('/api/pharmacy/stock/mark-expired', {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async getStockByBarcode(barcode: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: PharmacyStock;
+    }>(`/api/pharmacy/stock/barcode/${barcode}`);
+    return data.data;
+  }
+
+  async importStock(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    
+    const response = await fetch(`${API_URL}/api/pharmacy/stock/import`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Import failed');
+    }
+    return data.data;
+  }
+
+  async downloadStockImportTemplate() {
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    
+    const response = await fetch(`${API_URL}/api/pharmacy/stock/import-template`, {
+      headers,
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to download template');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'stock_import_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
+  // Suppliers
+  async getSuppliers(filters?: {
+    search?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/suppliers?${queryString}` : '/api/pharmacy/suppliers';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Supplier[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getSupplier(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Supplier;
+    }>(`/api/pharmacy/suppliers/${id}`);
+    return data.data;
+  }
+
+  async createSupplier(supplierData: CreateSupplierData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Supplier;
+      message: string;
+    }>('/api/pharmacy/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(supplierData),
+    });
+    return data.data;
+  }
+
+  async updateSupplier(id: number, supplierData: Partial<CreateSupplierData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Supplier;
+      message: string;
+    }>(`/api/pharmacy/suppliers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(supplierData),
+    });
+    return data.data;
+  }
+
+  async getSupplierPerformance(id: number, startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/suppliers/${id}/performance?${queryString}` : `/api/pharmacy/suppliers/${id}/performance`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: SupplierPerformance;
+    }>(endpoint);
+    return data.data;
+  }
+
+  // Purchase Orders
+  async getPurchaseOrders(filters?: {
+    supplier_id?: number;
+    status?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.supplier_id) params.append('supplier_id', filters.supplier_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/purchase-orders?${queryString}` : '/api/pharmacy/purchase-orders';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getPurchaseOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder;
+    }>(`/api/pharmacy/purchase-orders/${id}`);
+    return data.data;
+  }
+
+  async createPurchaseOrder(poData: CreatePurchaseOrderData) {
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder;
+      message: string;
+    }>('/api/pharmacy/purchase-orders', {
+      method: 'POST',
+      body: JSON.stringify(poData),
+    });
+    return data.data;
+  }
+
+  async updatePurchaseOrder(id: number, poData: Partial<CreatePurchaseOrderData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder;
+      message: string;
+    }>(`/api/pharmacy/purchase-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(poData),
+    });
+    return data.data;
+  }
+
+  async approvePurchaseOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder;
+      message: string;
+    }>(`/api/pharmacy/purchase-orders/${id}/approve`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async cancelPurchaseOrder(id: number, reason?: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: PurchaseOrder;
+      message: string;
+    }>(`/api/pharmacy/purchase-orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    return data.data;
+  }
+
+  async receiveStockFromPO(id: number, receiptData: CreateStockReceiptData) {
+    const data = await this.request<{
+      success: boolean;
+      data: StockReceipt;
+      message: string;
+    }>(`/api/pharmacy/purchase-orders/${id}/receive`, {
+      method: 'POST',
+      body: JSON.stringify(receiptData),
+    });
+    return data.data;
+  }
+
+  // Sales
+  async getSales(filters?: {
+    customer_id?: number;
+    patient_id?: number;
+    status?: string;
+    payment_method?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.customer_id) params.append('customer_id', filters.customer_id.toString());
+    if (filters?.patient_id) params.append('patient_id', filters.patient_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.payment_method) params.append('payment_method', filters.payment_method);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/sales?${queryString}` : '/api/pharmacy/sales';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Sale[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getSale(id: number | string) {
+    const data = await this.request<{
+      success: boolean;
+      data: Sale;
+    }>(`/api/pharmacy/sales/${id}`);
+    return data.data;
+  }
+
+  async createSale(saleData: CreateSaleData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Sale;
+      message: string;
+    }>('/api/pharmacy/sales', {
+      method: 'POST',
+      body: JSON.stringify(saleData),
+    });
+    return data.data;
+  }
+
+  async getSaleInvoice(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: SaleInvoice;
+    }>(`/api/pharmacy/sales/${id}/invoice`);
+    return data.data;
+  }
+
+  async getSalesSummary(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/sales/summary?${queryString}` : '/api/pharmacy/sales/summary';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: SalesSummary;
+    }>(endpoint);
+    return data.data;
+  }
+
+  async getTopSellingMedicines(limit = 10, startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    params.append('limit', limit.toString());
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const data = await this.request<{
+      success: boolean;
+      data: TopSellingMedicine[];
+    }>(`/api/pharmacy/sales/top-selling?${params.toString()}`);
+    return data.data || [];
+  }
+
+  // Refunds
+  async getRefunds(filters?: {
+    sale_id?: number;
+    status?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.sale_id) params.append('sale_id', filters.sale_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/refunds?${queryString}` : '/api/pharmacy/refunds';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Refund[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getRefund(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Refund;
+    }>(`/api/pharmacy/refunds/${id}`);
+    return data.data;
+  }
+
+  async createRefund(refundData: CreateRefundData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Refund;
+      message: string;
+    }>('/api/pharmacy/refunds', {
+      method: 'POST',
+      body: JSON.stringify(refundData),
+    });
+    return data.data;
+  }
+
+  async completeRefund(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Refund;
+      message: string;
+    }>(`/api/pharmacy/refunds/${id}/complete`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async getRefundsBySale(saleId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Refund[];
+    }>(`/api/pharmacy/refunds/sale/${saleId}`);
+    return data.data || [];
+  }
+
+  // Reorder Management
+  async getReorderLevels(filters?: {
+    auto_reorder?: boolean;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.auto_reorder !== undefined) params.append('auto_reorder', filters.auto_reorder.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/reorder?${queryString}` : '/api/pharmacy/reorder';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: ReorderLevel[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getLowStockAlertsReorder(autoReorderOnly = false) {
+    const params = autoReorderOnly ? '?auto_reorder_only=true' : '';
+    const data = await this.request<{
+      success: boolean;
+      data: LowStockAlert[];
+    }>(`/api/pharmacy/reorder/alerts${params}`);
+    return data.data || [];
+  }
+
+  async getReorderLevelByMedicine(medicineId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: ReorderLevel | null;
+    }>(`/api/pharmacy/reorder/medicine/${medicineId}`);
+    return data.data;
+  }
+
+  async setReorderLevel(medicineId: number, reorderData: CreateReorderLevelData) {
+    const data = await this.request<{
+      success: boolean;
+      data: ReorderLevel;
+      message: string;
+    }>(`/api/pharmacy/reorder/medicine/${medicineId}`, {
+      method: 'POST',
+      body: JSON.stringify(reorderData),
+    });
+    return data.data;
+  }
+
+  async generateAutoReorderPOs() {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        pos_generated: Array<{
+          po_id: number;
+          supplier_id: number;
+          items_count: number;
+          total_amount: number;
+        }>;
+        count: number;
+      };
+      message: string;
+    }>('/api/pharmacy/reorder/generate-pos', {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  // Medicine search with stock
+  async searchMedicinesWithStock(searchTerm: string, includeOutOfStock = false) {
+    const params = new URLSearchParams();
+    params.append('search', searchTerm);
+    if (includeOutOfStock) params.append('include_out_of_stock', 'true');
+    
+    const data = await this.request<{
+      success: boolean;
+      data: MedicineWithStock[];
+    }>(`/api/medicines/search-with-stock?${params.toString()}`);
+    return data.data || [];
+  }
+
+  async getMedicine(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Medicine;
+    }>(`/api/medicines/${id}`);
+    return data.data;
+  }
+
+  // ============================================
+  // STOCK ADJUSTMENTS API METHODS
+  // ============================================
+
+  async getStockAdjustments(filters?: {
+    medicine_id?: number;
+    adjustment_type?: string;
+    status?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.medicine_id) params.append('medicine_id', filters.medicine_id.toString());
+    if (filters?.adjustment_type) params.append('adjustment_type', filters.adjustment_type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/stock-adjustments?${queryString}` : '/api/pharmacy/stock-adjustments';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: StockAdjustment[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getStockAdjustment(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: StockAdjustment;
+    }>(`/api/pharmacy/stock-adjustments/${id}`);
+    return data.data;
+  }
+
+  async createStockAdjustment(adjustmentData: CreateStockAdjustmentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: StockAdjustment;
+      message: string;
+    }>('/api/pharmacy/stock-adjustments', {
+      method: 'POST',
+      body: JSON.stringify(adjustmentData),
+    });
+    return data.data;
+  }
+
+  async approveStockAdjustment(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: StockAdjustment;
+      message: string;
+    }>(`/api/pharmacy/stock-adjustments/${id}/approve`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async rejectStockAdjustment(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: StockAdjustment;
+      message: string;
+    }>(`/api/pharmacy/stock-adjustments/${id}/reject`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async getPendingAdjustmentsCount() {
+    const data = await this.request<{
+      success: boolean;
+      data: { count: number };
+    }>('/api/pharmacy/stock-adjustments/pending');
+    return data.data.count;
+  }
+
+  // ============================================
+  // STOCK MOVEMENTS API METHODS
+  // ============================================
+
+  async getStockMovements(filters?: {
+    medicine_id?: number;
+    movement_type?: string;
+    reference_type?: string;
+    reference_id?: number;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.medicine_id) params.append('medicine_id', filters.medicine_id.toString());
+    if (filters?.movement_type) params.append('movement_type', filters.movement_type);
+    if (filters?.reference_type) params.append('reference_type', filters.reference_type);
+    if (filters?.reference_id) params.append('reference_id', filters.reference_id.toString());
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/stock-movements?${queryString}` : '/api/pharmacy/stock-movements';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: StockMovement[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getStockMovementsSummary(medicineId?: number, startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (medicineId) params.append('medicine_id', medicineId.toString());
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/stock-movements/summary?${queryString}` : '/api/pharmacy/stock-movements/summary';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: StockMovementSummary[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getStockMovementsByMedicine(medicineId: number, limit = 100) {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/stock-movements/medicine/${medicineId}?${queryString}` : `/api/pharmacy/stock-movements/medicine/${medicineId}`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: StockMovement[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  // ============================================
+  // BARCODES API METHODS
+  // ============================================
+
+  async getBarcodes(filters?: {
+    medicine_id?: number;
+    barcode?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.medicine_id) params.append('medicine_id', filters.medicine_id.toString());
+    if (filters?.barcode) params.append('barcode', filters.barcode);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/barcodes?${queryString}` : '/api/pharmacy/barcodes';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Barcode[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getBarcode(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Barcode;
+    }>(`/api/pharmacy/barcodes/${id}`);
+    return data.data;
+  }
+
+  async createBarcode(barcodeData: CreateBarcodeData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Barcode;
+      message: string;
+    }>('/api/pharmacy/barcodes', {
+      method: 'POST',
+      body: JSON.stringify(barcodeData),
+    });
+    return data.data;
+  }
+
+  async updateBarcode(id: number, barcodeData: Partial<CreateBarcodeData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Barcode;
+      message: string;
+    }>(`/api/pharmacy/barcodes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(barcodeData),
+    });
+    return data.data;
+  }
+
+  async deleteBarcode(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/pharmacy/barcodes/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async generateBarcode(medicineId: number, isPrimary = false) {
+    const data = await this.request<{
+      success: boolean;
+      data: Barcode;
+      message: string;
+    }>('/api/pharmacy/barcodes/generate', {
+      method: 'POST',
+      body: JSON.stringify({ medicine_id: medicineId, is_primary: isPrimary }),
+    });
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -1235,6 +2035,505 @@ export interface EmergencyBed {
   current_visit_id?: number;
   location?: string;
   notes?: string;
+}
+
+// ============================================
+// PHARMACY INTERFACES
+// ============================================
+
+export interface PharmacyStock {
+  id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  category?: string;
+  batch_number: string;
+  manufacture_date?: string;
+  expiry_date: string;
+  quantity: number;
+  reserved_quantity: number;
+  available_quantity: number;
+  cost_price: number;
+  selling_price: number;
+  location?: string;
+  supplier_id?: number;
+  supplier_name?: string;
+  purchase_order_id?: number;
+  stock_receipt_id?: number;
+  status: 'Active' | 'Expired' | 'Damaged' | 'Sold Out';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePharmacyStockData {
+  medicine_id: number;
+  batch_number: string;
+  manufacture_date?: string;
+  expiry_date: string;
+  quantity: number;
+  cost_price: number;
+  selling_price: number;
+  location?: string;
+  supplier_id?: number;
+  purchase_order_id?: number;
+  stock_receipt_id?: number;
+  notes?: string;
+}
+
+export interface LowStockAlert {
+  medicine_id: number;
+  medicine_code: string;
+  name: string;
+  generic_name?: string;
+  available_stock: number;
+  minimum_stock: number;
+  reorder_quantity: number;
+  preferred_supplier_id?: number;
+  preferred_supplier_name?: string;
+}
+
+export interface ExpiringStock {
+  stock_id: number;
+  medicine_id: number;
+  medicine_code: string;
+  name: string;
+  batch_number: string;
+  expiry_date: string;
+  quantity: number;
+  days_until_expiry: number;
+}
+
+export interface Supplier {
+  id: number;
+  supplier_code: string;
+  name: string;
+  company_name?: string;
+  contact_person?: string;
+  email?: string;
+  phone: string;
+  alternate_phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country: string;
+  zip_code?: string;
+  tax_id?: string;
+  payment_terms?: string;
+  credit_limit: number;
+  outstanding_balance: number;
+  rating?: number;
+  status: 'Active' | 'Inactive' | 'Suspended';
+  notes?: string;
+  performance?: SupplierPerformance;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSupplierData {
+  name: string;
+  company_name?: string;
+  contact_person?: string;
+  email?: string;
+  phone: string;
+  alternate_phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip_code?: string;
+  tax_id?: string;
+  payment_terms?: string;
+  credit_limit?: number;
+  notes?: string;
+}
+
+export interface SupplierPerformance {
+  total_orders: number;
+  total_purchase_amount: number;
+  avg_order_value: number;
+  completed_orders: number;
+  pending_orders: number;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier_id: number;
+  supplier_name?: string;
+  supplier_code?: string;
+  order_date: string;
+  expected_delivery_date?: string;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  shipping_cost: number;
+  discount: number;
+  total_amount: number;
+  status: 'Draft' | 'Pending' | 'Approved' | 'Partially Received' | 'Received' | 'Cancelled';
+  approved_by?: number;
+  approved_at?: string;
+  approved_by_name?: string;
+  notes?: string;
+  created_by?: number;
+  created_by_name?: string;
+  items?: PurchaseOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderItem {
+  id: number;
+  purchase_order_id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  category?: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  received_quantity: number;
+  notes?: string;
+}
+
+export interface CreatePurchaseOrderData {
+  supplier_id: number;
+  order_date?: string;
+  expected_delivery_date?: string;
+  tax_rate?: number;
+  shipping_cost?: number;
+  discount?: number;
+  notes?: string;
+  items: Array<{
+    medicine_id: number;
+    quantity: number;
+    unit_cost: number;
+  }>;
+}
+
+export interface StockReceipt {
+  id: number;
+  receipt_number: string;
+  purchase_order_id?: number;
+  po_number?: string;
+  supplier_id: number;
+  supplier_name?: string;
+  supplier_code?: string;
+  receipt_date: string;
+  received_by?: number;
+  received_by_name?: string;
+  notes?: string;
+  created_by?: number;
+  items?: StockReceiptItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockReceiptItem {
+  id: number;
+  stock_receipt_id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  batch_number: string;
+  manufacture_date?: string;
+  expiry_date: string;
+  quantity: number;
+  cost_price: number;
+  selling_price: number;
+  location?: string;
+  purchase_order_item_id?: number;
+}
+
+export interface CreateStockReceiptData {
+  receipt_date?: string;
+  notes?: string;
+  items: Array<{
+    medicine_id: number;
+    batch_number: string;
+    manufacture_date?: string;
+    expiry_date: string;
+    quantity: number;
+    cost_price: number;
+    selling_price: number;
+    location?: string;
+    purchase_order_item_id?: number;
+  }>;
+}
+
+export interface Sale {
+  id: number;
+  invoice_number: string;
+  customer_id?: number;
+  patient_id?: number;
+  patient_name?: string;
+  prescription_id?: number;
+  customer_name: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_address?: string;
+  sale_date: string;
+  subtotal: number;
+  discount_amount: number;
+  discount_percentage: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_amount: number;
+  payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
+  amount_received?: number;
+  change_amount: number;
+  status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded';
+  cashier_id?: number;
+  cashier_name?: string;
+  notes?: string;
+  items?: SaleItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaleItem {
+  id: number;
+  sale_id: number;
+  medicine_id: number;
+  stock_id: number;
+  medicine_name: string;
+  batch_number: string;
+  expiry_date?: string;
+  quantity: number;
+  unit_price: number;
+  discount_percentage: number;
+  discount_amount: number;
+  subtotal: number;
+}
+
+export interface CreateSaleData {
+  customer_id?: number;
+  patient_id?: number;
+  prescription_id?: number;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_address?: string;
+  customer_city?: string;
+  items: Array<{
+    medicine_id: number;
+    medicine_name: string;
+    quantity: number;
+    unit_price: number;
+    discount_percentage?: number;
+  }>;
+  discount_percentage?: number;
+  tax_rate?: number;
+  payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
+  amount_received?: number;
+  notes?: string;
+}
+
+export interface SaleInvoice {
+  invoice_number: string;
+  sale_date: string;
+  customer: {
+    name: string;
+    phone: string;
+    email: string;
+    address: string;
+  };
+  items: SaleItem[];
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  payment_method: string;
+  amount_received?: number;
+  change_amount: number;
+  cashier: string;
+}
+
+export interface SalesSummary {
+  total_sales: number;
+  total_customers: number;
+  total_subtotal: number;
+  total_discount: number;
+  total_tax: number;
+  total_revenue: number;
+  cash_sales: number;
+  card_sales: number;
+  insurance_sales: number;
+}
+
+export interface TopSellingMedicine {
+  medicine_id: number;
+  name: string;
+  generic_name?: string;
+  total_quantity_sold: number;
+  total_revenue: number;
+}
+
+export interface Refund {
+  id: number;
+  refund_number: string;
+  sale_id: number;
+  invoice_number?: string;
+  sale_date?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  refund_date: string;
+  refund_type: 'Full' | 'Partial';
+  refund_reason?: string;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  payment_method: 'Cash' | 'Card' | 'Original';
+  status: 'Pending' | 'Completed' | 'Cancelled';
+  processed_by?: number;
+  processed_by_name?: string;
+  notes?: string;
+  items?: RefundItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RefundItem {
+  id: number;
+  refund_id: number;
+  sale_item_id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  batch_number?: string;
+  stock_id?: number;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  return_to_stock: boolean;
+}
+
+export interface CreateRefundData {
+  sale_id: number;
+  refund_reason?: string;
+  payment_method?: 'Cash' | 'Card' | 'Original';
+  items: Array<{
+    sale_item_id: number;
+    medicine_id: number;
+    quantity: number;
+    unit_price: number;
+    subtotal: number;
+    return_to_stock?: boolean;
+  }>;
+  notes?: string;
+}
+
+export interface ReorderLevel {
+  id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  category?: string;
+  minimum_stock: number;
+  reorder_quantity: number;
+  maximum_stock?: number;
+  preferred_supplier_id?: number;
+  preferred_supplier_name?: string;
+  auto_reorder: boolean;
+  last_reorder_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateReorderLevelData {
+  minimum_stock: number;
+  reorder_quantity: number;
+  maximum_stock?: number;
+  preferred_supplier_id?: number;
+  auto_reorder?: boolean;
+}
+
+export interface MedicineWithStock extends Medicine {
+  available_stock: number;
+  in_stock: boolean;
+  selling_price: number;
+  cost_price: number;
+}
+
+export interface StockAdjustment {
+  id: number;
+  adjustment_number: string;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  stock_id?: number;
+  batch_number?: string;
+  expiry_date?: string;
+  adjustment_type: 'Increase' | 'Decrease' | 'Expiry Write-off' | 'Damage Write-off' | 'Theft' | 'Correction';
+  quantity: number;
+  reason: string;
+  notes?: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Completed';
+  requested_by?: number;
+  requested_by_name?: string;
+  approved_by?: number;
+  approved_by_name?: string;
+  approved_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateStockAdjustmentData {
+  medicine_id: number;
+  stock_id?: number;
+  adjustment_type: 'Increase' | 'Decrease' | 'Expiry Write-off' | 'Damage Write-off' | 'Theft' | 'Correction';
+  quantity: number;
+  reason: string;
+  notes?: string;
+}
+
+export interface StockMovement {
+  id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  generic_name?: string;
+  stock_id?: number;
+  movement_type: string;
+  quantity: number;
+  stock_before?: number;
+  stock_after?: number;
+  reference_type?: string;
+  reference_id?: number;
+  notes?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface StockMovementSummary {
+  movement_type: string;
+  total_in: number;
+  total_out: number;
+  movement_count: number;
+}
+
+export interface Barcode {
+  id: number;
+  medicine_id: number;
+  medicine_name?: string;
+  medicine_code?: string;
+  barcode: string;
+  barcode_type: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBarcodeData {
+  medicine_id: number;
+  barcode: string;
+  barcode_type?: string;
+  is_primary?: boolean;
 }
 
 export const api = new ApiService();

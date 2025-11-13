@@ -101,5 +101,148 @@ class Medicine_model extends CI_Model {
         $this->db->where('id', $id);
         return $this->db->update('medicines', array('status' => 'Inactive'));
     }
+
+    /**
+     * Get medicine with stock quantity
+     */
+    public function get_with_stock($id) {
+        $medicine = $this->get_by_id($id);
+        
+        if ($medicine) {
+            $this->load->model('Medicine_stock_model');
+            $stock_summary = $this->Medicine_stock_model->get_stock_summary($id);
+            $medicine['stock'] = $stock_summary;
+            $medicine['available_stock'] = $stock_summary['available_stock'] ?? 0;
+            $medicine['total_stock'] = $stock_summary['total_stock'] ?? 0;
+        }
+        
+        return $medicine;
+    }
+
+    /**
+     * Get all medicines with stock information
+     */
+    public function get_all_with_stock($filters = array()) {
+        $medicines = $this->get_all($filters);
+        $this->load->model('Medicine_stock_model');
+        
+        foreach ($medicines as &$medicine) {
+            $stock_summary = $this->Medicine_stock_model->get_stock_summary($medicine['id']);
+            $medicine['stock'] = $stock_summary;
+            $medicine['available_stock'] = $stock_summary['available_stock'] ?? 0;
+            $medicine['total_stock'] = $stock_summary['total_stock'] ?? 0;
+            $medicine['is_low_stock'] = false;
+            
+            // Check if low stock
+            $this->load->model('Reorder_model');
+            $reorder_level = $this->Reorder_model->get_by_medicine_id($medicine['id']);
+            if ($reorder_level && $medicine['available_stock'] < $reorder_level['minimum_stock']) {
+                $medicine['is_low_stock'] = true;
+                $medicine['minimum_stock'] = $reorder_level['minimum_stock'];
+            }
+        }
+        
+        return $medicines;
+    }
+
+    /**
+     * Get medicine by barcode
+     */
+    public function get_by_barcode($barcode) {
+        $this->db->select('m.*');
+        $this->db->from('medicines m');
+        $this->db->join('barcodes b', 'm.id = b.medicine_id', 'left');
+        $this->db->where('b.barcode', $barcode);
+        $this->db->or_where('m.barcode', $barcode);
+        $this->db->where('m.status', 'Active');
+        $this->db->limit(1);
+        $query = $this->db->get();
+        return $query->row_array();
+    }
+
+    /**
+     * Get medicine alternatives
+     */
+    public function get_alternatives($medicine_id, $limit = 5) {
+        $this->db->select('
+            ma.*,
+            m.id as alternative_id,
+            m.name as alternative_name,
+            m.generic_name as alternative_generic_name,
+            m.medicine_code as alternative_code,
+            m.category,
+            m.strength,
+            m.requires_prescription
+        ');
+        $this->db->from('medicine_alternatives ma');
+        $this->db->join('medicines m', 'ma.alternative_medicine_id = m.id', 'left');
+        $this->db->where('ma.medicine_id', $medicine_id);
+        $this->db->where('ma.is_active', 1);
+        $this->db->where('m.status', 'Active');
+        $this->db->order_by('ma.similarity_score', 'DESC');
+        $this->db->limit($limit);
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Check if medicine is low stock
+     */
+    public function is_low_stock($medicine_id) {
+        $this->load->model('Medicine_stock_model');
+        $this->load->model('Reorder_model');
+        
+        $available_stock = $this->Medicine_stock_model->get_available_stock($medicine_id);
+        $reorder_level = $this->Reorder_model->get_by_medicine_id($medicine_id);
+        
+        if ($reorder_level && $available_stock < $reorder_level['minimum_stock']) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Search medicines with stock availability
+     */
+    public function search_with_stock($search_term, $include_out_of_stock = false) {
+        $this->db->select('m.*');
+        $this->db->from('medicines m');
+        
+        $search = $this->db->escape_like_str($search_term);
+        $this->db->group_start();
+        $this->db->like('m.name', $search);
+        $this->db->or_like('m.generic_name', $search);
+        $this->db->or_like('m.medicine_code', $search);
+        $this->db->group_end();
+        
+        $this->db->where('m.status', 'Active');
+        $this->db->order_by('m.name', 'ASC');
+        $query = $this->db->get();
+        $medicines = $query->result_array();
+        
+        $this->load->model('Medicine_stock_model');
+        
+        $results = array();
+        foreach ($medicines as $medicine) {
+            $available_stock = $this->Medicine_stock_model->get_available_stock($medicine['id']);
+            
+            if (!$include_out_of_stock && $available_stock <= 0) {
+                continue; // Skip out of stock items
+            }
+            
+            $medicine['available_stock'] = $available_stock;
+            $medicine['in_stock'] = $available_stock > 0;
+            
+            // Get pricing from stock
+            $stock_summary = $this->Medicine_stock_model->get_stock_summary($medicine['id']);
+            $medicine['selling_price'] = $stock_summary['max_price'] ?? 0;
+            $medicine['cost_price'] = $stock_summary['min_cost'] ?? 0;
+            
+            $results[] = $medicine;
+        }
+        
+        return $results;
+    }
 }
 

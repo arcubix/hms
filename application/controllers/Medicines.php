@@ -122,5 +122,28 @@ class Medicines extends Api {
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }
+
+    /**
+     * GET /api/medicines/search-with-stock - Search medicines with stock information
+     */
+    public function search_with_stock() {
+        if ($this->input->server('REQUEST_METHOD') !== 'GET') {
+            $this->error('Method not allowed', 405);
+            return;
+        }
+
+        try {
+            $search_term = $this->input->get('search') ?? '';
+            $include_out_of_stock = $this->input->get('include_out_of_stock') === 'true';
+            
+            $this->load->model('Medicine_model');
+            $medicines = $this->Medicine_model->search_with_stock($search_term, $include_out_of_stock);
+            
+            $this->success($medicines);
+        } catch (Exception $e) {
+            log_message('error', 'Search medicines with stock error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
 }
 

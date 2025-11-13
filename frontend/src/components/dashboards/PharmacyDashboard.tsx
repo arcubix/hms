@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
 import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
@@ -16,12 +16,21 @@ import {
   XCircle,
   Calendar,
   Search,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  Receipt,
+  RotateCcw
 } from 'lucide-react';
 import { User } from '../../App';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Input } from '../ui/input';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
+import { PurchaseOrders } from '../pharmacy/PurchaseOrders';
+import { StockManagement } from '../pharmacy/StockManagement';
+import { SalesHistory } from '../pharmacy/SalesHistory';
+import { RefundProcessing } from '../pharmacy/RefundProcessing';
+import { api, SalesSummary, LowStockAlert, PurchaseOrder, ExpiringStock } from '../../services/api';
+import { toast } from 'sonner';
 
 interface PharmacyDashboardProps {
   user: User;
@@ -33,6 +42,8 @@ const navigationItems: NavigationItem[] = [
   { icon: <CreditCard className="w-5 h-5" />, label: 'POS System', id: 'pos' },
   { icon: <ShoppingCart className="w-5 h-5" />, label: 'Prescriptions', id: 'prescriptions', badge: '8' },
   { icon: <Package className="w-5 h-5" />, label: 'Inventory', id: 'inventory' },
+  { icon: <Receipt className="w-5 h-5" />, label: 'Sales History', id: 'sales' },
+  { icon: <RotateCcw className="w-5 h-5" />, label: 'Returns', id: 'refunds' },
   { icon: <AlertTriangle className="w-5 h-5" />, label: 'Low Stock', id: 'lowstock', badge: '5' },
   { icon: <Clock className="w-5 h-5" />, label: 'Expired Items', id: 'expired' },
   { icon: <CheckCircle className="w-5 h-5" />, label: 'Orders', id: 'orders' }
@@ -131,6 +142,40 @@ const inventoryItems = [
 export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
+  const [todaySales, setTodaySales] = useState<SalesSummary | null>(null);
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([]);
+  const [pendingPOs, setPendingPOs] = useState<PurchaseOrder[]>([]);
+  const [expiringItems, setExpiringItems] = useState<ExpiringStock[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeSection === 'dashboard') {
+      loadDashboardData();
+    }
+  }, [activeSection]);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      
+      const [salesData, alertsData, posData, expiringData] = await Promise.all([
+        api.getSalesSummary(today, today).catch(() => null),
+        api.getLowStockAlerts().catch(() => []),
+        api.getPurchaseOrders({ status: 'Pending' }).catch(() => []),
+        api.getExpiringStock(30).catch(() => [])
+      ]);
+      
+      setTodaySales(salesData);
+      setLowStockAlerts(alertsData);
+      setPendingPOs(posData);
+      setExpiringItems(expiringData);
+    } catch (error: any) {
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -180,6 +225,21 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
     switch (activeSection) {
       case 'pos':
         return <AdvancedPOS />;
+      
+      case 'orders':
+        return <PurchaseOrders />;
+      
+      case 'lowstock':
+        return <StockManagement defaultTab="low-stock" />;
+      
+      case 'expired':
+        return <StockManagement defaultTab="expiring" />;
+      
+      case 'sales':
+        return <SalesHistory />;
+      
+      case 'refunds':
+        return <RefundProcessing />;
       
       case 'inventory':
         return (
@@ -288,31 +348,29 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <StatsCard
-                title="Pending Prescriptions"
-                value="8"
-                icon={<Clock className="w-6 h-6" />}
-                trend={{ value: 2, isPositive: false }}
-                color="yellow"
-              />
-              <StatsCard
-                title="Ready for Pickup"
-                value="12"
-                icon={<CheckCircle className="w-6 h-6" />}
-                trend={{ value: 5, isPositive: true }}
+                title="Today's Sales"
+                value={todaySales?.total_sales?.toString() || '0'}
+                icon={<ShoppingCart className="w-6 h-6" />}
+                trend={todaySales ? { value: todaySales.total_revenue, isPositive: true } : undefined}
                 color="green"
               />
               <StatsCard
+                title="Today's Revenue"
+                value={`Rs. ${(Number(todaySales?.total_revenue) || 0).toFixed(2)}`}
+                icon={<CreditCard className="w-6 h-6" />}
+                color="blue"
+              />
+              <StatsCard
                 title="Low Stock Items"
-                value="5"
+                value={lowStockAlerts.length.toString()}
                 icon={<AlertTriangle className="w-6 h-6" />}
                 color="red"
               />
               <StatsCard
-                title="Total Inventory Value"
-                value="$45,678"
+                title="Pending POs"
+                value={pendingPOs.length.toString()}
                 icon={<Package className="w-6 h-6" />}
-                trend={{ value: 8, isPositive: true }}
-                color="blue"
+                color="yellow"
               />
             </div>
 
@@ -373,40 +431,87 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-red-600" />
-                    Low Stock Alerts
+                    Low Stock Alerts ({lowStockAlerts.length})
                   </CardTitle>
-                  <Button variant="outline" size="sm">Reorder All</Button>
+                  <Button variant="outline" size="sm" onClick={loadDashboardData}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {inventoryItems
-                      .filter(item => item.status === 'low_stock' || item.status === 'critical')
-                      .map((item) => (
-                        <div key={item.id} className={`p-4 rounded-lg border-l-4 ${
-                          item.status === 'critical' ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-500'
-                        }`}>
+                    {loading ? (
+                      <div className="text-center py-8 text-gray-500">Loading...</div>
+                    ) : lowStockAlerts.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">No low stock alerts</div>
+                    ) : (
+                      lowStockAlerts.slice(0, 5).map((alert) => (
+                        <div key={alert.medicine_id} className="p-4 rounded-lg border-l-4 bg-yellow-50 border-yellow-500">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-sm text-gray-900">{item.name}</p>
-                              <p className="text-xs text-gray-600">{item.category}</p>
+                              <p className="text-sm text-gray-900 font-medium">{alert.name}</p>
+                              {alert.generic_name && (
+                                <p className="text-xs text-gray-600">{alert.generic_name}</p>
+                              )}
                               <div className="flex items-center gap-2 mt-2">
-                                <span className={`text-sm ${getStockColor(item.currentStock, item.minStock)}`}>
-                                  {item.currentStock} units left
+                                <span className="text-sm text-red-600 font-medium">
+                                  {alert.available_stock} units left
                                 </span>
-                                <span className="text-xs text-gray-500">Min: {item.minStock}</span>
+                                <span className="text-xs text-gray-500">Min: {alert.minimum_stock}</span>
                               </div>
                             </div>
                             <div className="text-right">
-                              <Badge className={getStatusColor(item.status)}>
-                                {item.status.replace('_', ' ')}
-                              </Badge>
-                              <Button size="sm" className="mt-2 bg-blue-500 hover:bg-blue-600">
-                                Reorder
-                              </Button>
+                              <Badge variant="destructive">Low Stock</Badge>
                             </div>
                           </div>
                         </div>
-                      ))}
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Expiring Items */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-orange-600" />
+                    Expiring Soon ({expiringItems.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {expiringItems.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">No expiring items</div>
+                    ) : (
+                      expiringItems.slice(0, 5).map((item) => {
+                        const days = item.days_until_expiry;
+                        return (
+                          <div key={item.stock_id} className={`p-4 rounded-lg border-l-4 ${
+                            days <= 7 ? 'bg-red-50 border-red-500' : 'bg-orange-50 border-orange-500'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-gray-900 font-medium">{item.name}</p>
+                                <p className="text-xs text-gray-600">Batch: {item.batch_number}</p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`text-sm font-medium ${
+                                    days <= 7 ? 'text-red-600' : 'text-orange-600'
+                                  }`}>
+                                    {days} days until expiry
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <Badge variant={days <= 7 ? 'destructive' : 'default'}>
+                                  {days <= 7 ? 'Urgent' : 'Warning'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -447,22 +552,28 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="border-0 shadow-sm">
                 <CardContent className="p-6 text-center">
-                  <div className="text-2xl text-green-600 mb-2">34</div>
-                  <div className="text-sm text-gray-600">Prescriptions Filled</div>
+                  <div className="text-2xl text-green-600 mb-2 font-bold">
+                    {todaySales?.total_sales || 0}
+                  </div>
+                  <div className="text-sm text-gray-600">Sales Transactions</div>
                   <div className="text-xs text-gray-500 mt-1">Today</div>
                 </CardContent>
               </Card>
               <Card className="border-0 shadow-sm">
                 <CardContent className="p-6 text-center">
-                  <div className="text-2xl text-blue-600 mb-2">$2,450</div>
+                  <div className="text-2xl text-blue-600 mb-2 font-bold">
+                    Rs. {(Number(todaySales?.total_revenue) || 0).toFixed(2)}
+                  </div>
                   <div className="text-sm text-gray-600">Revenue Generated</div>
                   <div className="text-xs text-gray-500 mt-1">Today</div>
                 </CardContent>
               </Card>
               <Card className="border-0 shadow-sm">
                 <CardContent className="p-6 text-center">
-                  <div className="text-2xl text-purple-600 mb-2">18</div>
-                  <div className="text-sm text-gray-600">Patients Served</div>
+                  <div className="text-2xl text-purple-600 mb-2 font-bold">
+                    {todaySales?.total_customers || 0}
+                  </div>
+                  <div className="text-sm text-gray-600">Customers Served</div>
                   <div className="text-xs text-gray-500 mt-1">Today</div>
                 </CardContent>
               </Card>

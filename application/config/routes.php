@@ -92,3 +92,69 @@ $route['api/emergency/visits/(:num)/history'] = 'emergency/history/$1';
 $route['api/emergency/visits/(:num)/admit-ipd'] = 'emergency/admit_ipd/$1';
 $route['api/emergency/stats'] = 'emergency/stats';
 $route['api/emergency/beds'] = 'emergency/beds';
+
+// Pharmacy Routes
+// Stock Management
+$route['api/pharmacy/stock'] = 'pharmacy_stock/index';
+$route['api/pharmacy/stock/(:num)'] = 'pharmacy_stock/get/$1';
+$route['api/pharmacy/stock/medicine/(:num)'] = 'pharmacy_stock/get_by_medicine/$1';
+$route['api/pharmacy/stock/barcode/(:any)'] = 'pharmacy_stock/get_by_barcode/$1';
+$route['api/pharmacy/stock/low-stock'] = 'pharmacy_stock/low_stock';
+$route['api/pharmacy/stock/expiring'] = 'pharmacy_stock/expiring';
+$route['api/pharmacy/stock/import'] = 'pharmacy_stock/import';
+$route['api/pharmacy/stock/import-template'] = 'pharmacy_stock/import_template';
+$route['api/pharmacy/stock/reserve'] = 'pharmacy_stock/reserve';
+$route['api/pharmacy/stock/release'] = 'pharmacy_stock/release';
+$route['api/pharmacy/stock/mark-expired'] = 'pharmacy_stock/mark_expired';
+$route['api/pharmacy/stock/(:num)/mark-expired'] = 'pharmacy_stock/mark_expired/$1';
+
+// Suppliers
+$route['api/pharmacy/suppliers'] = 'suppliers/index';
+$route['api/pharmacy/suppliers/(:num)'] = 'suppliers/id/$1';
+$route['api/pharmacy/suppliers/(:num)/performance'] = 'suppliers/performance/$1';
+
+// Purchase Orders
+$route['api/pharmacy/purchase-orders'] = 'purchase_orders/index';
+$route['api/pharmacy/purchase-orders/(:num)'] = 'purchase_orders/id/$1';
+$route['api/pharmacy/purchase-orders/(:num)/approve'] = 'purchase_orders/approve/$1';
+$route['api/pharmacy/purchase-orders/(:num)/cancel'] = 'purchase_orders/cancel/$1';
+$route['api/pharmacy/purchase-orders/(:num)/receive'] = 'purchase_orders/receive/$1';
+
+// Sales
+$route['api/pharmacy/sales'] = 'pharmacy_sales/index';
+$route['api/pharmacy/sales/(:num)'] = 'pharmacy_sales/id/$1';
+$route['api/pharmacy/sales/(:num)/invoice'] = 'pharmacy_sales/invoice/$1';
+$route['api/pharmacy/sales/summary'] = 'pharmacy_sales/summary';
+$route['api/pharmacy/sales/top-selling'] = 'pharmacy_sales/top_selling';
+
+// Refunds
+$route['api/pharmacy/refunds'] = 'refunds/index';
+$route['api/pharmacy/refunds/(:num)'] = 'refunds/id/$1';
+$route['api/pharmacy/refunds/(:num)/complete'] = 'refunds/complete/$1';
+$route['api/pharmacy/refunds/sale/(:num)'] = 'refunds/get_by_sale/$1';
+
+// Reorder Management
+$route['api/pharmacy/reorder'] = 'reorder/index';
+$route['api/pharmacy/reorder/alerts'] = 'reorder/alerts';
+$route['api/pharmacy/reorder/medicine/(:num)'] = 'reorder/medicine/$1';
+$route['api/pharmacy/reorder/generate-pos'] = 'reorder/generate_pos';
+
+// Medicine search with stock
+$route['api/medicines/search-with-stock'] = 'medicines/search_with_stock';
+
+// Stock Adjustments
+$route['api/pharmacy/stock-adjustments'] = 'stock_adjustments/index';
+$route['api/pharmacy/stock-adjustments/(:num)'] = 'stock_adjustments/get/$1';
+$route['api/pharmacy/stock-adjustments/(:num)/approve'] = 'stock_adjustments/approve/$1';
+$route['api/pharmacy/stock-adjustments/(:num)/reject'] = 'stock_adjustments/reject/$1';
+$route['api/pharmacy/stock-adjustments/pending'] = 'stock_adjustments/pending';
+
+// Stock Movements
+$route['api/pharmacy/stock-movements'] = 'stock_movements/index';
+$route['api/pharmacy/stock-movements/summary'] = 'stock_movements/summary';
+$route['api/pharmacy/stock-movements/medicine/(:num)'] = 'stock_movements/medicine/$1';
+
+// Barcodes
+$route['api/pharmacy/barcodes'] = 'barcodes/index';
+$route['api/pharmacy/barcodes/(:num)'] = 'barcodes/id/$1';
+$route['api/pharmacy/barcodes/generate'] = 'barcodes/generate';

@@ -73,22 +73,26 @@ import {
   Keyboard,
   Info,
   Layers,
-  Play
+  Play,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api, MedicineWithStock, CreateSaleData, Patient } from '../../services/api';
 
 interface Medicine {
-  id: string;
+  id: string | number;
   name: string;
-  genericName: string;
-  strength: string;
-  form: string;
-  category: string;
+  genericName?: string;
+  strength?: string;
+  form?: string;
+  category?: string;
   price: number;
   stock: number;
-  barcode: string;
+  available_stock?: number;
+  barcode?: string;
   image?: string;
-  requiresPrescription: boolean;
+  requiresPrescription?: boolean;
+  selling_price?: number;
 }
 
 interface CartItem {
@@ -116,94 +120,23 @@ interface HeldBill {
   prescriptionNumber: string;
   timestamp: Date;
   total: number;
+  reservedStock?: Map<number, number>; // Store reservation info
 }
-
-const mockMedicines: Medicine[] = [
-  {
-    id: '1',
-    name: 'Paracetamol',
-    genericName: 'Acetaminophen',
-    strength: '500mg',
-    form: 'Tablet',
-    category: 'Analgesics',
-    price: 5.0,
-    stock: 500,
-    barcode: '8901234567890',
-    requiresPrescription: false
-  },
-  {
-    id: '2',
-    name: 'Amoxicillin',
-    genericName: 'Amoxicillin',
-    strength: '250mg',
-    form: 'Capsule',
-    category: 'Antibiotics',
-    price: 15.0,
-    stock: 245,
-    barcode: '8901234567891',
-    requiresPrescription: true
-  },
-  {
-    id: '3',
-    name: 'Omeprazole',
-    genericName: 'Omeprazole',
-    strength: '20mg',
-    form: 'Capsule',
-    category: 'Gastrointestinal',
-    price: 8.5,
-    stock: 180,
-    barcode: '8901234567892',
-    requiresPrescription: false
-  },
-  {
-    id: '4',
-    name: 'Metformin',
-    genericName: 'Metformin HCl',
-    strength: '500mg',
-    form: 'Tablet',
-    category: 'Diabetes',
-    price: 12.0,
-    stock: 320,
-    barcode: '8901234567893',
-    requiresPrescription: true
-  },
-  {
-    id: '5',
-    name: 'Cetirizine',
-    genericName: 'Cetirizine HCl',
-    strength: '10mg',
-    form: 'Tablet',
-    category: 'Antihistamines',
-    price: 6.0,
-    stock: 150,
-    barcode: '8901234567894',
-    requiresPrescription: false
-  },
-  {
-    id: '6',
-    name: 'Lisinopril',
-    genericName: 'Lisinopril',
-    strength: '10mg',
-    form: 'Tablet',
-    category: 'Cardiovascular',
-    price: 18.0,
-    stock: 95,
-    barcode: '8901234567895',
-    requiresPrescription: true
-  }
-];
-
-const categories = ['All', 'Analgesics', 'Antibiotics', 'Diabetes', 'Cardiovascular', 'Gastrointestinal', 'Antihistamines'];
 
 export function AdvancedPOS() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [allMedicines, setAllMedicines] = useState<Medicine[]>([]); // Store all medicines
+  const [categories, setCategories] = useState<string[]>(['All']);
+  const [loading, setLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<Customer>({
     name: 'Walk-in Customer',
     phone: '',
     type: 'walk-in'
   });
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'insurance'>('cash');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [globalDiscount, setGlobalDiscount] = useState(0);
@@ -214,6 +147,143 @@ export function AdvancedPOS() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [heldBills, setHeldBills] = useState<HeldBill[]>([]);
   const [isHeldBillsOpen, setIsHeldBillsOpen] = useState(false);
+  const [processingSale, setProcessingSale] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [lastSaleId, setLastSaleId] = useState<number | null>(null);
+  const [lastInvoiceNumber, setLastInvoiceNumber] = useState<string | null>(null);
+  const [reservedStock, setReservedStock] = useState<Map<number, number>>(new Map()); // medicine_id -> reserved quantity
+
+  // Load all medicines on mount
+  useEffect(() => {
+    const loadAllMedicines = async () => {
+      try {
+        setLoading(true);
+        
+        // Load all active medicines
+        const allMedicinesData = await api.getMedicines({ status: 'Active' });
+        
+        // Load all stock to get available quantities and prices
+        const stockData = await api.getPharmacyStock({ status: 'Active', limit: 1000 });
+        
+        // Create a map of medicine_id -> total available stock and latest selling price
+        const stockMap = new Map<number, { stock: number; price: number }>();
+        stockData.forEach(stock => {
+          const available = stock.quantity - stock.reserved_quantity;
+          if (stockMap.has(stock.medicine_id)) {
+            const existing = stockMap.get(stock.medicine_id)!;
+            existing.stock += available;
+            // Use the latest selling price
+            if (stock.selling_price > existing.price) {
+              existing.price = stock.selling_price;
+            }
+          } else {
+            stockMap.set(stock.medicine_id, {
+              stock: available,
+              price: stock.selling_price
+            });
+          }
+        });
+
+        // Combine medicines with stock data
+        const medicinesWithStock: Medicine[] = allMedicinesData.map(med => {
+          const stockInfo = stockMap.get(med.id) || { stock: 0, price: 0 };
+          const price = Number(stockInfo.price) || 0;
+          const stock = Number(stockInfo.stock) || 0;
+          return {
+            id: med.id,
+            name: med.name,
+            genericName: med.generic_name,
+            strength: med.strength,
+            form: med.unit,
+            category: med.category || 'Uncategorized',
+            price: price,
+            stock: stock,
+            available_stock: stock,
+            barcode: '',
+            requiresPrescription: med.requires_prescription || false,
+            selling_price: price
+          };
+        });
+
+        // Filter to only show medicines with stock > 0
+        const availableMedicines = medicinesWithStock.filter(med => med.stock > 0);
+        
+        setAllMedicines(availableMedicines);
+        setMedicines(availableMedicines);
+
+        // Extract unique categories
+        const uniqueCategories = Array.from(new Set(availableMedicines.map(m => m.category).filter(Boolean)));
+        setCategories(['All', ...uniqueCategories]);
+      } catch (error: any) {
+        console.error('Failed to load medicines:', error);
+        toast.error('Failed to load medicines');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAllMedicines();
+  }, []);
+
+  // Filter medicines based on search and category
+  useEffect(() => {
+    let filtered = [...allMedicines];
+
+    // Apply search filter
+    if (searchQuery.length > 0) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(med => 
+        med.name.toLowerCase().includes(query) ||
+        med.genericName?.toLowerCase().includes(query) ||
+        med.barcode?.includes(query)
+      );
+    }
+
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(med => med.category === selectedCategory);
+    }
+
+    setMedicines(filtered);
+  }, [searchQuery, selectedCategory, allMedicines]);
+
+  // Handle barcode scanning
+  useEffect(() => {
+    const handleBarcodeScan = async () => {
+      if (barcodeInput.length >= 8) {
+        try {
+          const stock = await api.getStockByBarcode(barcodeInput);
+          if (stock) {
+            const medicine = await api.getMedicine(stock.medicine_id.toString());
+            const med: Medicine = {
+              id: medicine.id,
+              name: medicine.name,
+              genericName: medicine.generic_name,
+              strength: medicine.strength,
+              form: medicine.unit,
+              category: medicine.category,
+              price: stock.selling_price,
+              stock: stock.quantity - stock.reserved_quantity,
+              available_stock: stock.quantity - stock.reserved_quantity,
+              barcode: barcodeInput,
+              requiresPrescription: medicine.requires_prescription || false,
+              selling_price: stock.selling_price
+            };
+            addToCart(med);
+            setBarcodeInput('');
+          }
+        } catch (error: any) {
+          toast.error('Medicine not found for barcode');
+          setBarcodeInput('');
+        }
+      }
+    };
+
+    if (barcodeInput) {
+      const timer = setTimeout(handleBarcodeScan, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [barcodeInput]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -221,12 +291,18 @@ export function AdvancedPOS() {
       // F1 - Focus search
       if (e.key === 'F1') {
         e.preventDefault();
-        document.querySelector<HTMLInputElement>('input[placeholder*="Search medicine"]')?.focus();
+        const searchInput = document.querySelector<HTMLInputElement>('input[placeholder*="Search"], input[placeholder*="search"], input[type="search"]');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
       }
       // F2 - Clear cart
       if (e.key === 'F2') {
         e.preventDefault();
-        if (cart.length > 0 && confirm('Clear cart?')) clearCart();
+        if (cart.length > 0 && confirm('Clear cart?')) {
+          clearCart();
+        }
       }
       // F3 - Open customer dialog
       if (e.key === 'F3') {
@@ -236,63 +312,123 @@ export function AdvancedPOS() {
       // F9 - Hold sale
       if (e.key === 'F9') {
         e.preventDefault();
-        if (cart.length > 0) holdBill();
+        if (cart.length > 0) {
+          holdBill();
+        } else {
+          toast.info('Cart is empty');
+        }
       }
       // F12 - Open payment
       if (e.key === 'F12') {
         e.preventDefault();
-        if (cart.length > 0) setIsPaymentDialogOpen(true);
+        if (cart.length > 0) {
+          setIsPaymentDialogOpen(true);
+        } else {
+          toast.info('Cart is empty');
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [cart.length]);
+  }, [cart.length]); // Only depend on cart.length
 
-  // Filter medicines based on search and category
-  const filteredMedicines = mockMedicines.filter(medicine => {
-    const matchesSearch = medicine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         medicine.genericName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         medicine.barcode.includes(searchQuery);
-    const matchesCategory = selectedCategory === 'All' || medicine.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Medicines are already filtered in useEffect
+  const filteredMedicines = medicines;
 
-  // Add to cart
-  const addToCart = (medicine: Medicine) => {
+  // Add to cart with auto-reservation
+  const addToCart = async (medicine: Medicine) => {
+    const availableStock = medicine.available_stock || medicine.stock || 0;
     const existingItem = cart.find(item => item.medicine.id === medicine.id);
+    const price = Number(medicine.price) || Number(medicine.selling_price) || 0;
+    const medicineId = typeof medicine.id === 'string' ? parseInt(medicine.id) : medicine.id;
     
     if (existingItem) {
-      if (existingItem.quantity < medicine.stock) {
-        updateQuantity(medicine.id, existingItem.quantity + 1);
-        toast.success(`Increased ${medicine.name} quantity`);
+      const newQuantity = existingItem.quantity + 1;
+      if (newQuantity <= availableStock) {
+        // Reserve additional quantity
+        try {
+          await api.reserveStock(medicineId, 1);
+          const currentReserved = reservedStock.get(medicineId) || 0;
+          setReservedStock(new Map(reservedStock.set(medicineId, currentReserved + 1)));
+          updateQuantity(medicine.id.toString(), newQuantity);
+          toast.success(`Increased ${medicine.name} quantity`);
+        } catch (error: any) {
+          toast.error('Failed to reserve stock: ' + (error.message || 'Unknown error'));
+        }
       } else {
         toast.error('Insufficient stock');
       }
     } else {
-      if (medicine.stock > 0) {
-        setCart([...cart, {
-          medicine,
-          quantity: 1,
-          discount: 0,
-          subtotal: medicine.price
-        }]);
-        toast.success(`Added ${medicine.name} to cart`);
+      if (availableStock > 0) {
+        // Reserve stock for new item
+        try {
+          await api.reserveStock(medicineId, 1);
+          const currentReserved = reservedStock.get(medicineId) || 0;
+          setReservedStock(new Map(reservedStock.set(medicineId, currentReserved + 1)));
+          setCart([...cart, {
+            medicine,
+            quantity: 1,
+            discount: 0,
+            subtotal: price
+          }]);
+          toast.success(`Added ${medicine.name} to cart`);
+        } catch (error: any) {
+          toast.error('Failed to reserve stock: ' + (error.message || 'Unknown error'));
+        }
       } else {
         toast.error('Out of stock');
       }
     }
   };
 
-  // Update quantity
-  const updateQuantity = (medicineId: string, newQuantity: number) => {
+  // Update quantity with reservation management
+  const updateQuantity = async (medicineId: string, newQuantity: number) => {
+    const item = cart.find(i => i.medicine.id === medicineId);
+    if (!item) return;
+
+    const medId = typeof item.medicine.id === 'string' ? parseInt(item.medicine.id) : item.medicine.id;
+    const currentQuantity = item.quantity;
+    const quantityDiff = newQuantity - currentQuantity;
+    const finalQuantity = Math.max(0, Math.min(newQuantity, item.medicine.stock || item.medicine.available_stock || 0));
+
+    // Update reservation if quantity changed
+    if (quantityDiff !== 0 && finalQuantity > 0) {
+      try {
+        if (quantityDiff > 0) {
+          // Reserve more
+          await api.reserveStock(medId, quantityDiff);
+          const currentReserved = reservedStock.get(medId) || 0;
+          setReservedStock(new Map(reservedStock.set(medId, currentReserved + quantityDiff)));
+        } else if (quantityDiff < 0) {
+          // Release reservation
+          await api.releaseStock(medId, Math.abs(quantityDiff));
+          const currentReserved = reservedStock.get(medId) || 0;
+          const newReserved = Math.max(0, currentReserved - Math.abs(quantityDiff));
+          if (newReserved > 0) {
+            setReservedStock(new Map(reservedStock.set(medId, newReserved)));
+          } else {
+            const newMap = new Map(reservedStock);
+            newMap.delete(medId);
+            setReservedStock(newMap);
+          }
+        }
+      } catch (error: any) {
+        console.error('Failed to update reservation:', error);
+        toast.error('Failed to update stock reservation');
+      }
+    }
+
+    // Update cart
     setCart(cart.map(item => {
       if (item.medicine.id === medicineId) {
-        const quantity = Math.max(0, Math.min(newQuantity, item.medicine.stock));
+        const price = Number(item.medicine.price) || Number(item.medicine.selling_price) || 0;
+        const discount = Number(item.discount) || 0;
+        const subtotal = (price * finalQuantity) * (1 - discount / 100);
         return {
           ...item,
-          quantity,
-          subtotal: (item.medicine.price * quantity) * (1 - item.discount / 100)
+          quantity: finalQuantity,
+          subtotal: Number(subtotal.toFixed(2))
         };
       }
       return item;
@@ -303,36 +439,63 @@ export function AdvancedPOS() {
   const updateItemDiscount = (medicineId: string, discount: number) => {
     setCart(cart.map(item => {
       if (item.medicine.id === medicineId) {
-        const discountValue = Math.max(0, Math.min(100, discount));
+        const discountValue = Math.max(0, Math.min(100, Number(discount) || 0));
+        const price = Number(item.medicine.price) || Number(item.medicine.selling_price) || 0;
+        const quantity = Number(item.quantity) || 0;
+        const subtotal = (price * quantity) * (1 - discountValue / 100);
         return {
           ...item,
           discount: discountValue,
-          subtotal: (item.medicine.price * item.quantity) * (1 - discountValue / 100)
+          subtotal: Number(subtotal.toFixed(2))
         };
       }
       return item;
     }));
   };
 
-  // Remove from cart
-  const removeFromCart = (medicineId: string) => {
+  // Remove from cart and release reservation
+  const removeFromCart = async (medicineId: string) => {
     const item = cart.find(c => c.medicine.id === medicineId);
-    setCart(cart.filter(item => item.medicine.id !== medicineId));
-    if (item) {
-      toast.success(`Removed ${item.medicine.name} from cart`);
+    if (!item) return;
+
+    const medId = typeof item.medicine.id === 'string' ? parseInt(item.medicine.id) : item.medicine.id;
+    
+    // Release reserved stock
+    if (reservedStock.has(medId)) {
+      try {
+        await api.releaseStock(medId, item.quantity);
+        const newMap = new Map(reservedStock);
+        newMap.delete(medId);
+        setReservedStock(newMap);
+      } catch (error: any) {
+        console.error('Failed to release reservation:', error);
+      }
     }
+
+    setCart(cart.filter(item => item.medicine.id !== medicineId));
+    toast.success(`Removed ${item.medicine.name} from cart`);
   };
 
   // Calculate totals
-  const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
-  const discountAmount = (subtotal * globalDiscount) / 100;
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+  const discountAmount = (subtotal * (Number(globalDiscount) || 0)) / 100;
   const taxableAmount = subtotal - discountAmount;
   const tax = taxableAmount * 0.14; // 14% GST
   const total = taxableAmount + tax;
   const changeAmount = receivedAmount ? parseFloat(receivedAmount) - total : 0;
 
-  // Clear cart
-  const clearCart = () => {
+  // Clear cart and release all reservations
+  const clearCart = async () => {
+    // Release all reserved stock
+    for (const [medId, quantity] of reservedStock.entries()) {
+      try {
+        await api.releaseStock(medId, quantity);
+      } catch (error: any) {
+        console.error(`Failed to release reservation for medicine ${medId}:`, error);
+      }
+    }
+    
+    setReservedStock(new Map());
     setCart([]);
     setGlobalDiscount(0);
     setReceivedAmount('');
@@ -342,10 +505,10 @@ export function AdvancedPOS() {
       phone: '',
       type: 'walk-in'
     });
-    toast.success('Cart cleared');
+    toast.success('Cart cleared and reservations released');
   };
 
-  // Hold current bill
+  // Hold current bill (keep reservations)
   const holdBill = () => {
     if (cart.length === 0) {
       toast.error('Cart is empty');
@@ -361,40 +524,405 @@ export function AdvancedPOS() {
       globalDiscount,
       prescriptionNumber,
       timestamp: new Date(),
-      total
+      total,
+      reservedStock: new Map(reservedStock) // Store current reservations
     };
 
+    // Save held bill (reservations remain active)
     setHeldBills([...heldBills, heldBill]);
-    clearCart();
+    
+    // Clear cart UI but keep reservations (they're stored in the held bill)
+    setCart([]);
+    setGlobalDiscount(0);
+    setReceivedAmount('');
+    setPrescriptionNumber('');
+    setCustomer({
+      name: 'Walk-in Customer',
+      phone: '',
+      type: 'walk-in'
+    });
+    
     toast.success(`Bill ${billNumber} held successfully`, {
-      description: `${cart.length} items saved`
+      description: `${heldBill.cart.length} items saved`
     });
   };
 
-  // Load held bill
-  const loadHeldBill = (bill: HeldBill) => {
+  // Load held bill and restore reservations
+  const loadHeldBill = async (bill: HeldBill) => {
     if (cart.length > 0) {
       toast.error('Please clear or hold current cart first');
       return;
     }
 
-    setCart(bill.cart);
-    setCustomer(bill.customer);
-    setGlobalDiscount(bill.globalDiscount);
-    setPrescriptionNumber(bill.prescriptionNumber);
-    setHeldBills(heldBills.filter(b => b.id !== bill.id));
-    setIsHeldBillsOpen(false);
-    toast.success(`Loaded bill ${bill.billNumber}`);
+    try {
+      // Restore reservations from stored bill (they should already be reserved)
+      // But verify and re-reserve if needed
+      if (bill.reservedStock) {
+        // Restore the reservation state
+        setReservedStock(new Map(bill.reservedStock));
+      } else {
+        // Legacy: If no stored reservations, reserve now
+        const reservationPromises = bill.cart.map(async (item) => {
+          const medId = typeof item.medicine.id === 'string' ? parseInt(item.medicine.id) : item.medicine.id;
+          try {
+            await api.reserveStock(medId, item.quantity);
+          } catch (error: any) {
+            console.error(`Failed to reserve stock for medicine ${medId}:`, error);
+            // Don't throw - continue loading even if some reservations fail
+          }
+        });
+        await Promise.all(reservationPromises);
+        
+        // Update reserved stock state
+        const newReserved = new Map<number, number>();
+        bill.cart.forEach(item => {
+          const medId = typeof item.medicine.id === 'string' ? parseInt(item.medicine.id) : item.medicine.id;
+          newReserved.set(medId, item.quantity);
+        });
+        setReservedStock(newReserved);
+      }
+
+      // Load the bill
+      setCart(bill.cart);
+      setCustomer(bill.customer);
+      setGlobalDiscount(bill.globalDiscount);
+      setPrescriptionNumber(bill.prescriptionNumber);
+      setHeldBills(heldBills.filter(b => b.id !== bill.id));
+      setIsHeldBillsOpen(false);
+      toast.success(`Loaded bill ${bill.billNumber}`);
+    } catch (error: any) {
+      toast.error('Failed to load bill: ' + (error.message || 'Some items may be out of stock'));
+    }
   };
 
-  // Delete held bill
-  const deleteHeldBill = (billId: string) => {
+  // Delete held bill and release reservations
+  const deleteHeldBill = async (billId: string) => {
+    const bill = heldBills.find(b => b.id === billId);
+    if (bill && bill.reservedStock) {
+      // Release all reserved stock for this bill
+      for (const [medId, quantity] of bill.reservedStock.entries()) {
+        try {
+          await api.releaseStock(medId, quantity);
+        } catch (error: any) {
+          console.error(`Failed to release reservation for medicine ${medId}:`, error);
+        }
+      }
+    }
+    
     setHeldBills(heldBills.filter(b => b.id !== billId));
-    toast.info('Held bill deleted');
+    toast.info('Held bill deleted and reservations released');
+  };
+
+  // Print receipt by invoice number
+  const printReceiptByInvoice = async (invoiceNumber: string) => {
+    try {
+      if (!invoiceNumber) {
+        toast.error('Invoice number required');
+        return;
+      }
+
+      // Fetch sale by invoice number
+      const sale = await api.getSale(invoiceNumber);
+      if (!sale) {
+        toast.error('Sale not found for invoice: ' + invoiceNumber);
+        return;
+      }
+
+      // Convert sale to invoice format
+      const invoice = {
+        invoice_number: sale.invoice_number,
+        sale_date: sale.sale_date,
+        customer: {
+          name: sale.customer_name,
+          phone: sale.customer_phone || 'N/A',
+          email: sale.customer_email || 'N/A',
+          address: sale.customer_address || 'N/A'
+        },
+        items: sale.items || [],
+        subtotal: sale.subtotal,
+        discount_amount: sale.discount_amount,
+        tax_amount: sale.tax_amount,
+        total_amount: sale.total_amount,
+        payment_method: sale.payment_method,
+        amount_received: sale.amount_received,
+        change_amount: sale.change_amount,
+        cashier: sale.cashier_name || 'Cashier'
+      };
+
+      printInvoiceHTML(invoice, invoiceNumber);
+    } catch (error: any) {
+      console.error('Print receipt by invoice error:', error);
+      toast.error('Failed to print receipt: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  // Print invoice HTML
+  const printInvoiceHTML = (invoice: any, invoiceNumber: string) => {
+    // Create print window
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print receipt');
+      return;
+    }
+
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice ${invoiceNumber || invoice.invoice_number}</title>
+          <style>
+            @media print {
+              @page { margin: 0.5cm; size: 80mm auto; }
+              body { margin: 0; padding: 10px; }
+            }
+            body {
+              font-family: 'Courier New', monospace;
+              font-size: 12px;
+              max-width: 300px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 10px;
+              margin-bottom: 10px;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 18px;
+              font-weight: bold;
+            }
+            .header p {
+              margin: 2px 0;
+              font-size: 10px;
+            }
+            .info {
+              margin: 10px 0;
+              font-size: 11px;
+            }
+            .info-row {
+              display: flex;
+              justify-content: space-between;
+              margin: 3px 0;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 10px 0;
+            }
+            th, td {
+              padding: 5px;
+              text-align: left;
+              font-size: 11px;
+            }
+            th {
+              border-bottom: 1px solid #000;
+            }
+            .item-row td {
+              border-bottom: 1px dotted #ccc;
+            }
+            .text-right {
+              text-align: right;
+            }
+            .totals {
+              margin-top: 10px;
+              border-top: 2px dashed #000;
+              padding-top: 10px;
+            }
+            .total-row {
+              display: flex;
+              justify-content: space-between;
+              margin: 5px 0;
+              font-weight: bold;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 20px;
+              padding-top: 10px;
+              border-top: 1px dashed #000;
+              font-size: 10px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>HOSPITAL PHARMACY</h1>
+            <p>123 Medical Street, City</p>
+            <p>Phone: +92-XXX-XXXXXXX</p>
+            <p>Email: pharmacy@hospital.com</p>
+          </div>
+          
+          <div class="info">
+            <div class="info-row">
+              <span>Invoice:</span>
+              <span><strong>${invoiceNumber || invoice.invoice_number}</strong></span>
+            </div>
+            <div class="info-row">
+              <span>Date:</span>
+              <span>${new Date(invoice.sale_date || Date.now()).toLocaleString()}</span>
+            </div>
+            <div class="info-row">
+              <span>Customer:</span>
+              <span>${invoice.customer?.name || invoice.customer_name || 'Walk-in'}</span>
+            </div>
+            ${(invoice.customer?.phone || invoice.customer_phone) ? `
+            <div class="info-row">
+              <span>Phone:</span>
+              <span>${invoice.customer?.phone || invoice.customer_phone}</span>
+            </div>
+            ` : ''}
+            <div class="info-row">
+              <span>Payment:</span>
+              <span>${invoice.payment_method || 'Cash'}</span>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items?.map((item: any) => `
+                <tr class="item-row">
+                  <td>${item.medicine_name}</td>
+                  <td class="text-right">${item.quantity}</td>
+                  <td class="text-right">${Number(item.unit_price || 0).toFixed(2)}</td>
+                  <td class="text-right">${Number(item.subtotal || 0).toFixed(2)}</td>
+                </tr>
+              `).join('') || ''}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>PKR ${Number(invoice.subtotal || 0).toFixed(2)}</span>
+            </div>
+            ${invoice.discount_amount > 0 ? `
+            <div class="info-row">
+              <span>Discount:</span>
+              <span>-PKR ${Number(invoice.discount_amount || 0).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            <div class="info-row">
+              <span>Tax (${invoice.tax_rate || 14}%):</span>
+              <span>PKR ${Number(invoice.tax_amount || 0).toFixed(2)}</span>
+            </div>
+            <div class="total-row" style="font-size: 14px; border-top: 1px solid #000; padding-top: 5px; margin-top: 5px;">
+              <span>TOTAL:</span>
+              <span>PKR ${Number(invoice.total_amount || 0).toFixed(2)}</span>
+            </div>
+            ${invoice.amount_received ? `
+            <div class="info-row">
+              <span>Received:</span>
+              <span>PKR ${Number(invoice.amount_received).toFixed(2)}</span>
+            </div>
+            <div class="info-row">
+              <span>Change:</span>
+              <span>PKR ${Number(invoice.amount_received - invoice.total_amount).toFixed(2)}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="footer">
+            <p>Thank you for your purchase!</p>
+            <p>For returns, please bring this receipt</p>
+            <p>Valid for 7 days from purchase date</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+    printWindow.document.write(receiptHTML);
+    printWindow.document.close();
+    
+    // Wait for content to load, then print
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+    
+    toast.success('Receipt printed');
+  };
+
+  // Print receipt
+  const printReceipt = async (saleId?: number, invoiceNumber?: string) => {
+    try {
+      const saleIdToUse = saleId || lastSaleId;
+      const invoiceToUse = invoiceNumber || lastInvoiceNumber;
+      
+      // If we have invoice number but no sale ID, use invoice number method
+      if (invoiceToUse && !saleIdToUse) {
+        await printReceiptByInvoice(invoiceToUse);
+        return;
+      }
+      
+      if (!saleIdToUse) {
+        toast.error('No sale to print');
+        return;
+      }
+
+      // Fetch invoice data
+      let invoice;
+      try {
+        invoice = await api.getSaleInvoice(saleIdToUse);
+      } catch (error: any) {
+        // Fallback: try to get sale data directly
+        console.warn('Invoice endpoint failed, trying sale endpoint:', error);
+        const sale = await api.getSale(saleIdToUse);
+        // Convert sale to invoice format
+        invoice = {
+          invoice_number: sale.invoice_number,
+          sale_date: sale.sale_date,
+          customer: {
+            name: sale.customer_name,
+            phone: sale.customer_phone || 'N/A',
+            email: sale.customer_email || 'N/A',
+            address: sale.customer_address || 'N/A'
+          },
+          items: sale.items || [],
+          subtotal: sale.subtotal,
+          discount_amount: sale.discount_amount,
+          tax_amount: sale.tax_amount,
+          total_amount: sale.total_amount,
+          payment_method: sale.payment_method,
+          amount_received: sale.amount_received,
+          change_amount: sale.change_amount,
+          cashier: sale.cashier_name || 'Cashier',
+          tax_rate: sale.tax_rate || 14
+        };
+      }
+      
+      if (!invoice) {
+        toast.error('Could not retrieve sale data for printing');
+        return;
+      }
+
+      printInvoiceHTML(invoice, invoiceToUse || invoice.invoice_number);
+    } catch (error: any) {
+      console.error('Print error:', error);
+      toast.error('Failed to print receipt: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  // Save current sale as draft (hold bill)
+  const saveCurrentSale = () => {
+    if (cart.length === 0) {
+      toast.error('Cart is empty');
+      return;
+    }
+    holdBill();
+    toast.success('Sale saved as draft');
   };
 
   // Process payment
-  const processPayment = () => {
+  const processPayment = async () => {
     if (cart.length === 0) {
       toast.error('Cart is empty');
       return;
@@ -407,20 +935,116 @@ export function AdvancedPOS() {
       return;
     }
 
-    if (paymentMethod === 'cash' && parseFloat(receivedAmount) < total) {
+    if (paymentMethod === 'cash' && parseFloat(receivedAmount || '0') < total) {
       toast.error('Insufficient amount received');
       return;
     }
 
-    // Process the payment
-    const invoiceNo = `INV-${Date.now()}`;
-    toast.success(`Payment processed successfully! Invoice: ${invoiceNo}`);
-    
-    // Clear the cart after successful payment
-    setTimeout(() => {
-      clearCart();
-      setIsPaymentDialogOpen(false);
-    }, 1500);
+    try {
+      setProcessingSale(true);
+      
+      // Prepare sale data
+      const saleData: CreateSaleData = {
+        customer_name: customer.name,
+        customer_phone: customer.phone || undefined,
+        customer_email: customer.email || undefined,
+        customer_address: customer.address || undefined,
+        patient_id: patient?.id,
+        prescription_id: prescriptionNumber ? parseInt(prescriptionNumber) : undefined,
+        items: cart.map(item => ({
+          medicine_id: typeof item.medicine.id === 'string' ? parseInt(item.medicine.id) : item.medicine.id,
+          medicine_name: item.medicine.name,
+          quantity: item.quantity,
+          unit_price: item.medicine.price,
+          discount_percentage: item.discount
+        })),
+        discount_percentage: globalDiscount,
+        tax_rate: 14,
+        payment_method: paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'Insurance',
+        amount_received: paymentMethod === 'cash' ? parseFloat(receivedAmount || '0') : undefined,
+        notes: prescriptionNumber ? `Prescription: ${prescriptionNumber}` : undefined
+      };
+
+      const saleResponse = await api.createSale(saleData);
+      
+      // Debug: Log the response to see what we're getting
+      console.log('Sale creation response:', saleResponse);
+      
+      // Handle different response structures
+      let saleId: number | null = null;
+      let invoiceNumber: string | null = null;
+      
+      if (saleResponse) {
+        // Try different possible property names
+        saleId = saleResponse.id || saleResponse.sale_id || (saleResponse as any).ID || null;
+        invoiceNumber = saleResponse.invoice_number || (saleResponse as any).invoice_number || null;
+      }
+      
+      // If we have invoice number but not sale ID, fetch sale by invoice number
+      if (invoiceNumber && !saleId) {
+        try {
+          const saleByInvoice = await api.getSale(invoiceNumber);
+          if (saleByInvoice) {
+            saleId = saleByInvoice.id || saleByInvoice.sale_id || null;
+            if (!invoiceNumber && saleByInvoice.invoice_number) {
+              invoiceNumber = saleByInvoice.invoice_number;
+            }
+          }
+        } catch (fetchError) {
+          console.error('Failed to fetch sale by invoice number:', fetchError);
+        }
+      }
+      
+      // If we still don't have sale ID but have invoice, try one more time
+      if (invoiceNumber && !saleId) {
+        // The invoice number format is INV-YYYYMMDD-####, we can extract it
+        console.warn('Sale ID is null, but invoice number exists:', invoiceNumber);
+      }
+      
+      if (invoiceNumber) {
+        setLastInvoiceNumber(invoiceNumber);
+        toast.success(`Payment processed successfully! Invoice: ${invoiceNumber}`);
+      } else {
+        toast.error('Sale created but invoice number not found');
+      }
+      
+      if (saleId) {
+        setLastSaleId(saleId);
+      }
+      
+      // Release all reservations (stock is now sold, not just reserved)
+      setReservedStock(new Map());
+      
+      // Auto-print receipt after successful payment
+      // Use invoice number if available, otherwise use sale ID
+      if (invoiceNumber) {
+        setTimeout(() => {
+          if (saleId) {
+            printReceipt(saleId, invoiceNumber!);
+          } else {
+            // Try to print using invoice number
+            printReceiptByInvoice(invoiceNumber!);
+          }
+        }, 500);
+      } else if (saleId) {
+        setTimeout(() => {
+          printReceipt(saleId!);
+        }, 500);
+      }
+      
+      // Clear the cart after successful payment
+      setTimeout(() => {
+        setCart([]);
+        setGlobalDiscount(0);
+        setReceivedAmount('');
+        setPrescriptionNumber('');
+        setIsPaymentDialogOpen(false);
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process payment');
+    } finally {
+      setProcessingSale(false);
+    }
   };
 
   // Quick add number buttons for cash
@@ -463,13 +1087,15 @@ export function AdvancedPOS() {
                 </Badge>
               </Button>
             )}
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={() => setIsShortcutsOpen(true)}
+            >
+              <Keyboard className="w-4 h-4 mr-2" />
+              Shortcuts
+            </Button>
             <Dialog open={isShortcutsOpen} onOpenChange={setIsShortcutsOpen}>
-              <DialogTrigger asChild>
-                <Button variant="secondary" size="sm">
-                  <Keyboard className="w-4 h-4 mr-2" />
-                  Shortcuts
-                </Button>
-              </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
@@ -521,17 +1147,33 @@ export function AdvancedPOS() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input
-                    placeholder="Search medicine by name, generic name, or barcode..."
+                    placeholder="Search medicine by name, generic name, or scan barcode..."
                     className="pl-10 h-12 text-lg"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchQuery(value);
+                      // If it looks like a barcode (numeric, 8+ digits), handle it separately
+                      if (/^\d{8,}$/.test(value)) {
+                        setBarcodeInput(value);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // If Enter pressed and it's a barcode, trigger scan
+                      if (e.key === 'Enter' && /^\d{8,}$/.test(searchQuery)) {
+                        setBarcodeInput(searchQuery);
+                        setSearchQuery('');
+                      }
+                    }}
                     autoFocus
                   />
                 </div>
-                <Button variant="outline" className="h-12 px-6" size="lg">
-                  <Barcode className="w-5 h-5 mr-2" />
-                  Scan
-                </Button>
+                {loading && (
+                  <div className="flex items-center text-gray-500">
+                    <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                    Searching...
+                  </div>
+                )}
                 <div className="flex gap-1 border border-gray-200 rounded-lg p-1">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'ghost'}
@@ -598,8 +1240,8 @@ export function AdvancedPOS() {
                         
                         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                           <div>
-                            <p className="text-xl font-bold text-blue-600">PKR {medicine.price}</p>
-                            <p className="text-xs text-gray-500">Stock: {medicine.stock}</p>
+                            <p className="text-xl font-bold text-blue-600">PKR {(Number(medicine.price) || Number(medicine.selling_price) || 0).toFixed(2)}</p>
+                            <p className="text-xs text-gray-500">Stock: {medicine.stock || medicine.available_stock || 0}</p>
                           </div>
                           <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                             <Plus className="w-4 h-4" />
@@ -637,8 +1279,8 @@ export function AdvancedPOS() {
                           </div>
                           
                           <div className="text-right flex-shrink-0">
-                            <p className="text-2xl font-bold text-blue-600">PKR {medicine.price}</p>
-                            <p className="text-sm text-gray-500">Stock: {medicine.stock}</p>
+                            <p className="text-2xl font-bold text-blue-600">PKR {(Number(medicine.price) || Number(medicine.selling_price) || 0).toFixed(2)}</p>
+                            <p className="text-sm text-gray-500">Stock: {medicine.stock || medicine.available_stock || 0}</p>
                           </div>
                           
                           <Button size="lg" className="bg-blue-600 hover:bg-blue-700 h-12 w-12 p-0 flex-shrink-0">
@@ -679,13 +1321,15 @@ export function AdvancedPOS() {
                     <p className="text-sm text-gray-600">{customer.phone || 'No phone'}</p>
                   </div>
                 </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsCustomerDialogOpen(true)}
+                >
+                  <User className="w-4 h-4 mr-1" />
+                  Change
+                </Button>
                 <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <User className="w-4 h-4 mr-1" />
-                      Change
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Customer Information</DialogTitle>
@@ -694,28 +1338,86 @@ export function AdvancedPOS() {
                     <div className="space-y-4 py-4">
                       <div>
                         <Label>Customer Type</Label>
-                        <Select defaultValue="walk-in">
+                        <Select 
+                          value={customer.type} 
+                          onValueChange={(v: any) => setCustomer({...customer, type: v})}
+                        >
                           <SelectTrigger className="mt-2">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="walk-in">Walk-in Customer</SelectItem>
-                            <SelectItem value="registered">Registered Customer</SelectItem>
+                            <SelectItem value="registered">Registered Patient</SelectItem>
                             <SelectItem value="insurance">Insurance Customer</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                      {customer.type === 'registered' && (
+                        <div>
+                          <Label>Search Patient</Label>
+                          <Input 
+                            className="mt-2" 
+                            placeholder="Search by name or phone..."
+                            onChange={async (e) => {
+                              const searchTerm = e.target.value;
+                              if (searchTerm.length >= 2) {
+                                try {
+                                  const patients = await api.getPatients({ search: searchTerm });
+                                  if (patients.length > 0) {
+                                    const selectedPatient = patients[0];
+                                    setPatient(selectedPatient);
+                                    setCustomer({
+                                      name: selectedPatient.name,
+                                      phone: selectedPatient.phone,
+                                      email: selectedPatient.email,
+                                      address: selectedPatient.address,
+                                      type: 'registered'
+                                    });
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to search patients:', error);
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                       <div>
                         <Label>Name</Label>
-                        <Input className="mt-2" placeholder="Enter customer name" />
+                        <Input 
+                          className="mt-2" 
+                          placeholder="Enter customer name" 
+                          value={customer.name}
+                          onChange={(e) => setCustomer({...customer, name: e.target.value})}
+                        />
                       </div>
                       <div>
                         <Label>Phone Number</Label>
-                        <Input className="mt-2" placeholder="+92-XXX-XXXXXXX" />
+                        <Input 
+                          className="mt-2" 
+                          placeholder="+92-XXX-XXXXXXX" 
+                          value={customer.phone}
+                          onChange={(e) => setCustomer({...customer, phone: e.target.value})}
+                        />
                       </div>
                       <div>
                         <Label>Email (Optional)</Label>
-                        <Input type="email" className="mt-2" placeholder="customer@email.com" />
+                        <Input 
+                          type="email" 
+                          className="mt-2" 
+                          placeholder="customer@email.com" 
+                          value={customer.email || ''}
+                          onChange={(e) => setCustomer({...customer, email: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <Label>Address (Optional)</Label>
+                        <Input 
+                          className="mt-2" 
+                          placeholder="Address" 
+                          value={customer.address || ''}
+                          onChange={(e) => setCustomer({...customer, address: e.target.value})}
+                        />
                       </div>
                       <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setIsCustomerDialogOpen(false)}>
                         Save Customer
@@ -804,7 +1506,7 @@ export function AdvancedPOS() {
                           </Button>
                         </div>
                         <span className="text-sm text-gray-600">×</span>
-                        <span className="text-sm font-medium">PKR {item.medicine.price}</span>
+                        <span className="text-sm font-medium">PKR {(Number(item.medicine.price) || Number(item.medicine.selling_price) || 0).toFixed(2)}</span>
                       </div>
 
                       <div className="flex items-center justify-between">
@@ -820,7 +1522,7 @@ export function AdvancedPOS() {
                             max="100"
                           />
                         </div>
-                        <p className="text-lg font-bold text-blue-600">PKR {item.subtotal.toFixed(2)}</p>
+                        <p className="text-lg font-bold text-blue-600">PKR {(Number(item.subtotal) || 0).toFixed(2)}</p>
                       </div>
                     </div>
                   ))}
@@ -898,17 +1600,16 @@ export function AdvancedPOS() {
               <RotateCcw className="w-5 h-5 mr-2" />
               Reset
             </Button>
+            <Button
+              size="lg"
+              className="h-14 bg-green-600 hover:bg-green-700 text-white shadow-lg"
+              disabled={cart.length === 0}
+              onClick={() => setIsPaymentDialogOpen(true)}
+            >
+              <CreditCard className="w-5 h-5 mr-2" />
+              Pay PKR {total.toFixed(2)}
+            </Button>
             <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  size="lg"
-                  className="h-14 bg-green-600 hover:bg-green-700 text-white shadow-lg"
-                  disabled={cart.length === 0}
-                >
-                  <CreditCard className="w-5 h-5 mr-2" />
-                  Pay PKR {total.toFixed(2)}
-                </Button>
-              </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle className="text-2xl">Process Payment</DialogTitle>
@@ -1047,6 +1748,7 @@ export function AdvancedPOS() {
                       variant="outline"
                       size="lg"
                       onClick={() => setIsPaymentDialogOpen(false)}
+                      disabled={processingSale}
                     >
                       Cancel
                     </Button>
@@ -1054,9 +1756,19 @@ export function AdvancedPOS() {
                       size="lg"
                       className="bg-green-600 hover:bg-green-700"
                       onClick={processPayment}
+                      disabled={processingSale}
                     >
-                      <Check className="w-5 h-5 mr-2" />
-                      Complete Payment
+                      {processingSale ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-5 h-5 mr-2" />
+                          Complete Payment
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1070,11 +1782,22 @@ export function AdvancedPOS() {
               <Clock className="w-4 h-4 mr-1" />
               Hold
             </Button>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={saveCurrentSale}
+              disabled={cart.length === 0}
+            >
               <Save className="w-4 h-4 mr-1" />
               Save
             </Button>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => printReceipt()}
+              disabled={!lastSaleId}
+              title={lastSaleId ? 'Print last receipt' : 'Complete a sale first'}
+            >
               <Printer className="w-4 h-4 mr-1" />
               Print
             </Button>
@@ -1107,7 +1830,9 @@ export function AdvancedPOS() {
                   <Card
                     key={bill.id}
                     className="border-2 hover:border-blue-400 transition-all cursor-pointer group"
-                    onClick={() => loadHeldBill(bill)}
+                    onClick={() => {
+                      loadHeldBill(bill).catch(err => console.error('Failed to load bill:', err));
+                    }}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
@@ -1139,7 +1864,7 @@ export function AdvancedPOS() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              loadHeldBill(bill);
+                              loadHeldBill(bill).catch(err => console.error('Failed to load bill:', err));
                             }}
                             className="bg-green-600 hover:bg-green-700"
                           >
@@ -1151,7 +1876,7 @@ export function AdvancedPOS() {
                             variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteHeldBill(bill.id);
+                              deleteHeldBill(bill.id).catch(err => console.error('Failed to delete bill:', err));
                             }}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
@@ -1168,7 +1893,7 @@ export function AdvancedPOS() {
                           {bill.cart.slice(0, 3).map((item, idx) => (
                             <div key={idx} className="text-xs text-gray-600 flex justify-between">
                               <span>{item.medicine.name} × {item.quantity}</span>
-                              <span className="font-medium">PKR {item.subtotal.toFixed(2)}</span>
+                              <span className="font-medium">PKR {(Number(item.subtotal) || 0).toFixed(2)}</span>
                             </div>
                           ))}
                           {bill.cart.length > 3 && (
