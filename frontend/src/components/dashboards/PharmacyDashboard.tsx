@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -28,7 +28,7 @@ interface PharmacyDashboardProps {
   onLogout: () => void;
 }
 
-const sidebarItems: SidebarItem[] = [
+const navigationItems: NavigationItem[] = [
   { icon: <Pill className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
   { icon: <CreditCard className="w-5 h-5" />, label: 'POS System', id: 'pos' },
   { icon: <ShoppingCart className="w-5 h-5" />, label: 'Prescriptions', id: 'prescriptions', badge: '8' },
@@ -476,12 +476,11 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
     <DashboardLayout
       user={user}
       onLogout={onLogout}
-      sidebar={
-        <Sidebar
-          items={sidebarItems}
+      navigationItems={
+        <TopNavigation
+          items={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
-          title="Pharmacy"
         />
       }
     >

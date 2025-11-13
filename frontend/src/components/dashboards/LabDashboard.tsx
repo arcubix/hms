@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,7 +25,7 @@ interface LabDashboardProps {
   onLogout: () => void;
 }
 
-const sidebarItems: SidebarItem[] = [
+const navigationItems: NavigationItem[] = [
   { icon: <FlaskConical className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
   { icon: <TestTube className="w-5 h-5" />, label: 'Sample Collection', id: 'collection', badge: '6' },
   { icon: <Microscope className="w-5 h-5" />, label: 'Test Processing', id: 'processing' },
@@ -418,12 +418,11 @@ export function LabDashboard({ user, onLogout }: LabDashboardProps) {
     <DashboardLayout
       user={user}
       onLogout={onLogout}
-      sidebar={
-        <Sidebar
-          items={sidebarItems}
+      navigationItems={
+        <TopNavigation
+          items={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
-          title="Laboratory"
         />
       }
     >

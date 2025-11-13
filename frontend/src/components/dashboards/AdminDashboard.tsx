@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { 
@@ -15,7 +15,10 @@ import {
   FileText,
   BarChart3,
   Settings,
-  Stethoscope
+  Stethoscope,
+  Ambulance,
+  Hospital,
+  Scan
 } from 'lucide-react';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
@@ -34,19 +37,37 @@ import { EditDoctorPage } from '../pages/EditDoctorPage';
 import { ViewDoctorPage } from '../pages/ViewDoctorPage';
 import { ScheduleAppointmentPage } from '../pages/ScheduleAppointmentPage';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+// Import new modules (will be created if they don't exist)
+import { OPDSchedule } from '../modules/OPDSchedule';
+import { BedManagement } from '../modules/BedManagement';
+import { HealthRecords } from '../modules/HealthRecords';
+import { PharmacyManagement } from '../modules/PharmacyManagement';
+import { EvaluationDashboard } from '../modules/EvaluationDashboard';
+import { EnhancedAdminDashboard } from '../modules/EnhancedAdminDashboard';
+import { EmergencyManagement } from '../modules/EmergencyManagement';
+import { LaboratoryManagement } from '../modules/LaboratoryManagement';
+import { IPDManagement } from '../modules/IPDManagement';
+import { RadiologyManagement } from '../modules/RadiologyManagement';
 
 interface AdminDashboardProps {
   user: User;
   onLogout: () => void;
 }
 
-const sidebarItems: SidebarItem[] = [
+const navigationItems: NavigationItem[] = [
   { icon: <BarChart3 className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
+  { icon: <Activity className="w-5 h-5" />, label: 'Analytics', id: 'analytics' },
+  { icon: <Ambulance className="w-5 h-5" />, label: 'Emergency', id: 'emergency', badge: '3' },
   { icon: <Users className="w-5 h-5" />, label: 'Patients', id: 'patients', badge: '12' },
   { icon: <Stethoscope className="w-5 h-5" />, label: 'Doctors', id: 'doctors' },
   { icon: <Calendar className="w-5 h-5" />, label: 'Appointments', id: 'appointments', badge: '5' },
+  { icon: <Activity className="w-5 h-5" />, label: 'OPD', id: 'opd' },
+  { icon: <Hospital className="w-5 h-5" />, label: 'IPD Management', id: 'ipd', badge: '80' },
+  { icon: <Bed className="w-5 h-5" />, label: 'Bed Management', id: 'beds' },
+  { icon: <FileText className="w-5 h-5" />, label: 'Health Records', id: 'healthrecords' },
   { icon: <Pill className="w-5 h-5" />, label: 'Pharmacy', id: 'pharmacy' },
   { icon: <FlaskConical className="w-5 h-5" />, label: 'Laboratory', id: 'lab' },
+  { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
   { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
   { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
   { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
@@ -169,8 +190,32 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         } else {
           return <AppointmentList onAddAppointment={handleAddAppointment} />;
         }
+      case 'opd':
+        return <OPDSchedule />;
+      case 'ipd':
+        return <IPDManagement />;
+      case 'beds':
+        return <BedManagement />;
+      case 'healthrecords':
+        return <HealthRecords />;
+      case 'pharmacy':
+        return <PharmacyManagement />;
+      case 'lab':
+        return <LaboratoryManagement />;
+      case 'radiology':
+        return <RadiologyManagement />;
+      case 'emergency':
+        return <EmergencyManagement />;
+      case 'analytics':
+        return <EvaluationDashboard />;
       default:
-        return (
+        return <EnhancedAdminDashboard />;
+    }
+  };
+
+  // Legacy dashboard content (kept for reference, but default now uses EnhancedAdminDashboard)
+  const renderLegacyDashboard = () => {
+    return (
           <div className="p-6 space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -300,19 +345,17 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
             </Card>
           </div>
         );
-    }
   };
 
   return (
     <DashboardLayout
       user={user}
       onLogout={onLogout}
-      sidebar={
-        <Sidebar
-          items={sidebarItems}
+      navigationItems={
+        <TopNavigation
+          items={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
-          title="Admin Panel"
         />
       }
     >

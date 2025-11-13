@@ -1,9 +1,8 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { 
   LogOut, 
-  Menu, 
   Bell, 
   Search,
   Heart
@@ -14,41 +13,23 @@ import { User } from '../../App';
 interface DashboardLayoutProps {
   user: User;
   children: ReactNode;
-  sidebar: ReactNode;
+  navigationItems?: ReactNode;
   onLogout: () => void;
 }
 
-export function DashboardLayout({ user, children, sidebar, onLogout }: DashboardLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
+export function DashboardLayout({ user, children, navigationItems, onLogout }: DashboardLayoutProps) {
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden bg-white border-r border-gray-200 shadow-sm`}>
-        {sidebar}
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Top Header */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        {/* Top Row - Logo, Search, and User Info */}
+        <div className="px-6 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2"
-              >
-                <Menu className="w-5 h-5" />
-              </Button>
-              
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
                   <Heart className="w-4 h-4 text-white" />
                 </div>
                 <h1 className="text-xl text-gray-900">MediCare HMS</h1>
-              </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -89,13 +70,20 @@ export function DashboardLayout({ user, children, sidebar, onLogout }: Dashboard
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Bottom Row - Navigation Menu */}
+        {navigationItems && (
+          <div className="px-6 py-0">
+            {navigationItems}
+          </div>
+        )}
         </header>
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-auto">
           {children}
         </main>
-      </div>
     </div>
   );
 }

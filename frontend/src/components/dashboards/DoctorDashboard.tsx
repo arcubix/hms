@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -33,7 +33,7 @@ interface DoctorDashboardProps {
   onLogout: () => void;
 }
 
-const sidebarItems: SidebarItem[] = [
+const navigationItems: NavigationItem[] = [
   { icon: <Activity className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
   { icon: <Calendar className="w-5 h-5" />, label: 'My Schedule', id: 'schedule', badge: '8' },
   { icon: <Users className="w-5 h-5" />, label: 'My Patients', id: 'patients' },
@@ -1145,12 +1145,11 @@ export function DoctorDashboard({ user, onLogout }: DoctorDashboardProps) {
     <DashboardLayout
       user={user}
       onLogout={onLogout}
-      sidebar={
-        <Sidebar
-          items={sidebarItems}
+      navigationItems={
+        <TopNavigation
+          items={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
-          title="Doctor Portal"
         />
       }
     >

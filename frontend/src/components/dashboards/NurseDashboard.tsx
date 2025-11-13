@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
-import { Sidebar, SidebarItem } from '../common/Sidebar';
+import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,7 +25,7 @@ interface NurseDashboardProps {
   onLogout: () => void;
 }
 
-const sidebarItems: SidebarItem[] = [
+const navigationItems: NavigationItem[] = [
   { icon: <Activity className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
   { icon: <Bed className="w-5 h-5" />, label: 'Ward Management', id: 'ward', badge: '3' },
   { icon: <Users className="w-5 h-5" />, label: 'Patient Monitoring', id: 'monitoring' },
@@ -401,12 +401,11 @@ export function NurseDashboard({ user, onLogout }: NurseDashboardProps) {
     <DashboardLayout
       user={user}
       onLogout={onLogout}
-      sidebar={
-        <Sidebar
-          items={sidebarItems}
+      navigationItems={
+        <TopNavigation
+          items={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
-          title="Nurse Station"
         />
       }
     >
