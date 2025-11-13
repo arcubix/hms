@@ -80,6 +80,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { toast } from 'sonner@2.0.3';
+import { EmergencyPatientDetail } from './EmergencyPatientDetail';
 
 // ============= INTERFACES =============
 // Using EmergencyVisit from api.ts instead of local interface
@@ -773,20 +774,79 @@ export function EmergencyManagement() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-2 pt-3 border-t">
+              <div className="flex gap-2 pt-3 border-t flex-wrap">
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="flex-1"
+                  className="flex-1 min-w-[120px]"
                   onClick={() => setSelectedPatient(patient)}
                 >
                   <Eye className="w-3 h-3 mr-1" />
                   View Details
                 </Button>
+                
+                {/* Status Transition Buttons */}
+                {patient.currentStatus === 'registered' && (
+                  <Button 
+                    size="sm" 
+                    className="flex-1 min-w-[120px] bg-blue-600 hover:bg-blue-700"
+                    onClick={async () => {
+                      try {
+                        await api.updateEmergencyStatus(patient.id, 'triaged');
+                        toast.success('Status updated to Triaged');
+                        loadData();
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to update status');
+                      }
+                    }}
+                  >
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Start Triage
+                  </Button>
+                )}
+                
+                {patient.currentStatus === 'triaged' && (
+                  <Button 
+                    size="sm" 
+                    className="flex-1 min-w-[120px] bg-yellow-600 hover:bg-yellow-700"
+                    onClick={async () => {
+                      try {
+                        await api.updateEmergencyStatus(patient.id, 'in-treatment');
+                        toast.success('Status updated to In Treatment');
+                        loadData();
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to update status');
+                      }
+                    }}
+                  >
+                    <Activity className="w-3 h-3 mr-1" />
+                    Start Treatment
+                  </Button>
+                )}
+                
+                {patient.currentStatus === 'in-treatment' && (
+                  <Button 
+                    size="sm" 
+                    className="flex-1 min-w-[120px] bg-orange-600 hover:bg-orange-700"
+                    onClick={async () => {
+                      try {
+                        await api.updateEmergencyStatus(patient.id, 'awaiting-disposition');
+                        toast.success('Status updated to Awaiting Disposition');
+                        loadData();
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to update status');
+                      }
+                    }}
+                  >
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Complete Treatment
+                  </Button>
+                )}
+                
                 {patient.currentStatus === 'awaiting-disposition' && !patient.disposition && (
                   <Button 
                     size="sm" 
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    className="flex-1 min-w-[120px] bg-green-600 hover:bg-green-700"
                     onClick={() => {
                       setSelectedPatient(patient);
                       setIsDispositionOpen(true);
@@ -1400,10 +1460,28 @@ export function EmergencyManagement() {
             </div>
           </div>
 
+          {(dispositionForm.disposition === 'admit-ward' || dispositionForm.disposition === 'admit-private') && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                After confirming disposition, you can create IPD admission from the patient detail view.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex gap-3 pt-4 border-t">
             <Button 
               className="flex-1 bg-green-600 hover:bg-green-700"
-              onClick={handleDisposition}
+              onClick={async () => {
+                try {
+                  await handleDisposition();
+                  if (dispositionForm.disposition === 'admit-ward' || dispositionForm.disposition === 'admit-private') {
+                    toast.info('Disposition set. You can now create IPD admission from the patient detail view.');
+                  }
+                } catch (error: any) {
+                  toast.error(error.message || 'Failed to set disposition');
+                }
+              }}
               disabled={submitting}
             >
               <CheckCircle className="w-4 h-4 mr-2" />
@@ -1415,7 +1493,7 @@ export function EmergencyManagement() {
                 setIsDispositionOpen(false);
                 setSelectedPatient(null);
                 setDispositionForm({
-                  disposition: '',
+                  disposition: 'discharge',
                   disposition_details: '',
                   follow_up_required: false,
                   follow_up_date: '',
@@ -1479,6 +1557,18 @@ export function EmergencyManagement() {
 
       {/* Disposition Dialog */}
       <DispositionDialog />
+
+      {/* Patient Detail View */}
+      {selectedPatient && (
+        <EmergencyPatientDetail
+          visit={selectedPatient}
+          onClose={() => setSelectedPatient(null)}
+          onUpdate={() => {
+            loadData();
+            setSelectedPatient(null);
+          }}
+        />
+      )}
 
     </div>
   );

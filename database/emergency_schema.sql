@@ -105,3 +105,8 @@ CREATE TABLE IF NOT EXISTS `emergency_beds` (
 -- ('ER-BED-03', 'standard', 'available', 'ER Ward B'),
 -- ('ER-RESUS-01', 'resuscitation', 'available', 'Resuscitation Bay'),
 -- ('ER-TRAUMA-01', 'trauma', 'available', 'Trauma Bay 1');
+
+-- ============================================
+-- NOTE: For complete workflow tables, run:
+-- database/emergency_workflow_schema.sql
+-- ============================================

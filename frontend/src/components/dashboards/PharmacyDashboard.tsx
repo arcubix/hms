@@ -21,7 +21,7 @@ import {
 import { User } from '../../App';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Input } from '../ui/input';
-import { POSScreen } from '../pharmacy/POSScreen';
+import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
 
 interface PharmacyDashboardProps {
   user: User;
@@ -179,7 +179,7 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
   const renderContent = () => {
     switch (activeSection) {
       case 'pos':
-        return <POSScreen />;
+        return <AdvancedPOS />;
       
       case 'inventory':
         return (

@@ -622,6 +622,155 @@ class ApiService {
     }>('/api/emergency/beds');
     return data.data || [];
   }
+
+  // ============================================
+  // WORKFLOW API METHODS
+  // ============================================
+
+  async getEmergencyVitals(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVitalSign[];
+    }>(`/api/emergency/visits/${visitId}/vitals`);
+    return data.data || [];
+  }
+
+  async recordEmergencyVitals(visitId: number, vitals: CreateEmergencyVitalSignData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVitalSign[];
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/vitals`, {
+      method: 'POST',
+      body: JSON.stringify(vitals),
+    });
+    return data.data;
+  }
+
+  async getEmergencyNotes(visitId: number, filters?: { note_type?: string; date_from?: string; date_to?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.note_type) params.append('note_type', filters.note_type);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyTreatmentNote[];
+    }>(`/api/emergency/visits/${visitId}/notes${query}`);
+    return data.data || [];
+  }
+
+  async addEmergencyNote(visitId: number, note: CreateEmergencyNoteData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyTreatmentNote[];
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(note),
+    });
+    return data.data;
+  }
+
+  async getEmergencyInvestigations(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyInvestigationOrder[];
+    }>(`/api/emergency/visits/${visitId}/investigations`);
+    return data.data || [];
+  }
+
+  async orderEmergencyInvestigation(visitId: number, order: CreateEmergencyInvestigationData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyInvestigationOrder[];
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/investigations`, {
+      method: 'POST',
+      body: JSON.stringify(order),
+    });
+    return data.data;
+  }
+
+  async getEmergencyMedications(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyMedication[];
+    }>(`/api/emergency/visits/${visitId}/medications`);
+    return data.data || [];
+  }
+
+  async administerEmergencyMedication(visitId: number, medication: CreateEmergencyMedicationData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyMedication[];
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/medications`, {
+      method: 'POST',
+      body: JSON.stringify(medication),
+    });
+    return data.data;
+  }
+
+  async getEmergencyCharges(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        charges: EmergencyCharge[];
+        total: number;
+      };
+    }>(`/api/emergency/visits/${visitId}/charges`);
+    return data.data || { charges: [], total: 0 };
+  }
+
+  async addEmergencyCharge(visitId: number, charge: CreateEmergencyChargeData) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        charges: EmergencyCharge[];
+        total: number;
+      };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/charges`, {
+      method: 'POST',
+      body: JSON.stringify(charge),
+    });
+    return data.data;
+  }
+
+  async deleteEmergencyCharge(visitId: number, chargeId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        charges: EmergencyCharge[];
+        total: number;
+      };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/charges/${chargeId}`, {
+      method: 'DELETE',
+    });
+    return data.data;
+  }
+
+  async getEmergencyStatusHistory(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyStatusHistory[];
+    }>(`/api/emergency/visits/${visitId}/history`);
+    return data.data || [];
+  }
+
+  async createIPDAdmissionFromER(visitId: number, admissionData: CreateIPDAdmissionData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/admit-ipd`, {
+      method: 'POST',
+      body: JSON.stringify(admissionData),
+    });
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -640,6 +789,155 @@ export interface Patient {
   blood_group?: string;
   status: 'Active' | 'Inactive' | 'Critical';
   created_at: string;
+}
+
+// ============================================
+// EMERGENCY WORKFLOW INTERFACES
+// ============================================
+
+export interface EmergencyVitalSign {
+  id: number;
+  emergency_visit_id: number;
+  recorded_at: string;
+  recorded_by?: number;
+  recorded_by_name?: string;
+  bp?: string;
+  pulse?: number;
+  temp?: number;
+  spo2?: number;
+  resp?: number;
+  pain_score?: number;
+  consciousness_level?: 'Alert' | 'Drowsy' | 'Confused' | 'Unconscious';
+  notes?: string;
+  created_at: string;
+}
+
+export interface CreateEmergencyVitalSignData {
+  bp?: string;
+  pulse?: number;
+  temp?: number;
+  spo2?: number;
+  resp?: number;
+  pain_score?: number;
+  consciousness_level?: 'Alert' | 'Drowsy' | 'Confused' | 'Unconscious';
+  notes?: string;
+  recorded_at?: string;
+}
+
+export interface EmergencyTreatmentNote {
+  id: number;
+  emergency_visit_id: number;
+  note_type: 'observation' | 'progress' | 'procedure' | 'nursing' | 'doctor';
+  note_text: string;
+  recorded_by?: number;
+  recorded_by_name?: string;
+  recorded_by_role?: string;
+  recorded_at: string;
+  attachments?: string[];
+  created_at: string;
+}
+
+export interface CreateEmergencyNoteData {
+  note_type?: 'observation' | 'progress' | 'procedure' | 'nursing' | 'doctor';
+  note_text: string;
+  attachments?: string[];
+  recorded_at?: string;
+}
+
+export interface EmergencyInvestigationOrder {
+  id: number;
+  emergency_visit_id: number;
+  investigation_type: 'lab' | 'radiology' | 'other';
+  test_name: string;
+  test_code?: string;
+  lab_test_id?: number;
+  lab_test_name?: string;
+  priority: 'normal' | 'urgent' | 'stat';
+  ordered_by?: number;
+  ordered_by_name?: string;
+  ordered_at: string;
+  status: 'ordered' | 'in-progress' | 'completed' | 'cancelled';
+  result_id?: number;
+  result_value?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyInvestigationData {
+  investigation_type?: 'lab' | 'radiology' | 'other';
+  test_name: string;
+  test_code?: string;
+  lab_test_id?: number;
+  priority?: 'normal' | 'urgent' | 'stat';
+  notes?: string;
+}
+
+export interface EmergencyMedication {
+  id: number;
+  emergency_visit_id: number;
+  medication_name: string;
+  dosage: string;
+  route: 'IV' | 'IM' | 'PO' | 'Sublingual' | 'Topical' | 'Inhalation' | 'Other';
+  frequency?: string;
+  administered_by?: number;
+  administered_by_name?: string;
+  administered_at?: string;
+  status: 'pending' | 'given' | 'missed' | 'refused';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyMedicationData {
+  medication_name: string;
+  dosage: string;
+  route?: 'IV' | 'IM' | 'PO' | 'Sublingual' | 'Topical' | 'Inhalation' | 'Other';
+  frequency?: string;
+  status?: 'pending' | 'given' | 'missed' | 'refused';
+  notes?: string;
+  administered_at?: string;
+}
+
+export interface EmergencyCharge {
+  id: number;
+  emergency_visit_id: number;
+  charge_type: 'consultation' | 'procedure' | 'medication' | 'investigation' | 'bed' | 'other';
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  charged_by?: number;
+  charged_by_name?: string;
+  charged_at: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CreateEmergencyChargeData {
+  charge_type: 'consultation' | 'procedure' | 'medication' | 'investigation' | 'bed' | 'other';
+  item_name: string;
+  quantity?: number;
+  unit_price: number;
+  notes?: string;
+}
+
+export interface EmergencyStatusHistory {
+  id: number;
+  emergency_visit_id: number;
+  from_status?: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed';
+  to_status: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed';
+  changed_by?: number;
+  changed_by_name?: string;
+  changed_at: string;
+  notes?: string;
+}
+
+export interface CreateIPDAdmissionData {
+  admission_type: 'ward' | 'private';
+  ward_id?: number;
+  bed_id?: number;
+  notes?: string;
 }
 
 export interface CreatePatientData {

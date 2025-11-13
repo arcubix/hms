@@ -303,13 +303,36 @@ class Emergency_model extends CI_Model {
     /**
      * Update visit status
      */
-    public function update_status($id, $status) {
+    public function update_status($id, $status, $changed_by = null, $notes = null) {
         $valid_statuses = array('registered', 'triaged', 'in-treatment', 'awaiting-disposition', 'completed');
         if (!in_array($status, $valid_statuses)) {
             return false;
         }
         
-        return $this->update($id, array('current_status' => $status));
+        // Get current status
+        $visit = $this->get_by_id($id);
+        $from_status = $visit['current_status'] ?? null;
+        
+        // Prepare update data
+        $update_data = array('current_status' => $status);
+        
+        // Update timestamps based on status
+        if ($status === 'in-treatment' && empty($visit['treatment_started_at'])) {
+            $update_data['treatment_started_at'] = date('Y-m-d H:i:s');
+        }
+        
+        if ($status === 'awaiting-disposition' && empty($visit['treatment_completed_at'])) {
+            $update_data['treatment_completed_at'] = date('Y-m-d H:i:s');
+        }
+        
+        $result = $this->update($id, $update_data);
+        
+        // Record status change in history
+        if ($result) {
+            $this->record_status_change($id, $from_status, $status, $changed_by, $notes);
+        }
+        
+        return $result;
     }
 
     /**
@@ -387,5 +410,515 @@ class Emergency_model extends CI_Model {
         
         $this->db->where('bed_number', $bed_number);
         return $this->db->update('emergency_beds', $update_data);
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Vital Signs
+    // ============================================
+
+    /**
+     * Record vital signs for emergency visit
+     */
+    public function record_vital_signs($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_vital_signs')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'recorded_at' => isset($data['recorded_at']) ? $data['recorded_at'] : date('Y-m-d H:i:s'),
+            'recorded_by' => isset($data['recorded_by']) ? intval($data['recorded_by']) : null,
+            'bp' => isset($data['bp']) && !empty($data['bp']) ? $data['bp'] : null,
+            'pulse' => isset($data['pulse']) && !empty($data['pulse']) ? intval($data['pulse']) : null,
+            'temp' => isset($data['temp']) && !empty($data['temp']) ? floatval($data['temp']) : null,
+            'spo2' => isset($data['spo2']) && !empty($data['spo2']) ? intval($data['spo2']) : null,
+            'resp' => isset($data['resp']) && !empty($data['resp']) ? intval($data['resp']) : null,
+            'pain_score' => isset($data['pain_score']) && !empty($data['pain_score']) ? intval($data['pain_score']) : null,
+            'consciousness_level' => isset($data['consciousness_level']) ? $data['consciousness_level'] : null,
+            'notes' => isset($data['notes']) ? $data['notes'] : null
+        );
+
+        if ($this->db->insert('emergency_vital_signs', $insert_data)) {
+            // Update latest vitals in emergency_visits table
+            $this->db->where('id', $visit_id);
+            $update_vitals = array();
+            if (isset($data['bp'])) $update_vitals['vitals_bp'] = $data['bp'];
+            if (isset($data['pulse'])) $update_vitals['vitals_pulse'] = intval($data['pulse']);
+            if (isset($data['temp'])) $update_vitals['vitals_temp'] = floatval($data['temp']);
+            if (isset($data['spo2'])) $update_vitals['vitals_spo2'] = intval($data['spo2']);
+            if (isset($data['resp'])) $update_vitals['vitals_resp'] = intval($data['resp']);
+            
+            if (!empty($update_vitals)) {
+                $this->db->update('emergency_visits', $update_vitals);
+            }
+            
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get vital signs history for emergency visit
+     */
+    public function get_vital_signs_history($visit_id) {
+        if (!$this->db->table_exists('emergency_vital_signs')) {
+            return array();
+        }
+
+        $this->db->select('evs.*, u.name as recorded_by_name');
+        $this->db->from('emergency_vital_signs evs');
+        $this->db->join('users u', 'u.id = evs.recorded_by', 'left');
+        $this->db->where('evs.emergency_visit_id', $visit_id);
+        $this->db->order_by('evs.recorded_at', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Treatment Notes
+    // ============================================
+
+    /**
+     * Add treatment note
+     */
+    public function add_treatment_note($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_treatment_notes')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'note_type' => isset($data['note_type']) ? $data['note_type'] : 'observation',
+            'note_text' => $data['note_text'],
+            'recorded_by' => isset($data['recorded_by']) ? intval($data['recorded_by']) : null,
+            'recorded_at' => isset($data['recorded_at']) ? $data['recorded_at'] : date('Y-m-d H:i:s'),
+            'attachments' => isset($data['attachments']) && is_array($data['attachments']) ? json_encode($data['attachments']) : null
+        );
+
+        if ($this->db->insert('emergency_treatment_notes', $insert_data)) {
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get treatment notes for emergency visit
+     */
+    public function get_treatment_notes($visit_id, $filters = array()) {
+        if (!$this->db->table_exists('emergency_treatment_notes')) {
+            return array();
+        }
+
+        $this->db->select('etn.*, u.name as recorded_by_name, u.role as recorded_by_role');
+        $this->db->from('emergency_treatment_notes etn');
+        $this->db->join('users u', 'u.id = etn.recorded_by', 'left');
+        $this->db->where('etn.emergency_visit_id', $visit_id);
+
+        if (!empty($filters['note_type'])) {
+            $this->db->where('etn.note_type', $filters['note_type']);
+        }
+
+        if (!empty($filters['date_from'])) {
+            $this->db->where('etn.recorded_at >=', $filters['date_from']);
+        }
+
+        if (!empty($filters['date_to'])) {
+            $this->db->where('etn.recorded_at <=', $filters['date_to']);
+        }
+
+        $this->db->order_by('etn.recorded_at', 'DESC');
+        $query = $this->db->get();
+        $notes = $query->result_array();
+
+        // Parse attachments JSON
+        foreach ($notes as &$note) {
+            if (!empty($note['attachments'])) {
+                $note['attachments'] = json_decode($note['attachments'], true);
+            } else {
+                $note['attachments'] = array();
+            }
+        }
+
+        return $notes;
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Investigation Orders
+    // ============================================
+
+    /**
+     * Order investigation
+     */
+    public function order_investigation($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_investigation_orders')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'investigation_type' => isset($data['investigation_type']) ? $data['investigation_type'] : 'lab',
+            'test_name' => $data['test_name'],
+            'test_code' => isset($data['test_code']) ? $data['test_code'] : null,
+            'lab_test_id' => isset($data['lab_test_id']) && !empty($data['lab_test_id']) ? intval($data['lab_test_id']) : null,
+            'priority' => isset($data['priority']) ? $data['priority'] : 'normal',
+            'ordered_by' => isset($data['ordered_by']) ? intval($data['ordered_by']) : null,
+            'ordered_at' => isset($data['ordered_at']) ? $data['ordered_at'] : date('Y-m-d H:i:s'),
+            'status' => 'ordered',
+            'notes' => isset($data['notes']) ? $data['notes'] : null
+        );
+
+        if ($this->db->insert('emergency_investigation_orders', $insert_data)) {
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get investigation orders for emergency visit
+     */
+    public function get_investigation_orders($visit_id) {
+        if (!$this->db->table_exists('emergency_investigation_orders')) {
+            return array();
+        }
+
+        $this->db->select('eio.*, u.name as ordered_by_name, lt.test_name as lab_test_name');
+        $this->db->from('emergency_investigation_orders eio');
+        $this->db->join('users u', 'u.id = eio.ordered_by', 'left');
+        $this->db->join('lab_tests lt', 'lt.id = eio.lab_test_id', 'left');
+        $this->db->where('eio.emergency_visit_id', $visit_id);
+        $this->db->order_by('eio.ordered_at', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Update investigation order status
+     */
+    public function update_investigation_status($order_id, $status, $result_data = null) {
+        if (!$this->db->table_exists('emergency_investigation_orders')) {
+            return false;
+        }
+
+        $update_data = array('status' => $status);
+        
+        if (isset($result_data['result_id'])) {
+            $update_data['result_id'] = intval($result_data['result_id']);
+        }
+        
+        if (isset($result_data['result_value'])) {
+            $update_data['result_value'] = $result_data['result_value'];
+        }
+
+        $this->db->where('id', $order_id);
+        return $this->db->update('emergency_investigation_orders', $update_data);
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Medication Administration
+    // ============================================
+
+    /**
+     * Administer medication
+     */
+    public function administer_medication($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_medication_administration')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'medication_name' => $data['medication_name'],
+            'dosage' => $data['dosage'],
+            'route' => isset($data['route']) ? $data['route'] : 'PO',
+            'frequency' => isset($data['frequency']) ? $data['frequency'] : null,
+            'administered_by' => isset($data['administered_by']) ? intval($data['administered_by']) : null,
+            'administered_at' => isset($data['administered_at']) ? $data['administered_at'] : date('Y-m-d H:i:s'),
+            'status' => isset($data['status']) ? $data['status'] : 'given',
+            'notes' => isset($data['notes']) ? $data['notes'] : null
+        );
+
+        if ($this->db->insert('emergency_medication_administration', $insert_data)) {
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get medication history for emergency visit
+     */
+    public function get_medication_history($visit_id) {
+        if (!$this->db->table_exists('emergency_medication_administration')) {
+            return array();
+        }
+
+        $this->db->select('ema.*, u.name as administered_by_name');
+        $this->db->from('emergency_medication_administration ema');
+        $this->db->join('users u', 'u.id = ema.administered_by', 'left');
+        $this->db->where('ema.emergency_visit_id', $visit_id);
+        $this->db->order_by('ema.created_at', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Update medication status
+     */
+    public function update_medication_status($medication_id, $status, $data = array()) {
+        if (!$this->db->table_exists('emergency_medication_administration')) {
+            return false;
+        }
+
+        $update_data = array('status' => $status);
+        
+        if ($status === 'given' && empty($data['administered_at'])) {
+            $update_data['administered_at'] = date('Y-m-d H:i:s');
+        }
+        
+        if (isset($data['administered_by'])) {
+            $update_data['administered_by'] = intval($data['administered_by']);
+        }
+        
+        if (isset($data['notes'])) {
+            $update_data['notes'] = $data['notes'];
+        }
+
+        $this->db->where('id', $medication_id);
+        return $this->db->update('emergency_medication_administration', $update_data);
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Charges/Billing
+    // ============================================
+
+    /**
+     * Add charge item
+     */
+    public function add_charge($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_charges')) {
+            return false;
+        }
+
+        $quantity = isset($data['quantity']) ? floatval($data['quantity']) : 1.00;
+        $unit_price = floatval($data['unit_price']);
+        $total_amount = $quantity * $unit_price;
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'charge_type' => $data['charge_type'],
+            'item_name' => $data['item_name'],
+            'quantity' => $quantity,
+            'unit_price' => $unit_price,
+            'total_amount' => $total_amount,
+            'charged_by' => isset($data['charged_by']) ? intval($data['charged_by']) : null,
+            'charged_at' => isset($data['charged_at']) ? $data['charged_at'] : date('Y-m-d H:i:s'),
+            'notes' => isset($data['notes']) ? $data['notes'] : null
+        );
+
+        if ($this->db->insert('emergency_charges', $insert_data)) {
+            // Update total charges in emergency_visits
+            $this->calculate_total_charges($visit_id);
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get charges for emergency visit
+     */
+    public function get_charges($visit_id) {
+        if (!$this->db->table_exists('emergency_charges')) {
+            return array();
+        }
+
+        $this->db->select('ec.*, u.name as charged_by_name');
+        $this->db->from('emergency_charges ec');
+        $this->db->join('users u', 'u.id = ec.charged_by', 'left');
+        $this->db->where('ec.emergency_visit_id', $visit_id);
+        $this->db->order_by('ec.charged_at', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Calculate and update total charges
+     */
+    public function calculate_total_charges($visit_id) {
+        if (!$this->db->table_exists('emergency_charges')) {
+            return 0;
+        }
+
+        $this->db->select_sum('total_amount');
+        $this->db->where('emergency_visit_id', $visit_id);
+        $query = $this->db->get('emergency_charges');
+        $result = $query->row_array();
+        $total = floatval($result['total_amount'] ?? 0);
+
+        // Update emergency_visits table
+        $this->db->where('id', $visit_id);
+        $this->db->update('emergency_visits', array('total_charges' => $total));
+
+        return $total;
+    }
+
+    /**
+     * Delete charge item
+     */
+    public function delete_charge($charge_id, $visit_id) {
+        if (!$this->db->table_exists('emergency_charges')) {
+            return false;
+        }
+
+        $this->db->where('id', $charge_id);
+        $this->db->where('emergency_visit_id', $visit_id);
+        $result = $this->db->delete('emergency_charges');
+
+        if ($result) {
+            $this->calculate_total_charges($visit_id);
+        }
+
+        return $result;
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - Status History
+    // ============================================
+
+    /**
+     * Record status change
+     */
+    public function record_status_change($visit_id, $from_status, $to_status, $changed_by = null, $notes = null) {
+        if (!$this->db->table_exists('emergency_status_history')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'from_status' => $from_status,
+            'to_status' => $to_status,
+            'changed_by' => $changed_by ? intval($changed_by) : null,
+            'changed_at' => date('Y-m-d H:i:s'),
+            'notes' => $notes
+        );
+
+        if ($this->db->insert('emergency_status_history', $insert_data)) {
+            return $this->db->insert_id();
+        }
+        return false;
+    }
+
+    /**
+     * Get status history for emergency visit
+     */
+    public function get_status_history($visit_id) {
+        if (!$this->db->table_exists('emergency_status_history')) {
+            return array();
+        }
+
+        $this->db->select('esh.*, u.name as changed_by_name');
+        $this->db->from('emergency_status_history esh');
+        $this->db->join('users u', 'u.id = esh.changed_by', 'left');
+        $this->db->where('esh.emergency_visit_id', $visit_id);
+        $this->db->order_by('esh.changed_at', 'ASC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    // ============================================
+    // WORKFLOW METHODS - IPD Integration
+    // ============================================
+
+    /**
+     * Create IPD admission from ER visit
+     */
+    public function create_ipd_admission($visit_id, $data) {
+        // Check if IPD admissions table exists
+        if (!$this->db->table_exists('ipd_admissions')) {
+            // If IPD table doesn't exist, just create the link record
+            if ($this->db->table_exists('emergency_ipd_admissions')) {
+                $link_data = array(
+                    'emergency_visit_id' => intval($visit_id),
+                    'admission_type' => $data['admission_type'],
+                    'admitted_by' => isset($data['admitted_by']) ? intval($data['admitted_by']) : null,
+                    'notes' => isset($data['notes']) ? $data['notes'] : null
+                );
+                $this->db->insert('emergency_ipd_admissions', $link_data);
+            }
+            return array('success' => false, 'message' => 'IPD admissions table does not exist');
+        }
+
+        // Get emergency visit details
+        $visit = $this->get_by_id($visit_id);
+        if (!$visit) {
+            return array('success' => false, 'message' => 'Emergency visit not found');
+        }
+
+        // Create IPD admission record
+        $this->load->model('IPD_model');
+        if (!class_exists('IPD_model')) {
+            // If IPD_model doesn't exist, create basic admission
+            $ipd_data = array(
+                'patient_id' => $visit['patient_db_id'],
+                'admission_type' => $data['admission_type'] === 'ward' ? 'Emergency' : 'Planned',
+                'ward_id' => isset($data['ward_id']) ? intval($data['ward_id']) : null,
+                'bed_id' => isset($data['bed_id']) ? intval($data['bed_id']) : null,
+                'consulting_doctor_id' => $visit['assigned_doctor_id'] ?? null,
+                'primary_diagnosis' => $visit['chief_complaint'] ?? '',
+                'admitted_by' => isset($data['admitted_by']) ? intval($data['admitted_by']) : null
+            );
+
+            // Try to insert into ipd_admissions if table exists
+            if ($this->db->table_exists('ipd_admissions')) {
+                $ipd_data['admission_date'] = date('Y-m-d H:i:s');
+                if ($this->db->insert('ipd_admissions', $ipd_data)) {
+                    $ipd_admission_id = $this->db->insert_id();
+                } else {
+                    return array('success' => false, 'message' => 'Failed to create IPD admission');
+                }
+            } else {
+                return array('success' => false, 'message' => 'IPD admissions table does not exist');
+            }
+        } else {
+            // Use IPD_model if available
+            $ipd_result = $this->IPD_model->create_admission_from_er($visit, $data);
+            if (!$ipd_result['success']) {
+                return $ipd_result;
+            }
+            $ipd_admission_id = $ipd_result['id'];
+        }
+
+        // Link ER visit to IPD admission
+        if ($this->db->table_exists('emergency_ipd_admissions')) {
+            $link_data = array(
+                'emergency_visit_id' => intval($visit_id),
+                'ipd_admission_id' => $ipd_admission_id,
+                'admission_type' => $data['admission_type'],
+                'admitted_by' => isset($data['admitted_by']) ? intval($data['admitted_by']) : null,
+                'notes' => isset($data['notes']) ? $data['notes'] : null
+            );
+            $this->db->insert('emergency_ipd_admissions', $link_data);
+        }
+
+        // Update emergency_visits table
+        $this->db->where('id', $visit_id);
+        $this->db->update('emergency_visits', array(
+            'ipd_admission_id' => $ipd_admission_id,
+            'disposition' => $data['admission_type'] === 'ward' ? 'admit-ward' : 'admit-private',
+            'disposition_time' => date('Y-m-d H:i:s')
+        ));
+
+        return array('success' => true, 'id' => $ipd_admission_id);
+    }
+
+    /**
+     * Get IPD admission link for ER visit
+     */
+    public function get_ipd_admission_link($visit_id) {
+        if (!$this->db->table_exists('emergency_ipd_admissions')) {
+            return null;
+        }
+
+        $this->db->where('emergency_visit_id', $visit_id);
+        $query = $this->db->get('emergency_ipd_admissions');
+        return $query->row_array();
     }
 }

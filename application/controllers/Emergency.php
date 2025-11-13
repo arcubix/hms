@@ -306,7 +306,10 @@ class Emergency extends Api {
             return;
         }
         
-        $result = $this->Emergency_model->update_status($id, $data['status']);
+        $changed_by = $this->user && isset($this->user['id']) ? $this->user['id'] : null;
+        $notes = isset($data['notes']) ? $data['notes'] : null;
+        
+        $result = $this->Emergency_model->update_status($id, $data['status'], $changed_by, $notes);
         
         if ($result) {
             $visit = $this->Emergency_model->get_by_id($id);
@@ -340,6 +343,335 @@ class Emergency extends Api {
             $this->success($beds);
         } catch (Exception $e) {
             log_message('error', 'Emergency beds error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // ============================================
+    // WORKFLOW API ENDPOINTS
+    // ============================================
+
+    /**
+     * Record vital signs
+     * POST /api/emergency/visits/:id/vitals
+     * GET /api/emergency/visits/:id/vitals
+     */
+    public function vitals($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $vitals = $this->Emergency_model->get_vital_signs_history($id);
+                $this->success($vitals);
+            } elseif ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if ($this->user && isset($this->user['id'])) {
+                    $data['recorded_by'] = $this->user['id'];
+                }
+                
+                $result = $this->Emergency_model->record_vital_signs($id, $data);
+                
+                if ($result) {
+                    $vitals = $this->Emergency_model->get_vital_signs_history($id);
+                    $this->success($vitals, 'Vital signs recorded successfully');
+                } else {
+                    $this->error('Failed to record vital signs', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency vitals error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Treatment notes
+     * POST /api/emergency/visits/:id/notes
+     * GET /api/emergency/visits/:id/notes
+     */
+    public function notes($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $filters = array(
+                    'note_type' => $this->input->get('note_type'),
+                    'date_from' => $this->input->get('date_from'),
+                    'date_to' => $this->input->get('date_to')
+                );
+                $notes = $this->Emergency_model->get_treatment_notes($id, $filters);
+                $this->success($notes);
+            } elseif ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if (empty($data['note_text'])) {
+                    $this->error('Note text is required', 400);
+                    return;
+                }
+                
+                if ($this->user && isset($this->user['id'])) {
+                    $data['recorded_by'] = $this->user['id'];
+                }
+                
+                $result = $this->Emergency_model->add_treatment_note($id, $data);
+                
+                if ($result) {
+                    $notes = $this->Emergency_model->get_treatment_notes($id);
+                    $this->success($notes, 'Treatment note added successfully');
+                } else {
+                    $this->error('Failed to add treatment note', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency notes error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Investigation orders
+     * POST /api/emergency/visits/:id/investigations
+     * GET /api/emergency/visits/:id/investigations
+     */
+    public function investigations($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $orders = $this->Emergency_model->get_investigation_orders($id);
+                $this->success($orders);
+            } elseif ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if (empty($data['test_name'])) {
+                    $this->error('Test name is required', 400);
+                    return;
+                }
+                
+                if ($this->user && isset($this->user['id'])) {
+                    $data['ordered_by'] = $this->user['id'];
+                }
+                
+                $result = $this->Emergency_model->order_investigation($id, $data);
+                
+                if ($result) {
+                    $orders = $this->Emergency_model->get_investigation_orders($id);
+                    $this->success($orders, 'Investigation ordered successfully');
+                } else {
+                    $this->error('Failed to order investigation', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency investigations error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Medication administration
+     * POST /api/emergency/visits/:id/medications
+     * GET /api/emergency/visits/:id/medications
+     */
+    public function medications($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $medications = $this->Emergency_model->get_medication_history($id);
+                $this->success($medications);
+            } elseif ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if (empty($data['medication_name']) || empty($data['dosage'])) {
+                    $this->error('Medication name and dosage are required', 400);
+                    return;
+                }
+                
+                if ($this->user && isset($this->user['id'])) {
+                    $data['administered_by'] = $this->user['id'];
+                }
+                
+                $result = $this->Emergency_model->administer_medication($id, $data);
+                
+                if ($result) {
+                    $medications = $this->Emergency_model->get_medication_history($id);
+                    $this->success($medications, 'Medication recorded successfully');
+                } else {
+                    $this->error('Failed to record medication', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency medications error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Charges/Billing
+     * POST /api/emergency/visits/:id/charges
+     * GET /api/emergency/visits/:id/charges
+     * DELETE /api/emergency/visits/:id/charges/:charge_id
+     */
+    public function charges($id = null, $charge_id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $charges = $this->Emergency_model->get_charges($id);
+                $total = $this->Emergency_model->calculate_total_charges($id);
+                $this->success(array(
+                    'charges' => $charges,
+                    'total' => $total
+                ));
+            } elseif ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if (empty($data['item_name']) || empty($data['charge_type']) || !isset($data['unit_price'])) {
+                    $this->error('Item name, charge type, and unit price are required', 400);
+                    return;
+                }
+                
+                if ($this->user && isset($this->user['id'])) {
+                    $data['charged_by'] = $this->user['id'];
+                }
+                
+                $result = $this->Emergency_model->add_charge($id, $data);
+                
+                if ($result) {
+                    $charges = $this->Emergency_model->get_charges($id);
+                    $total = $this->Emergency_model->calculate_total_charges($id);
+                    $this->success(array(
+                        'charges' => $charges,
+                        'total' => $total
+                    ), 'Charge added successfully');
+                } else {
+                    $this->error('Failed to add charge', 400);
+                }
+            } elseif ($method === 'DELETE' && $charge_id) {
+                $result = $this->Emergency_model->delete_charge($charge_id, $id);
+                
+                if ($result) {
+                    $charges = $this->Emergency_model->get_charges($id);
+                    $total = $this->Emergency_model->calculate_total_charges($id);
+                    $this->success(array(
+                        'charges' => $charges,
+                        'total' => $total
+                    ), 'Charge deleted successfully');
+                } else {
+                    $this->error('Failed to delete charge', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency charges error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Status history
+     * GET /api/emergency/visits/:id/history
+     */
+    public function history($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $history = $this->Emergency_model->get_status_history($id);
+            $this->success($history);
+        } catch (Exception $e) {
+            log_message('error', 'Emergency history error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Create IPD admission from ER
+     * POST /api/emergency/visits/:id/admit-ipd
+     */
+    public function admit_ipd($id = null) {
+        if (!$id) {
+            $this->error('Visit ID is required', 400);
+            return;
+        }
+
+        try {
+            $data = json_decode($this->input->raw_input_stream, true);
+            if (empty($data)) {
+                $data = $this->input->post();
+            }
+            
+            if (empty($data['admission_type']) || !in_array($data['admission_type'], array('ward', 'private'))) {
+                $this->error('Valid admission type (ward or private) is required', 400);
+                return;
+            }
+            
+            if ($this->user && isset($this->user['id'])) {
+                $data['admitted_by'] = $this->user['id'];
+            }
+            
+            $result = $this->Emergency_model->create_ipd_admission($id, $data);
+            
+            if ($result['success']) {
+                $visit = $this->Emergency_model->get_by_id($id);
+                $this->success($this->format_visit($visit), 'IPD admission created successfully');
+            } else {
+                $this->error($result['message'] ?? 'Failed to create IPD admission', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency IPD admission error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }
