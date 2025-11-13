@@ -496,6 +496,132 @@ class ApiService {
     }>(`/api/lab-tests/${id}`);
     return data.data;
   }
+
+  // Emergency endpoints
+  async getEmergencyVisits(filters?: {
+    search?: string;
+    status?: string;
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    triage_level?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.date) params.append('date', filters.date);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.triage_level) params.append('triage_level', filters.triage_level.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/emergency/visits?${queryString}` : '/api/emergency/visits';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getEmergencyVisit(id: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+    }>(`/api/emergency/visits/${id}`);
+    return data.data;
+  }
+
+  async createEmergencyVisit(visitData: CreateEmergencyVisitData) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>('/api/emergency/visits', {
+      method: 'POST',
+      body: JSON.stringify(visitData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyVisit(id: string, visitData: Partial<CreateEmergencyVisitData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(visitData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyTriage(id: string, triageData: {
+    triage_level: number;
+    chief_complaint?: string;
+    vitals_bp?: string;
+    vitals_pulse?: number;
+    vitals_temp?: number;
+    vitals_spo2?: number;
+    vitals_resp?: number;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${id}/triage`, {
+      method: 'PUT',
+      body: JSON.stringify(triageData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyDisposition(id: string, dispositionData: {
+    disposition: 'discharge' | 'admit-ward' | 'admit-private' | 'transfer' | 'absconded' | 'death';
+    disposition_details?: string;
+    follow_up_required?: boolean;
+    follow_up_date?: string;
+    medications_prescribed?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${id}/disposition`, {
+      method: 'PUT',
+      body: JSON.stringify(dispositionData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyStatus(id: string, status: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed') {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return data.data;
+  }
+
+  async getEmergencyStats(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyStats;
+    }>(`/api/emergency/stats${params}`);
+    return data.data;
+  }
+
+  async getEmergencyBeds() {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyBed[];
+    }>('/api/emergency/beds');
+    return data.data || [];
+  }
 }
 
 export interface Patient {
@@ -726,6 +852,91 @@ export interface CreatePrescriptionData {
   medicines?: PrescriptionMedicine[];
   lab_tests?: PrescriptionLabTest[];
   status?: 'Draft' | 'Active' | 'Completed' | 'Cancelled';
+}
+
+// Emergency interfaces
+export interface EmergencyVisit {
+  id: number;
+  erNumber: string;
+  uhid?: string;
+  name: string;
+  age: number;
+  gender: string;
+  phone?: string;
+  email?: string;
+  bloodGroup?: string;
+  arrivalTime: string;
+  arrivalMode: 'walk-in' | 'ambulance' | 'police' | 'referred';
+  triageLevel: number;
+  chiefComplaint: string;
+  vitals: {
+    bp: string;
+    pulse: number;
+    temp: number;
+    spo2: number;
+    resp: number;
+  };
+  currentStatus: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed';
+  assignedDoctor?: string;
+  assignedNurse?: string;
+  bedNumber?: string;
+  disposition?: 'discharge' | 'admit-ward' | 'admit-private' | 'transfer' | 'absconded' | 'death';
+  dispositionDetails?: string;
+  followUpRequired?: boolean;
+  followUpDate?: string;
+  medicationsPrescribed?: string;
+  investigations?: string[];
+  medications?: string[];
+  totalCharges: number;
+  waitTime: number;
+  createdAt?: string;
+}
+
+export interface CreateEmergencyVisitData {
+  patient_id: number;
+  arrival_time?: string;
+  arrival_mode?: 'walk-in' | 'ambulance' | 'police' | 'referred';
+  triage_level: 1 | 2 | 3 | 4 | 5;
+  chief_complaint: string;
+  vitals_bp?: string;
+  vitals_pulse?: number;
+  vitals_temp?: number;
+  vitals_spo2?: number;
+  vitals_resp?: number;
+  current_status?: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed';
+  assigned_doctor_id?: number;
+  assigned_nurse_id?: number;
+  bed_number?: string;
+  investigations?: string[];
+  medications?: string[];
+  total_charges?: number;
+}
+
+export interface EmergencyStats {
+  total: number;
+  registered: number;
+  triaged: number;
+  in_treatment: number;
+  awaiting_disposition: number;
+  completed: number;
+  discharged: number;
+  admitted_ward: number;
+  admitted_private: number;
+  transferred: number;
+  avg_wait_time: number;
+  triage_distribution: {
+    [key: number]: number;
+  };
+}
+
+export interface EmergencyBed {
+  id: number;
+  bed_number: string;
+  bed_type: 'standard' | 'resuscitation' | 'trauma' | 'isolation';
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved';
+  current_visit_id?: number;
+  location?: string;
+  notes?: string;
 }
 
 export const api = new ApiService();

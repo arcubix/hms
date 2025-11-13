@@ -12,7 +12,7 @@
  *    - Admit to Private Room
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -27,6 +27,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
 import { Progress } from '../ui/progress';
 import { Alert, AlertDescription } from '../ui/alert';
+import { api, EmergencyVisit, Patient, Doctor, EmergencyStats, CreateEmergencyVisitData, CreatePatientData } from '../../services/api';
 import {
   Ambulance,
   Activity,
@@ -81,221 +82,178 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { toast } from 'sonner@2.0.3';
 
 // ============= INTERFACES =============
-
-interface EmergencyPatient {
-  id: string;
-  erNumber: string;
-  uhid?: string;
-  
-  // Personal Info
-  name: string;
-  age: number;
-  gender: 'male' | 'female' | 'other';
-  contact: string;
-  
-  // Arrival Info
-  arrivalTime: string;
-  arrivalMode: 'walk-in' | 'ambulance' | 'police' | 'referred';
-  
-  // Triage Info
-  triageLevel: 1 | 2 | 3 | 4 | 5;
-  chiefComplaint: string;
-  vitals: {
-    bp: string;
-    pulse: number;
-    temp: number;
-    spo2: number;
-    resp: number;
-  };
-  
-  // Status
-  currentStatus: 'registered' | 'triaged' | 'in-treatment' | 'awaiting-disposition' | 'completed';
-  
-  // Treatment
-  assignedDoctor?: string;
-  assignedNurse?: string;
-  bedNumber?: string;
-  
-  // Disposition
-  disposition?: 'discharge' | 'admit-ward' | 'admit-private' | 'transfer' | 'absconded' | 'death';
-  dispositionDetails?: string;
-  dispositionTime?: string;
-  
-  // Additional
-  investigations?: string[];
-  medications?: string[];
-  totalCharges: number;
-  waitTime: number; // minutes
-}
-
-// ============= MOCK DATA =============
-
-const mockEmergencyPatients: EmergencyPatient[] = [
-  {
-    id: 'ER001',
-    erNumber: 'ER-2024-001',
-    uhid: 'UHID-234567',
-    name: 'John Anderson',
-    age: 45,
-    gender: 'male',
-    contact: '+1-555-0101',
-    arrivalTime: '2024-11-12 08:30 AM',
-    arrivalMode: 'ambulance',
-    triageLevel: 2,
-    chiefComplaint: 'Chest pain, shortness of breath',
-    vitals: {
-      bp: '160/95',
-      pulse: 110,
-      temp: 98.6,
-      spo2: 92,
-      resp: 22
-    },
-    currentStatus: 'in-treatment',
-    assignedDoctor: 'Dr. Sarah Mitchell',
-    assignedNurse: 'Nurse Emily',
-    bedNumber: 'ER-BED-03',
-    investigations: ['ECG', 'Troponin', 'CBC'],
-    medications: ['Aspirin', 'Nitroglycerin'],
-    totalCharges: 15000,
-    waitTime: 12
-  },
-  {
-    id: 'ER002',
-    erNumber: 'ER-2024-002',
-    name: 'Maria Garcia',
-    age: 32,
-    gender: 'female',
-    contact: '+1-555-0102',
-    arrivalTime: '2024-11-12 09:15 AM',
-    arrivalMode: 'walk-in',
-    triageLevel: 4,
-    chiefComplaint: 'Minor laceration on hand',
-    vitals: {
-      bp: '120/80',
-      pulse: 78,
-      temp: 98.4,
-      spo2: 98,
-      resp: 16
-    },
-    currentStatus: 'awaiting-disposition',
-    assignedDoctor: 'Dr. James Wilson',
-    bedNumber: 'ER-BED-08',
-    investigations: ['X-Ray Hand'],
-    medications: ['Tetanus', 'Antibiotics'],
-    totalCharges: 3500,
-    waitTime: 45,
-    disposition: 'discharge',
-    dispositionDetails: 'Wound sutured, follow-up in 7 days'
-  },
-  {
-    id: 'ER003',
-    erNumber: 'ER-2024-003',
-    uhid: 'UHID-456789',
-    name: 'Robert Chen',
-    age: 68,
-    gender: 'male',
-    contact: '+1-555-0103',
-    arrivalTime: '2024-11-12 07:45 AM',
-    arrivalMode: 'ambulance',
-    triageLevel: 1,
-    chiefComplaint: 'Stroke symptoms - Left sided weakness',
-    vitals: {
-      bp: '180/110',
-      pulse: 95,
-      temp: 98.2,
-      spo2: 94,
-      resp: 20
-    },
-    currentStatus: 'completed',
-    assignedDoctor: 'Dr. Michael Brown',
-    bedNumber: 'ER-RESUS-01',
-    investigations: ['CT Brain', 'CBC', 'PT/INR'],
-    medications: ['tPA', 'Antiplatelets'],
-    totalCharges: 45000,
-    waitTime: 5,
-    disposition: 'admit-ward',
-    dispositionDetails: 'Admitted to Neurology ICU',
-    dispositionTime: '2024-11-12 10:30 AM'
-  },
-  {
-    id: 'ER004',
-    erNumber: 'ER-2024-004',
-    name: 'Lisa Thompson',
-    age: 28,
-    gender: 'female',
-    contact: '+1-555-0104',
-    arrivalTime: '2024-11-12 09:45 AM',
-    arrivalMode: 'walk-in',
-    triageLevel: 3,
-    chiefComplaint: 'Severe abdominal pain',
-    vitals: {
-      bp: '125/82',
-      pulse: 88,
-      temp: 99.2,
-      spo2: 97,
-      resp: 18
-    },
-    currentStatus: 'in-treatment',
-    assignedDoctor: 'Dr. Emily Davis',
-    bedNumber: 'ER-BED-05',
-    investigations: ['Ultrasound Abdomen', 'CBC', 'Urine Analysis'],
-    medications: ['Pain relief', 'Anti-spasmodic'],
-    totalCharges: 8500,
-    waitTime: 30
-  },
-  {
-    id: 'ER005',
-    erNumber: 'ER-2024-005',
-    name: 'David Martinez',
-    age: 55,
-    gender: 'male',
-    contact: '+1-555-0105',
-    arrivalTime: '2024-11-12 10:20 AM',
-    arrivalMode: 'referred',
-    triageLevel: 2,
-    chiefComplaint: 'Road traffic accident - Multiple injuries',
-    vitals: {
-      bp: '100/65',
-      pulse: 115,
-      temp: 98.0,
-      spo2: 93,
-      resp: 24
-    },
-    currentStatus: 'triaged',
-    bedNumber: 'ER-TRAUMA-02',
-    totalCharges: 0,
-    waitTime: 8
-  }
-];
-
+// Using EmergencyVisit from api.ts instead of local interface
 const COLORS = ['#EF4444', '#F97316', '#EAB308', '#10B981', '#3B82F6'];
 
 // ============= MAIN COMPONENT =============
 
 export function EmergencyManagement() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [patients] = useState<EmergencyPatient[]>(mockEmergencyPatients);
+  const [registrationTab, setRegistrationTab] = useState('patient');
+  const [patients, setPatients] = useState<EmergencyVisit[]>([]);
+  const [stats, setStats] = useState<EmergencyStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<EmergencyPatient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<EmergencyVisit | null>(null);
   const [isDispositionOpen, setIsDispositionOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  // Patient search for registration
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
+  const [selectedPatientForRegistration, setSelectedPatientForRegistration] = useState<Patient | null>(null);
+  const [searchingPatients, setSearchingPatients] = useState(false);
+  
+  // Doctors and nurses for assignment
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [beds, setBeds] = useState<Array<{bed_number: string}>>([]);
+  
+  // Registration form state
+  const [registrationForm, setRegistrationForm] = useState({
+    patient_id: '',
+    arrival_mode: 'walk-in' as 'walk-in' | 'ambulance' | 'police' | 'referred',
+    triage_level: 3 as 1 | 2 | 3 | 4 | 5,
+    chief_complaint: '',
+    vitals: {
+      bp: '',
+      pulse: '',
+      temp: '',
+      spo2: '',
+      resp: ''
+    },
+    assigned_doctor_id: '',
+    assigned_nurse_id: '',
+    bed_number: '',
+    investigations: [] as string[],
+    medications: [] as string[]
+  });
+  
+  // Disposition form state
+  const [dispositionForm, setDispositionForm] = useState({
+    disposition: '' as '' | 'discharge' | 'admit-ward' | 'admit-private' | 'transfer' | 'absconded' | 'death',
+    disposition_details: '',
+    follow_up_required: false,
+    follow_up_date: '',
+    medications_prescribed: ''
+  });
+  
+  const [submitting, setSubmitting] = useState(false);
+  
+  // New patient registration form (in tab)
+  const [newPatientForm, setNewPatientForm] = useState({
+    name: '',
+    phone: '',
+    age: '',
+    gender: 'Male' as 'Male' | 'Female' | 'Other',
+    email: '',
+    address: ''
+  });
+  const [creatingPatient, setCreatingPatient] = useState(false);
 
-  // Statistics
-  const stats = {
-    total: patients.length,
-    registered: patients.filter(p => p.currentStatus === 'registered').length,
-    triaged: patients.filter(p => p.currentStatus === 'triaged').length,
-    inTreatment: patients.filter(p => p.currentStatus === 'in-treatment').length,
-    awaitingDisposition: patients.filter(p => p.currentStatus === 'awaiting-disposition').length,
-    completed: patients.filter(p => p.currentStatus === 'completed').length,
+  // Load data on mount and when filters change
+  useEffect(() => {
+    loadData();
+    loadDoctors();
+    loadBeds();
+  }, [filterStatus]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const filters: any = {};
+      if (filterStatus !== 'all') {
+        filters.status = filterStatus;
+      }
+      const visits = await api.getEmergencyVisits(filters);
+      setPatients(visits);
+      
+      const statsData = await api.getEmergencyStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error loading emergency data:', error);
+      toast.error('Failed to load emergency data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDoctors = async () => {
+    try {
+      const doctorsData = await api.getDoctors();
+      setDoctors(doctorsData);
+    } catch (error) {
+      console.error('Error loading doctors:', error);
+    }
+  };
+
+  const loadBeds = async () => {
+    try {
+      const bedsData = await api.getEmergencyBeds();
+      setBeds(bedsData.map(b => ({ bed_number: b.bed_number })));
+    } catch (error) {
+      console.error('Error loading beds:', error);
+    }
+  };
+
+  const searchPatients = async (query: string) => {
+    if (!query || query.length < 2) {
+      setPatientSearchResults([]);
+      return;
+    }
     
-    discharged: patients.filter(p => p.disposition === 'discharge').length,
-    admittedWard: patients.filter(p => p.disposition === 'admit-ward').length,
-    admittedPrivate: patients.filter(p => p.disposition === 'admit-private').length,
-    transferred: patients.filter(p => p.disposition === 'transfer').length,
-    
-    avgWaitTime: Math.round(patients.reduce((sum, p) => sum + p.waitTime, 0) / patients.length)
+    try {
+      setSearchingPatients(true);
+      const results = await api.getPatients({ search: query });
+      setPatientSearchResults(results);
+    } catch (error) {
+      console.error('Error searching patients:', error);
+      toast.error('Failed to search patients');
+    } finally {
+      setSearchingPatients(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (patientSearchQuery) {
+        searchPatients(patientSearchQuery);
+      } else {
+        setPatientSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [patientSearchQuery]);
+
+  // Statistics - use API stats or calculate from patients
+  const calculatedStats = stats ? {
+    total: stats.total || 0,
+    registered: stats.registered || 0,
+    triaged: stats.triaged || 0,
+    in_treatment: stats['in-treatment'] || stats.in_treatment || 0,
+    awaiting_disposition: stats['awaiting-disposition'] || stats.awaiting_disposition || 0,
+    completed: stats.completed || 0,
+    discharged: stats.discharged || 0,
+    admitted_ward: stats['admit-ward'] || stats.admitted_ward || 0,
+    admitted_private: stats['admit-private'] || stats.admitted_private || 0,
+    transferred: stats.transfer || stats.transferred || 0,
+    avg_wait_time: stats.avg_wait_time || 0,
+    triage_distribution: stats.triage_distribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+  } : {
+    total: patients.length || 0,
+    registered: patients.filter(p => p.currentStatus === 'registered').length || 0,
+    triaged: patients.filter(p => p.currentStatus === 'triaged').length || 0,
+    in_treatment: patients.filter(p => p.currentStatus === 'in-treatment').length || 0,
+    awaiting_disposition: patients.filter(p => p.currentStatus === 'awaiting-disposition').length || 0,
+    completed: patients.filter(p => p.currentStatus === 'completed').length || 0,
+    discharged: patients.filter(p => p.disposition === 'discharge').length || 0,
+    admitted_ward: patients.filter(p => p.disposition === 'admit-ward').length || 0,
+    admitted_private: patients.filter(p => p.disposition === 'admit-private').length || 0,
+    transferred: patients.filter(p => p.disposition === 'transfer').length || 0,
+    avg_wait_time: patients.length > 0 ? Math.round(patients.reduce((sum, p) => sum + (p.waitTime || 0), 0) / patients.length) : 0,
+    triage_distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
   };
 
   const getTriageColor = (level: number) => {
@@ -352,18 +310,184 @@ export function EmergencyManagement() {
   };
 
   const filteredPatients = patients.filter(patient => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = !searchQuery || 
+      patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       patient.erNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      patient.chiefComplaint.toLowerCase().includes(searchQuery.toLowerCase());
+      (patient.chiefComplaint && patient.chiefComplaint.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesFilter = filterStatus === 'all' || patient.currentStatus === filterStatus;
     
     return matchesSearch && matchesFilter;
   });
 
+  const handleRegisterPatient = async () => {
+    console.log('handleRegisterPatient called', { selectedPatientForRegistration, registrationForm });
+    
+    if (!selectedPatientForRegistration) {
+      toast.error('Please select a patient');
+      return;
+    }
+
+    if (!registrationForm.chief_complaint || !registrationForm.triage_level) {
+      toast.error('Please fill in all required fields (Triage Level and Chief Complaint)');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const visitData: CreateEmergencyVisitData = {
+        patient_id: selectedPatientForRegistration.id,
+        arrival_mode: registrationForm.arrival_mode,
+        triage_level: registrationForm.triage_level,
+        chief_complaint: registrationForm.chief_complaint,
+        vitals_bp: registrationForm.vitals.bp || undefined,
+        vitals_pulse: registrationForm.vitals.pulse ? parseInt(registrationForm.vitals.pulse) : undefined,
+        vitals_temp: registrationForm.vitals.temp ? parseFloat(registrationForm.vitals.temp) : undefined,
+        vitals_spo2: registrationForm.vitals.spo2 ? parseInt(registrationForm.vitals.spo2) : undefined,
+        vitals_resp: registrationForm.vitals.resp ? parseInt(registrationForm.vitals.resp) : undefined,
+        assigned_doctor_id: registrationForm.assigned_doctor_id ? parseInt(registrationForm.assigned_doctor_id) : undefined,
+        bed_number: registrationForm.bed_number || undefined,
+        investigations: registrationForm.investigations.length > 0 ? registrationForm.investigations : undefined,
+        medications: registrationForm.medications.length > 0 ? registrationForm.medications : undefined
+      };
+
+      console.log('Creating emergency visit with data:', visitData);
+      await api.createEmergencyVisit(visitData);
+      console.log('Emergency visit created successfully');
+      toast.success('Emergency visit registered successfully');
+      resetRegistrationForm();
+      setActiveTab('active');
+      loadData();
+    } catch (error: any) {
+      console.error('Error registering patient:', error);
+      toast.error(error.message || 'Failed to register emergency visit');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetRegistrationForm = () => {
+    setSelectedPatientForRegistration(null);
+    setPatientSearchQuery('');
+    setRegistrationTab('patient');
+    setRegistrationForm({
+      patient_id: '',
+      arrival_mode: 'walk-in',
+      triage_level: 3,
+      chief_complaint: '',
+      vitals: { bp: '', pulse: '', temp: '', spo2: '', resp: '' },
+      assigned_doctor_id: '',
+      assigned_nurse_id: '',
+      bed_number: '',
+      investigations: [],
+      medications: []
+    });
+  };
+
+  const handleDisposition = async () => {
+    if (!selectedPatient || !dispositionForm.disposition) {
+      toast.error('Please select a disposition type');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await api.updateEmergencyDisposition(selectedPatient.id.toString(), {
+        disposition: dispositionForm.disposition,
+        disposition_details: dispositionForm.disposition_details,
+        follow_up_required: dispositionForm.follow_up_required,
+        follow_up_date: dispositionForm.follow_up_date || undefined,
+        medications_prescribed: dispositionForm.medications_prescribed
+      });
+      toast.success('Disposition saved successfully');
+      setIsDispositionOpen(false);
+      setSelectedPatient(null);
+      setDispositionForm({
+        disposition: '',
+        disposition_details: '',
+        follow_up_required: false,
+        follow_up_date: '',
+        medications_prescribed: ''
+      });
+      loadData();
+    } catch (error: any) {
+      console.error('Error updating disposition:', error);
+      toast.error(error.message || 'Failed to update disposition');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateNewPatient = async () => {
+    console.log('handleCreateNewPatient called', newPatientForm);
+    
+    if (!newPatientForm.name || !newPatientForm.phone || !newPatientForm.age) {
+      toast.error('Please fill in all required fields (Name, Phone, Age)');
+      return;
+    }
+
+    const ageNum = parseInt(newPatientForm.age);
+    if (isNaN(ageNum) || ageNum < 0 || ageNum > 150) {
+      toast.error('Please enter a valid age (0-150)');
+      return;
+    }
+
+    try {
+      setCreatingPatient(true);
+      const patientData: CreatePatientData = {
+        name: newPatientForm.name.trim(),
+        phone: newPatientForm.phone.trim(),
+        age: ageNum,
+        gender: newPatientForm.gender,
+        email: newPatientForm.email?.trim() || undefined,
+        address: newPatientForm.address?.trim() || undefined
+      };
+
+      console.log('Creating patient with data:', patientData);
+      const newPatient = await api.createPatient(patientData);
+      console.log('Patient created successfully:', newPatient);
+      
+      toast.success('Patient registered successfully');
+      
+      // Automatically select the new patient for emergency registration
+      setSelectedPatientForRegistration(newPatient);
+      
+      // Switch to patient selection tab to show the selected patient
+      setRegistrationTab('patient');
+      
+      // Reset form but keep it in the tab for reference
+      setNewPatientForm({
+        name: '',
+        phone: '',
+        age: '',
+        gender: 'Male',
+        email: '',
+        address: ''
+      });
+    } catch (error: any) {
+      console.error('Error creating patient:', error);
+      toast.error(error.message || 'Failed to register patient');
+    } finally {
+      setCreatingPatient(false);
+    }
+  };
+
   // ============= RENDER OVERVIEW =============
   
-  const renderOverview = () => (
+  const renderOverview = () => {
+    // Ensure calculatedStats is always defined
+    if (!calculatedStats) {
+      return (
+        <div className="flex items-center justify-center p-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading statistics...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
     <div className="space-y-6">
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -371,9 +495,9 @@ export function EmergencyManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Ambulance className="w-8 h-8 text-red-600" />
-              <Badge className="bg-red-100 text-red-800">{stats.total}</Badge>
+              <Badge className="bg-red-100 text-red-800">{calculatedStats?.total || 0}</Badge>
             </div>
-            <p className="text-2xl font-bold text-red-900">{stats.total}</p>
+            <p className="text-2xl font-bold text-red-900">{calculatedStats?.total || 0}</p>
             <p className="text-xs text-gray-600">Total ER Patients</p>
           </CardContent>
         </Card>
@@ -382,9 +506,9 @@ export function EmergencyManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Activity className="w-8 h-8 text-yellow-600" />
-              <Badge className="bg-yellow-100 text-yellow-800">{stats.inTreatment}</Badge>
+              <Badge className="bg-yellow-100 text-yellow-800">{calculatedStats?.in_treatment || 0}</Badge>
             </div>
-            <p className="text-2xl font-bold text-yellow-900">{stats.inTreatment}</p>
+            <p className="text-2xl font-bold text-yellow-900">{calculatedStats?.in_treatment || 0}</p>
             <p className="text-xs text-gray-600">In Treatment</p>
           </CardContent>
         </Card>
@@ -395,7 +519,7 @@ export function EmergencyManagement() {
               <Clock className="w-8 h-8 text-orange-600" />
               <TrendingUp className="w-5 h-5 text-orange-600" />
             </div>
-            <p className="text-2xl font-bold text-orange-900">{stats.awaitingDisposition}</p>
+            <p className="text-2xl font-bold text-orange-900">{calculatedStats?.awaiting_disposition || 0}</p>
             <p className="text-xs text-gray-600">Awaiting Disposition</p>
           </CardContent>
         </Card>
@@ -404,9 +528,9 @@ export function EmergencyManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Timer className="w-8 h-8 text-green-600" />
-              <Badge className="bg-green-100 text-green-800">{stats.avgWaitTime}m</Badge>
+              <Badge className="bg-green-100 text-green-800">{calculatedStats?.avg_wait_time || 0}m</Badge>
             </div>
-            <p className="text-2xl font-bold text-green-900">{stats.avgWaitTime} min</p>
+            <p className="text-2xl font-bold text-green-900">{calculatedStats?.avg_wait_time || 0} min</p>
             <p className="text-xs text-gray-600">Avg Wait Time</p>
           </CardContent>
         </Card>
@@ -424,11 +548,11 @@ export function EmergencyManagement() {
           <CardContent>
             <div className="space-y-3">
               {[
-                { label: 'Registered', count: stats.registered, color: 'bg-blue-500', icon: UserPlus },
-                { label: 'Triaged', count: stats.triaged, color: 'bg-purple-500', icon: ClipboardList },
-                { label: 'In Treatment', count: stats.inTreatment, color: 'bg-yellow-500', icon: Stethoscope },
-                { label: 'Awaiting Disposition', count: stats.awaitingDisposition, color: 'bg-orange-500', icon: AlertCircle },
-                { label: 'Completed', count: stats.completed, color: 'bg-green-500', icon: CheckCircle }
+                { label: 'Registered', count: calculatedStats?.registered || 0, color: 'bg-blue-500', icon: UserPlus },
+                { label: 'Triaged', count: calculatedStats?.triaged || 0, color: 'bg-purple-500', icon: ClipboardList },
+                { label: 'In Treatment', count: calculatedStats?.in_treatment || 0, color: 'bg-yellow-500', icon: Stethoscope },
+                { label: 'Awaiting Disposition', count: calculatedStats?.awaiting_disposition || 0, color: 'bg-orange-500', icon: AlertCircle },
+                { label: 'Completed', count: calculatedStats?.completed || 0, color: 'bg-green-500', icon: CheckCircle }
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -454,10 +578,10 @@ export function EmergencyManagement() {
           <CardContent>
             <div className="space-y-3">
               {[
-                { label: 'Discharged Home', count: stats.discharged, color: 'bg-green-500', icon: Home },
-                { label: 'Admitted to Ward', count: stats.admittedWard, color: 'bg-blue-500', icon: Bed },
-                { label: 'Admitted to Private Room', count: stats.admittedPrivate, color: 'bg-purple-500', icon: Building2 },
-                { label: 'Transferred/Referred', count: stats.transferred, color: 'bg-orange-500', icon: Send }
+                { label: 'Discharged Home', count: calculatedStats?.discharged || 0, color: 'bg-green-500', icon: Home },
+                { label: 'Admitted to Ward', count: calculatedStats?.admitted_ward || 0, color: 'bg-blue-500', icon: Bed },
+                { label: 'Admitted to Private Room', count: calculatedStats?.admitted_private || 0, color: 'bg-purple-500', icon: Building2 },
+                { label: 'Transferred/Referred', count: calculatedStats?.transferred || 0, color: 'bg-orange-500', icon: Send }
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -486,8 +610,8 @@ export function EmergencyManagement() {
         <CardContent>
           <div className="grid grid-cols-5 gap-4">
             {[1, 2, 3, 4, 5].map((level) => {
-              const count = patients.filter(p => p.triageLevel === level).length;
-              const percentage = patients.length > 0 ? (count / patients.length * 100).toFixed(0) : 0;
+              const count = calculatedStats?.triage_distribution?.[level] || 0;
+              const percentage = (calculatedStats?.total || 0) > 0 ? (count / (calculatedStats?.total || 1) * 100).toFixed(0) : 0;
               
               return (
                 <div key={level} className={`p-4 rounded-lg border-2 ${getTriageColor(level)}`}>
@@ -503,7 +627,8 @@ export function EmergencyManagement() {
         </CardContent>
       </Card>
     </div>
-  );
+    );
+  };
 
   // ============= RENDER ACTIVE PATIENTS =============
   
@@ -702,47 +827,94 @@ export function EmergencyManagement() {
           <CardDescription>Complete patient registration and triage</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Tabs defaultValue="personal">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="personal">Personal Info</TabsTrigger>
+          <Tabs value={registrationTab} onValueChange={setRegistrationTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="patient">Patient Selection</TabsTrigger>
               <TabsTrigger value="triage">Triage</TabsTrigger>
               <TabsTrigger value="clinical">Clinical Info</TabsTrigger>
+              <TabsTrigger value="new-patient">New Patient</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="personal" className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>ER Number</Label>
-                  <Input value="ER-2024-006" disabled className="bg-gray-50" />
-                </div>
-                <div className="col-span-2">
-                  <Label>Patient Name *</Label>
-                  <Input placeholder="Enter full name" />
-                </div>
+            <TabsContent value="patient" className="space-y-4">
+              <div className="space-y-4">
                 <div>
-                  <Label>Age *</Label>
-                  <Input type="number" placeholder="Age" />
+                  <Label>Search Existing Patient *</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      placeholder="Search by name, phone, or patient ID..."
+                      className="pl-10"
+                      value={patientSearchQuery}
+                      onChange={(e) => setPatientSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  
+                  {/* Search Results */}
+                  {patientSearchQuery && patientSearchResults.length > 0 && !selectedPatientForRegistration && (
+                    <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                      {patientSearchResults.map((patient) => (
+                        <button
+                          key={patient.id}
+                          onClick={() => {
+                            setSelectedPatientForRegistration(patient);
+                            setPatientSearchQuery('');
+                            setPatientSearchResults([]);
+                          }}
+                          className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b last:border-0 flex items-center gap-3"
+                        >
+                          <User className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <div className="font-medium">{patient.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {patient.patient_id} • {patient.age}Y • {patient.gender} • {patient.phone}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Selected Patient */}
+                  {selectedPatientForRegistration && (
+                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <User className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <div className="font-medium">{selectedPatientForRegistration.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {selectedPatientForRegistration.patient_id} • {selectedPatientForRegistration.age}Y • {selectedPatientForRegistration.gender}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPatientForRegistration(null);
+                          setPatientSearchQuery('');
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {!selectedPatientForRegistration && patientSearchQuery && patientSearchResults.length === 0 && !searchingPatients && (
+                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Patient not found. Switch to "New Patient" tab to register a new patient.</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <Label>Gender *</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Contact Number *</Label>
-                  <Input type="tel" placeholder="+1-555-0000" />
-                </div>
+                
                 <div>
                   <Label>Arrival Mode *</Label>
-                  <Select>
+                  <Select
+                    value={registrationForm.arrival_mode}
+                    onValueChange={(value: any) => setRegistrationForm({ ...registrationForm, arrival_mode: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select mode" />
                     </SelectTrigger>
@@ -754,10 +926,156 @@ export function EmergencyManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2">
-                  <Label>Existing UHID (if registered patient)</Label>
-                  <Input placeholder="UHID-XXXXXX" />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="new-patient" className="space-y-4">
+              <div className="space-y-4">
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Register a new patient for emergency visit. After creating the patient, they will be automatically selected.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="new-patient-name">Name *</Label>
+                    <Input
+                      id="new-patient-name"
+                      value={newPatientForm.name}
+                      onChange={(e) => setNewPatientForm({ ...newPatientForm, name: e.target.value })}
+                      placeholder="Full name"
+                      disabled={creatingPatient}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="new-patient-phone">Phone *</Label>
+                    <Input
+                      id="new-patient-phone"
+                      value={newPatientForm.phone}
+                      onChange={(e) => setNewPatientForm({ ...newPatientForm, phone: e.target.value })}
+                      placeholder="Phone number"
+                      disabled={creatingPatient}
+                      required
+                    />
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="new-patient-age">Age *</Label>
+                    <Input
+                      id="new-patient-age"
+                      type="number"
+                      min="0"
+                      max="150"
+                      value={newPatientForm.age}
+                      onChange={(e) => setNewPatientForm({ ...newPatientForm, age: e.target.value })}
+                      placeholder="Age in years"
+                      disabled={creatingPatient}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="new-patient-gender">Gender *</Label>
+                    <Select
+                      value={newPatientForm.gender}
+                      onValueChange={(value: 'Male' | 'Female' | 'Other') =>
+                        setNewPatientForm({ ...newPatientForm, gender: value })
+                      }
+                      disabled={creatingPatient}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="new-patient-email">Email (Optional)</Label>
+                  <Input
+                    id="new-patient-email"
+                    type="email"
+                    value={newPatientForm.email}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
+                    placeholder="email@example.com"
+                    disabled={creatingPatient}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="new-patient-address">Address (Optional)</Label>
+                  <Input
+                    id="new-patient-address"
+                    value={newPatientForm.address}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
+                    placeholder="Street address"
+                    disabled={creatingPatient}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setNewPatientForm({
+                        name: '',
+                        phone: '',
+                        age: '',
+                        gender: 'Male',
+                        email: '',
+                        address: ''
+                      });
+                    }}
+                    disabled={creatingPatient}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleCreateNewPatient}
+                    disabled={creatingPatient}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {creatingPatient ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Create Patient & Continue
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {selectedPatientForRegistration && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-800">
+                      <CheckCircle className="w-5 h-5" />
+                      <div>
+                        <div className="font-medium">Patient Created Successfully!</div>
+                        <div className="text-sm">
+                          {selectedPatientForRegistration.name} ({selectedPatientForRegistration.patient_id}) is now selected.
+                          Continue to Triage tab to complete registration.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -765,7 +1083,10 @@ export function EmergencyManagement() {
               <div className="space-y-4">
                 <div>
                   <Label>Triage Level (ESI) *</Label>
-                  <Select>
+                  <Select
+                    value={registrationForm.triage_level.toString()}
+                    onValueChange={(value) => setRegistrationForm({ ...registrationForm, triage_level: parseInt(value) as 1 | 2 | 3 | 4 | 5 })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select triage level" />
                     </SelectTrigger>
@@ -784,6 +1105,8 @@ export function EmergencyManagement() {
                   <Textarea 
                     placeholder="Describe the main complaint..."
                     rows={3}
+                    value={registrationForm.chief_complaint}
+                    onChange={(e) => setRegistrationForm({ ...registrationForm, chief_complaint: e.target.value })}
                   />
                 </div>
 
@@ -797,23 +1120,63 @@ export function EmergencyManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Blood Pressure (mmHg)</Label>
-                    <Input placeholder="120/80" />
+                    <Input 
+                      placeholder="120/80" 
+                      value={registrationForm.vitals.bp}
+                      onChange={(e) => setRegistrationForm({ 
+                        ...registrationForm, 
+                        vitals: { ...registrationForm.vitals, bp: e.target.value } 
+                      })}
+                    />
                   </div>
                   <div>
                     <Label>Pulse Rate (bpm)</Label>
-                    <Input type="number" placeholder="72" />
+                    <Input 
+                      type="number" 
+                      placeholder="72"
+                      value={registrationForm.vitals.pulse}
+                      onChange={(e) => setRegistrationForm({ 
+                        ...registrationForm, 
+                        vitals: { ...registrationForm.vitals, pulse: e.target.value } 
+                      })}
+                    />
                   </div>
                   <div>
                     <Label>Temperature (°F)</Label>
-                    <Input type="number" step="0.1" placeholder="98.6" />
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      placeholder="98.6"
+                      value={registrationForm.vitals.temp}
+                      onChange={(e) => setRegistrationForm({ 
+                        ...registrationForm, 
+                        vitals: { ...registrationForm.vitals, temp: e.target.value } 
+                      })}
+                    />
                   </div>
                   <div>
                     <Label>SpO2 (%)</Label>
-                    <Input type="number" placeholder="98" />
+                    <Input 
+                      type="number" 
+                      placeholder="98"
+                      value={registrationForm.vitals.spo2}
+                      onChange={(e) => setRegistrationForm({ 
+                        ...registrationForm, 
+                        vitals: { ...registrationForm.vitals, spo2: e.target.value } 
+                      })}
+                    />
                   </div>
                   <div>
                     <Label>Respiratory Rate</Label>
-                    <Input type="number" placeholder="16" />
+                    <Input 
+                      type="number" 
+                      placeholder="16"
+                      value={registrationForm.vitals.resp}
+                      onChange={(e) => setRegistrationForm({ 
+                        ...registrationForm, 
+                        vitals: { ...registrationForm.vitals, resp: e.target.value } 
+                      })}
+                    />
                   </div>
                 </div>
               </div>
@@ -823,66 +1186,70 @@ export function EmergencyManagement() {
               <div className="space-y-4">
                 <div>
                   <Label>Assign Doctor</Label>
-                  <Select>
+                  <Select
+                    value={registrationForm.assigned_doctor_id}
+                    onValueChange={(value) => setRegistrationForm({ ...registrationForm, assigned_doctor_id: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select doctor" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="dr1">Dr. Sarah Mitchell - Cardiology</SelectItem>
-                      <SelectItem value="dr2">Dr. James Wilson - Emergency</SelectItem>
-                      <SelectItem value="dr3">Dr. Emily Davis - General Medicine</SelectItem>
-                      <SelectItem value="dr4">Dr. Michael Brown - Neurology</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Assign Nurse</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select nurse" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="n1">Nurse Emily</SelectItem>
-                      <SelectItem value="n2">Nurse John</SelectItem>
-                      <SelectItem value="n3">Nurse Sarah</SelectItem>
+                      {doctors.map((doctor) => (
+                        <SelectItem key={doctor.id} value={doctor.id.toString()}>
+                          {doctor.name} - {doctor.specialty}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
                   <Label>Bed Assignment</Label>
-                  <Select>
+                  <Select
+                    value={registrationForm.bed_number}
+                    onValueChange={(value) => setRegistrationForm({ ...registrationForm, bed_number: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select bed" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="er1">ER-BED-01</SelectItem>
-                      <SelectItem value="er2">ER-BED-02</SelectItem>
-                      <SelectItem value="er3">ER-BED-03</SelectItem>
-                      <SelectItem value="resus">ER-RESUS-01 (Resuscitation)</SelectItem>
-                      <SelectItem value="trauma">ER-TRAUMA-01 (Trauma Bay)</SelectItem>
+                      {beds.map((bed) => (
+                        <SelectItem key={bed.bed_number} value={bed.bed_number}>
+                          {bed.bed_number}
+                        </SelectItem>
+                      ))}
+                      {beds.length === 0 && (
+                        <SelectItem value="" disabled>No beds available</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div>
-                  <Label>Initial Notes</Label>
-                  <Textarea 
-                    placeholder="Additional clinical notes, allergies, current medications..."
-                    rows={4}
-                  />
                 </div>
               </div>
             </TabsContent>
           </Tabs>
 
           <div className="flex gap-3 pt-6 border-t">
-            <Button className="flex-1 bg-blue-600 hover:bg-blue-700">
+            <Button 
+              type="button"
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              onClick={(e) => {
+                e.preventDefault();
+                console.log('Register Patient button clicked');
+                handleRegisterPatient();
+              }}
+              disabled={submitting}
+            >
               <Save className="w-4 h-4 mr-2" />
-              Register Patient
+              {submitting ? 'Registering...' : 'Register Patient'}
             </Button>
-            <Button variant="outline">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                resetRegistrationForm();
+                setActiveTab('overview');
+              }}
+              disabled={submitting}
+            >
               <X className="w-4 h-4 mr-2" />
               Cancel
             </Button>
@@ -918,7 +1285,13 @@ export function EmergencyManagement() {
           <div className="space-y-4">
             <Label>Disposition Type *</Label>
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={() => setDispositionForm({ ...dispositionForm, disposition: 'discharge' })}
+                className={`p-4 border-2 rounded-lg hover:bg-green-50 cursor-pointer transition-colors text-left ${
+                  dispositionForm.disposition === 'discharge' ? 'border-green-500 bg-green-50' : 'border-green-200'
+                }`}
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
                     <Home className="w-5 h-5 text-white" />
@@ -926,9 +1299,15 @@ export function EmergencyManagement() {
                   <h4 className="font-semibold">Discharge Home</h4>
                 </div>
                 <p className="text-xs text-gray-600">Patient is stable and can go home</p>
-              </div>
+              </button>
 
-              <div className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={() => setDispositionForm({ ...dispositionForm, disposition: 'admit-ward' })}
+                className={`p-4 border-2 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors text-left ${
+                  dispositionForm.disposition === 'admit-ward' ? 'border-blue-500 bg-blue-50' : 'border-blue-200'
+                }`}
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
                     <Bed className="w-5 h-5 text-white" />
@@ -936,9 +1315,15 @@ export function EmergencyManagement() {
                   <h4 className="font-semibold">Admit to Ward</h4>
                 </div>
                 <p className="text-xs text-gray-600">Requires further in-patient care</p>
-              </div>
+              </button>
 
-              <div className="p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={() => setDispositionForm({ ...dispositionForm, disposition: 'admit-private' })}
+                className={`p-4 border-2 rounded-lg hover:bg-purple-50 cursor-pointer transition-colors text-left ${
+                  dispositionForm.disposition === 'admit-private' ? 'border-purple-500 bg-purple-50' : 'border-purple-200'
+                }`}
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
                     <Building2 className="w-5 h-5 text-white" />
@@ -946,9 +1331,15 @@ export function EmergencyManagement() {
                   <h4 className="font-semibold">Admit to Private Room</h4>
                 </div>
                 <p className="text-xs text-gray-600">Private room admission</p>
-              </div>
+              </button>
 
-              <div className="p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={() => setDispositionForm({ ...dispositionForm, disposition: 'transfer' })}
+                className={`p-4 border-2 rounded-lg hover:bg-orange-50 cursor-pointer transition-colors text-left ${
+                  dispositionForm.disposition === 'transfer' ? 'border-orange-500 bg-orange-50' : 'border-orange-200'
+                }`}
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center">
                     <Send className="w-5 h-5 text-white" />
@@ -956,7 +1347,7 @@ export function EmergencyManagement() {
                   <h4 className="font-semibold">Transfer/Refer</h4>
                 </div>
                 <p className="text-xs text-gray-600">Transfer to another facility</p>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -966,13 +1357,18 @@ export function EmergencyManagement() {
               <Textarea 
                 placeholder="Discharge instructions, admission reason, transfer details, etc..."
                 rows={3}
+                value={dispositionForm.disposition_details}
+                onChange={(e) => setDispositionForm({ ...dispositionForm, disposition_details: e.target.value })}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Follow-up Required</Label>
-                <Select>
+                <Select
+                  value={dispositionForm.follow_up_required ? 'yes' : 'no'}
+                  onValueChange={(value) => setDispositionForm({ ...dispositionForm, follow_up_required: value === 'yes' })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select option" />
                   </SelectTrigger>
@@ -984,7 +1380,12 @@ export function EmergencyManagement() {
               </div>
               <div>
                 <Label>Follow-up Date</Label>
-                <Input type="date" />
+                <Input 
+                  type="date" 
+                  value={dispositionForm.follow_up_date}
+                  onChange={(e) => setDispositionForm({ ...dispositionForm, follow_up_date: e.target.value })}
+                  disabled={!dispositionForm.follow_up_required}
+                />
               </div>
             </div>
 
@@ -993,6 +1394,8 @@ export function EmergencyManagement() {
               <Textarea 
                 placeholder="List medications and dosages..."
                 rows={2}
+                value={dispositionForm.medications_prescribed}
+                onChange={(e) => setDispositionForm({ ...dispositionForm, medications_prescribed: e.target.value })}
               />
             </div>
           </div>
@@ -1000,17 +1403,26 @@ export function EmergencyManagement() {
           <div className="flex gap-3 pt-4 border-t">
             <Button 
               className="flex-1 bg-green-600 hover:bg-green-700"
-              onClick={() => {
-                toast.success('Disposition saved successfully!');
-                setIsDispositionOpen(false);
-              }}
+              onClick={handleDisposition}
+              disabled={submitting}
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Confirm Disposition
+              {submitting ? 'Saving...' : 'Confirm Disposition'}
             </Button>
             <Button 
               variant="outline"
-              onClick={() => setIsDispositionOpen(false)}
+              onClick={() => {
+                setIsDispositionOpen(false);
+                setSelectedPatient(null);
+                setDispositionForm({
+                  disposition: '',
+                  disposition_details: '',
+                  follow_up_required: false,
+                  follow_up_date: '',
+                  medications_prescribed: ''
+                });
+              }}
+              disabled={submitting}
             >
               Cancel
             </Button>
@@ -1067,6 +1479,7 @@ export function EmergencyManagement() {
 
       {/* Disposition Dialog */}
       <DispositionDialog />
+
     </div>
   );
 }
