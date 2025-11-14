@@ -470,7 +470,7 @@ export function AdvancedPOS() {
                   Shortcuts
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-sm">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Keyboard className="w-5 h-5" />
@@ -686,7 +686,7 @@ export function AdvancedPOS() {
                       Change
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-md">
                     <DialogHeader>
                       <DialogTitle>Customer Information</DialogTitle>
                       <DialogDescription>Add or select customer details</DialogDescription>
@@ -909,7 +909,7 @@ export function AdvancedPOS() {
                   Pay PKR {total.toFixed(2)}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl">Process Payment</DialogTitle>
                   <DialogDescription>Complete the transaction</DialogDescription>
@@ -1084,7 +1084,7 @@ export function AdvancedPOS() {
 
       {/* Held Bills Dialog */}
       <Dialog open={isHeldBillsOpen} onOpenChange={setIsHeldBillsOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Layers className="w-6 h-6 text-blue-600" />

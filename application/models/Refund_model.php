@@ -35,7 +35,7 @@ class Refund_model extends CI_Model {
     }
 
     /**
-     * Get all refunds
+     * Get all refunds with items
      */
     public function get_all($filters = array()) {
         $this->db->select('r.*, s.invoice_number, s.customer_name, u.name as processed_by_name');
@@ -66,7 +66,20 @@ class Refund_model extends CI_Model {
         }
         
         $query = $this->db->get();
-        return $query->result_array();
+        $refunds = $query->result_array();
+        
+        // Load items for each refund
+        foreach ($refunds as &$refund) {
+            $this->db->select('ri.*, si.medicine_name, si.batch_number, m.name as current_medicine_name');
+            $this->db->from('refund_items ri');
+            $this->db->join('sale_items si', 'ri.sale_item_id = si.id', 'left');
+            $this->db->join('medicines m', 'ri.medicine_id = m.id', 'left');
+            $this->db->where('ri.refund_id', $refund['id']);
+            $items_query = $this->db->get();
+            $refund['items'] = $items_query->result_array();
+        }
+        
+        return $refunds;
     }
 
     /**
@@ -109,11 +122,12 @@ class Refund_model extends CI_Model {
             return array('success' => false, 'message' => 'Sale not found');
         }
         
-        // Check if sale is already fully refunded
+        // Check if sale is already fully refunded (excluding cancelled/voided)
         $this->db->select_sum('total_amount');
         $this->db->from('refunds');
         $this->db->where('sale_id', $data['sale_id']);
-        $this->db->where('status', 'Completed');
+        $this->db->where('status !=', 'Cancelled');
+        $this->db->where('status !=', 'Voided');
         $existing_refunds = $this->db->get()->row()->total_amount ?? 0;
         
         if ($existing_refunds >= $sale['total_amount']) {
@@ -144,19 +158,46 @@ class Refund_model extends CI_Model {
             $data['refund_date'] = date('Y-m-d H:i:s');
         }
         
+        // Remove items from data before inserting into refunds table (items go to refund_items)
+        $items = $data['items'] ?? array();
+        unset($data['items']);
+        
         // Insert refund
         if ($this->db->insert('refunds', $data)) {
             $refund_id = $this->db->insert_id();
             
             // Process items and return stock if applicable
-            if (!empty($data['items']) && is_array($data['items'])) {
-                foreach ($data['items'] as $item) {
+            if (!empty($items) && is_array($items)) {
+                foreach ($items as $item) {
                     // Get original sale item
                     $this->db->where('id', $item['sale_item_id']);
                     $sale_item = $this->db->get('sale_items')->row_array();
                     
                     if (!$sale_item) {
                         continue;
+                    }
+                    
+                    // Check how much of this item has already been returned
+                    // Count all refunds except cancelled/voided ones
+                    $this->db->select_sum('quantity');
+                    $this->db->from('refund_items');
+                    $this->db->where('sale_item_id', $item['sale_item_id']);
+                    $this->db->join('refunds', 'refund_items.refund_id = refunds.id');
+                    $this->db->where('refunds.status !=', 'Cancelled');
+                    $this->db->where('refunds.status !=', 'Voided');
+                    $already_returned = $this->db->get()->row()->quantity ?? 0;
+                    
+                    // Calculate remaining quantity that can be returned
+                    $original_quantity = $sale_item['quantity'];
+                    $remaining_quantity = $original_quantity - $already_returned;
+                    
+                    // Validate that we're not returning more than available
+                    if ($item['quantity'] > $remaining_quantity) {
+                        $this->db->trans_rollback();
+                        return array(
+                            'success' => false, 
+                            'message' => "Cannot return {$item['quantity']} units. Only {$remaining_quantity} units remaining for this item."
+                        );
                     }
                     
                     // Insert refund item

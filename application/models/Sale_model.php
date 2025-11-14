@@ -8,6 +8,7 @@ class Sale_model extends CI_Model {
         $this->load->database();
         $this->load->model('Medicine_stock_model');
         $this->load->model('Stock_movement_model');
+        $this->load->model('Sale_payment_model');
     }
 
     /**
@@ -77,6 +78,10 @@ class Sale_model extends CI_Model {
             $this->db->where('DATE(s.sale_date) <=', $filters['end_date']);
         }
         
+        if (!empty($filters['shift_id'])) {
+            $this->db->where('s.shift_id', $filters['shift_id']);
+        }
+        
         $this->db->order_by('s.sale_date', 'DESC');
         $this->db->order_by('s.id', 'DESC');
         
@@ -92,7 +97,8 @@ class Sale_model extends CI_Model {
      * Get sale by ID with items
      */
     public function get_by_id($id) {
-        $this->db->select('s.id, s.invoice_number, s.customer_id, s.patient_id, s.prescription_id, s.customer_name, s.customer_phone, s.customer_email, s.customer_address, s.sale_date, s.subtotal, s.discount_amount, s.discount_percentage, s.tax_rate, s.tax_amount, s.total_amount, s.payment_method, s.amount_received, s.change_amount, s.status, s.notes, s.cashier_id, pc.*, p.name as patient_name, p.patient_id as patient_code, u.name as cashier_name');
+        // Select sale ID last to ensure it's not overwritten by joined table columns
+        $this->db->select('s.invoice_number, s.customer_id, s.patient_id, s.prescription_id, s.customer_name, s.customer_phone, s.customer_email, s.customer_address, s.sale_date, s.subtotal, s.discount_amount, s.discount_percentage, s.tax_rate, s.tax_amount, s.total_amount, s.payment_method, s.amount_received, s.change_amount, s.status, s.notes, s.cashier_id, pc.name as customer_name_display, pc.phone as customer_phone_display, pc.email as customer_email_display, pc.address as customer_address_display, p.name as patient_name, p.patient_id as patient_code, u.name as cashier_name, s.id');
         $this->db->from('sales s');
         $this->db->join('pharmacy_customers pc', 's.customer_id = pc.id', 'left');
         $this->db->join('patients p', 's.patient_id = p.id', 'left');
@@ -110,24 +116,41 @@ class Sale_model extends CI_Model {
             $this->db->where('si.sale_id', $id);
             $items_query = $this->db->get();
             $sale['items'] = $items_query->result_array();
+            
+            // Get split payments if any
+            $sale['payments'] = $this->Sale_payment_model->get_by_sale($id);
         }
         
         return $sale;
     }
 
     /**
-     * Get sale by invoice number
+     * Get sale by invoice number (exact match)
      */
     public function get_by_invoice_number($invoice_number) {
         $this->db->where('invoice_number', $invoice_number);
         $query = $this->db->get('sales');
         $sale = $query->row_array();
         
-        if ($sale) {
+        if ($sale && isset($sale['id'])) {
             return $this->get_by_id($sale['id']);
         }
         
         return null;
+    }
+
+    /**
+     * Search sales by partial invoice number
+     */
+    public function search_by_invoice_number($partial_invoice, $limit = 10) {
+        $this->db->select('s.id, s.invoice_number, s.sale_date, s.customer_name, s.total_amount, s.status');
+        $this->db->from('sales s');
+        $this->db->like('s.invoice_number', $partial_invoice);
+        $this->db->order_by('s.sale_date', 'DESC');
+        $this->db->order_by('s.id', 'DESC');
+        $this->db->limit($limit);
+        $query = $this->db->get();
+        return $query->result_array();
     }
 
     /**
@@ -164,7 +187,7 @@ class Sale_model extends CI_Model {
             $data['tax_amount'] = ($taxable_amount * $tax_rate) / 100;
             $data['total_amount'] = $taxable_amount + $data['tax_amount'];
             
-            // Calculate change for cash payments
+            // Calculate change for cash payments (only if single payment method)
             if ($data['payment_method'] === 'Cash' && !empty($data['amount_received'])) {
                 $data['change_amount'] = max(0, $data['amount_received'] - $data['total_amount']);
             }
@@ -175,6 +198,10 @@ class Sale_model extends CI_Model {
             $data['sale_date'] = date('Y-m-d H:i:s');
         }
         
+        // Handle split payments
+        $payments = $data['payments'] ?? null;
+        unset($data['payments']);
+        
         // Remove items from data before inserting (items are stored in sale_items table)
         $items = $data['items'] ?? null;
         unset($data['items']);
@@ -182,6 +209,35 @@ class Sale_model extends CI_Model {
         // Insert sale
         if ($this->db->insert('sales', $data)) {
             $sale_id = $this->db->insert_id();
+            
+            // Process split payments if provided
+            if (!empty($payments) && is_array($payments)) {
+                $payment_records = array();
+                foreach ($payments as $payment) {
+                    $payment_records[] = array(
+                        'sale_id' => $sale_id,
+                        'payment_method' => $payment['payment_method'],
+                        'amount' => $payment['amount'],
+                        'reference_number' => $payment['reference_number'] ?? null,
+                        'notes' => $payment['notes'] ?? null
+                    );
+                }
+                $this->Sale_payment_model->create_multiple($payment_records);
+                
+                // Calculate total received and change for split payments
+                $total_received = array_sum(array_column($payments, 'amount'));
+                if ($total_received > $data['total_amount']) {
+                    $data['change_amount'] = $total_received - $data['total_amount'];
+                }
+                $data['amount_received'] = $total_received;
+                
+                // Update sale with calculated amounts
+                $this->db->where('id', $sale_id);
+                $this->db->update('sales', array(
+                    'amount_received' => $data['amount_received'],
+                    'change_amount' => $data['change_amount'] ?? 0.00
+                ));
+            }
             
             // Process items, deduct stock, and record movements
             if (!empty($items) && is_array($items)) {

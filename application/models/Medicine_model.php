@@ -80,7 +80,22 @@ class Medicine_model extends CI_Model {
             $data['medicine_code'] = $this->generate_medicine_code();
         }
         
-        if ($this->db->insert('medicines', $data)) {
+        // Filter out fields that don't exist in the database
+        $allowed_fields = array(
+            'medicine_code', 'name', 'generic_name', 'manufacturer', 'category', 
+            'unit', 'strength', 'description', 'status', 'barcode', 
+            'requires_prescription', 'therapeutic_class', 'indication', 
+            'drap_number', 'min_stock', 'max_stock'
+        );
+        
+        $filtered_data = array();
+        foreach ($allowed_fields as $field) {
+            if (isset($data[$field])) {
+                $filtered_data[$field] = $data[$field];
+            }
+        }
+        
+        if ($this->db->insert('medicines', $filtered_data)) {
             return $this->db->insert_id();
         }
         return false;
@@ -90,8 +105,23 @@ class Medicine_model extends CI_Model {
      * Update medicine
      */
     public function update($id, $data) {
+        // Filter out fields that don't exist in the database
+        $allowed_fields = array(
+            'medicine_code', 'name', 'generic_name', 'manufacturer', 'category', 
+            'unit', 'strength', 'description', 'status', 'barcode', 
+            'requires_prescription', 'therapeutic_class', 'indication', 
+            'drap_number', 'min_stock', 'max_stock'
+        );
+        
+        $filtered_data = array();
+        foreach ($allowed_fields as $field) {
+            if (isset($data[$field])) {
+                $filtered_data[$field] = $data[$field];
+            }
+        }
+        
         $this->db->where('id', $id);
-        return $this->db->update('medicines', $data);
+        return $this->db->update('medicines', $filtered_data);
     }
 
     /**

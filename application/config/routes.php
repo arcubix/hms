@@ -122,10 +122,12 @@ $route['api/pharmacy/purchase-orders/(:num)/receive'] = 'purchase_orders/receive
 
 // Sales
 $route['api/pharmacy/sales'] = 'pharmacy_sales/index';
-$route['api/pharmacy/sales/(:num)'] = 'pharmacy_sales/id/$1';
-$route['api/pharmacy/sales/(:num)/invoice'] = 'pharmacy_sales/invoice/$1';
+$route['api/pharmacy/sales/voided'] = 'pharmacy_sales/voided';
 $route['api/pharmacy/sales/summary'] = 'pharmacy_sales/summary';
 $route['api/pharmacy/sales/top-selling'] = 'pharmacy_sales/top_selling';
+$route['api/pharmacy/sales/(:num)/invoice'] = 'pharmacy_sales/invoice/$1';
+$route['api/pharmacy/sales/(:num)/void'] = 'pharmacy_sales/void/$1';
+$route['api/pharmacy/sales/(:any)'] = 'pharmacy_sales/get/$1';
 
 // Refunds
 $route['api/pharmacy/refunds'] = 'refunds/index';
@@ -158,3 +160,23 @@ $route['api/pharmacy/stock-movements/medicine/(:num)'] = 'stock_movements/medici
 $route['api/pharmacy/barcodes'] = 'barcodes/index';
 $route['api/pharmacy/barcodes/(:num)'] = 'barcodes/id/$1';
 $route['api/pharmacy/barcodes/generate'] = 'barcodes/generate';
+
+// Cash Drawers
+$route['api/pharmacy/cash-drawers'] = 'cash_drawers/index';
+$route['api/pharmacy/cash-drawers/(:num)'] = 'cash_drawers/get/$1';
+$route['api/pharmacy/cash-drawers/(:num)/close'] = 'cash_drawers/close/$1';
+$route['api/pharmacy/cash-drawers/(:num)/drop'] = 'cash_drawers/drop/$1';
+$route['api/pharmacy/cash-drawers/open'] = 'cash_drawers/open_drawer';
+
+// Shifts
+$route['api/pharmacy/shifts'] = 'shifts/index';
+$route['api/pharmacy/shifts/current'] = 'shifts/current';
+$route['api/pharmacy/shifts/(:num)/close'] = 'shifts/close/$1';
+$route['api/pharmacy/shifts/(:num)'] = 'shifts/get/$1';
+
+// Price Overrides
+$route['api/pharmacy/price-overrides'] = 'price_overrides/index';
+$route['api/pharmacy/price-overrides/(:num)'] = 'price_overrides/get/$1';
+$route['api/pharmacy/price-overrides/(:num)/approve'] = 'price_overrides/approve/$1';
+$route['api/pharmacy/price-overrides/(:num)/reject'] = 'price_overrides/reject/$1';
+$route['api/pharmacy/price-overrides/pending'] = 'price_overrides/pending';

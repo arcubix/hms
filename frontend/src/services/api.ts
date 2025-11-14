@@ -466,6 +466,50 @@ class ApiService {
     return data.data;
   }
 
+  async createMedicine(medicineData: {
+    name: string;
+    generic_name?: string;
+    category?: string;
+    strength?: string;
+    unit?: string;
+    min_stock?: number;
+    max_stock?: number;
+    requires_prescription?: number;
+    status?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: Medicine;
+      message: string;
+    }>('/api/medicines', {
+      method: 'POST',
+      body: JSON.stringify(medicineData),
+    });
+    return data.data;
+  }
+
+  async updateMedicine(id: string, medicineData: Partial<{
+    name: string;
+    generic_name?: string;
+    category?: string;
+    strength?: string;
+    unit?: string;
+    min_stock?: number;
+    max_stock?: number;
+    requires_prescription?: number;
+    status?: string;
+  }>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Medicine;
+      message: string;
+    }>(`/api/medicines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(medicineData),
+    });
+    return data.data;
+  }
+
   // Lab test endpoints
   async getLabTests(filters?: {
     search?: string;
@@ -1118,6 +1162,7 @@ class ApiService {
     search?: string;
     start_date?: string;
     end_date?: string;
+    shift_id?: number;
     limit?: number;
     offset?: number;
   }) {
@@ -1129,6 +1174,7 @@ class ApiService {
     if (filters?.search) params.append('search', filters.search);
     if (filters?.start_date) params.append('start_date', filters.start_date);
     if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.shift_id) params.append('shift_id', filters.shift_id.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.offset) params.append('offset', filters.offset.toString());
     
@@ -1143,10 +1189,12 @@ class ApiService {
   }
 
   async getSale(id: number | string) {
+    // URL encode the ID in case it's an invoice number with special characters
+    const encodedId = encodeURIComponent(String(id));
     const data = await this.request<{
       success: boolean;
-      data: Sale;
-    }>(`/api/pharmacy/sales/${id}`);
+      data: Sale | Sale[]; // Can return single sale or array of matching sales
+    }>(`/api/pharmacy/sales/${encodedId}`);
     return data.data;
   }
 
@@ -1195,6 +1243,236 @@ class ApiService {
       success: boolean;
       data: TopSellingMedicine[];
     }>(`/api/pharmacy/sales/top-selling?${params.toString()}`);
+    return data.data || [];
+  }
+
+  async voidSale(saleId: number, voidData: { void_reason: string; void_type?: string; restore_stock?: boolean; notes?: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/sales/${saleId}/void`, {
+      method: 'POST',
+      body: JSON.stringify(voidData),
+    });
+    return data.data;
+  }
+
+  async getVoidedSales(filters?: { start_date?: string; end_date?: string; voided_by?: number; limit?: number; offset?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.voided_by) params.append('voided_by', filters.voided_by.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/sales/voided?${queryString}` : '/api/pharmacy/sales/voided';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  // Cash Drawer methods
+  async getCashDrawers(filters?: { status?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/cash-drawers?${queryString}` : '/api/pharmacy/cash-drawers';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getCashDrawer(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/pharmacy/cash-drawers/${id}`);
+    return data.data;
+  }
+
+  async openCashDrawer(drawerData: { drawer_number: string; location?: string; opening_balance?: number }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/cash-drawers', {
+      method: 'POST',
+      body: JSON.stringify(drawerData),
+    });
+    return data.data;
+  }
+
+  async closeCashDrawer(drawerId: number, closeData: { actual_cash: number; notes?: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/cash-drawers/${drawerId}/close`, {
+      method: 'POST',
+      body: JSON.stringify(closeData),
+    });
+    return data.data;
+  }
+
+  async getOpenCashDrawer(drawerNumber?: string) {
+    const params = new URLSearchParams();
+    if (drawerNumber) params.append('drawer_number', drawerNumber);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/cash-drawers/open?${queryString}` : '/api/pharmacy/cash-drawers/open';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(endpoint);
+    return data.data;
+  }
+
+  async recordCashDrop(drawerId: number, dropData: { drop_type: 'Drop' | 'Pickup'; amount: number; reason?: string; notes?: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/cash-drawers/${drawerId}/drop`, {
+      method: 'POST',
+      body: JSON.stringify(dropData),
+    });
+    return data.data;
+  }
+
+  // Shift methods
+  async getShifts(filters?: { cashier_id?: number; drawer_id?: number; status?: string; start_date?: string; end_date?: string; limit?: number; offset?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.cashier_id) params.append('cashier_id', filters.cashier_id.toString());
+    if (filters?.drawer_id) params.append('drawer_id', filters.drawer_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/shifts?${queryString}` : '/api/pharmacy/shifts';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getShift(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/pharmacy/shifts/${id}`);
+    return data.data;
+  }
+
+  async openShift(shiftData: { drawer_id?: number; opening_cash?: number }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/shifts', {
+      method: 'POST',
+      body: JSON.stringify(shiftData),
+    });
+    return data.data;
+  }
+
+  async closeShift(shiftId: number, closeData: { actual_cash?: number; handover_notes?: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/shifts/${shiftId}/close`, {
+      method: 'POST',
+      body: JSON.stringify(closeData),
+    });
+    return data.data;
+  }
+
+  async getCurrentShift(drawerId?: number) {
+    const params = new URLSearchParams();
+    if (drawerId) params.append('drawer_id', drawerId.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/shifts/current?${queryString}` : '/api/pharmacy/shifts/current';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(endpoint);
+    return data.data;
+  }
+
+  // Price Override methods
+  async getPriceOverrides(filters?: { status?: string; sale_id?: number; limit?: number; offset?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.sale_id) params.append('sale_id', filters.sale_id.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/price-overrides?${queryString}` : '/api/pharmacy/price-overrides';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async createPriceOverride(overrideData: { medicine_id: number; original_price: number; override_price: number; override_reason: string; sale_id?: number; sale_item_id?: number; notes?: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/price-overrides', {
+      method: 'POST',
+      body: JSON.stringify(overrideData),
+    });
+    return data.data;
+  }
+
+  async approvePriceOverride(overrideId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/price-overrides/${overrideId}/approve`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async rejectPriceOverride(overrideId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/price-overrides/${overrideId}/reject`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async getPendingPriceOverrides() {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>('/api/pharmacy/price-overrides/pending');
     return data.data || [];
   }
 
@@ -2285,7 +2563,10 @@ export interface Sale {
   payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
   amount_received?: number;
   change_amount: number;
-  status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded';
+  status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded' | 'Voided';
+  payments?: SalePayment[];
+  shift_id?: number;
+  drawer_id?: number;
   cashier_id?: number;
   cashier_name?: string;
   notes?: string;
@@ -2309,6 +2590,16 @@ export interface SaleItem {
   subtotal: number;
 }
 
+export interface SalePayment {
+  id: number;
+  sale_id: number;
+  payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
+  amount: number;
+  reference_number?: string;
+  notes?: string;
+  created_at: string;
+}
+
 export interface CreateSaleData {
   customer_id?: number;
   patient_id?: number;
@@ -2329,6 +2620,14 @@ export interface CreateSaleData {
   tax_rate?: number;
   payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
   amount_received?: number;
+  payments?: Array<{
+    payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet';
+    amount: number;
+    reference_number?: string;
+    notes?: string;
+  }>;
+  shift_id?: number;
+  drawer_id?: number;
   notes?: string;
 }
 

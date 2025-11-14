@@ -87,21 +87,58 @@ class Refunds extends Api {
                 return;
             }
             
-            // Validate refund amounts don't exceed sale amounts
+            // Validate refund items and check quantities
             $total_refund = 0;
             foreach ($data['items'] as $item) {
                 if (empty($item['sale_item_id']) || empty($item['quantity']) || empty($item['subtotal'])) {
                     $this->error('Each refund item must have sale_item_id, quantity, and subtotal', 400);
                     return;
                 }
+                
+                // Get original sale item to check quantities
+                $this->load->database();
+                $this->db->select('si.*, m.name as medicine_name');
+                $this->db->from('sale_items si');
+                $this->db->join('medicines m', 'si.medicine_id = m.id', 'left');
+                $this->db->where('si.id', $item['sale_item_id']);
+                $this->db->where('si.sale_id', $data['sale_id']); // Ensure it belongs to this sale
+                $sale_item = $this->db->get()->row_array();
+                
+                if (!$sale_item) {
+                    $this->error('Sale item not found', 400);
+                    return;
+                }
+                
+                // Check how much of this item has already been returned
+                // Count all refunds except cancelled/voided ones
+                $this->db->select_sum('refund_items.quantity');
+                $this->db->from('refund_items');
+                $this->db->join('refunds', 'refund_items.refund_id = refunds.id');
+                $this->db->where('refund_items.sale_item_id', $item['sale_item_id']);
+                $this->db->where('refunds.status !=', 'Cancelled');
+                $this->db->where('refunds.status !=', 'Voided');
+                $already_returned = $this->db->get()->row()->quantity ?? 0;
+                
+                // Calculate remaining quantity
+                $original_quantity = $sale_item['quantity'];
+                $remaining_quantity = $original_quantity - $already_returned;
+                
+                // Validate quantity
+                if ($item['quantity'] > $remaining_quantity) {
+                    $medicine_name = $sale_item['medicine_name'] ?? 'item';
+                    $this->error("Cannot return {$item['quantity']} units of {$medicine_name}. Only {$remaining_quantity} units remaining.", 400);
+                    return;
+                }
+                
                 $total_refund += $item['subtotal'];
             }
             
-            // Check existing refunds
+            // Check existing refunds total amount (excluding cancelled/voided)
             $this->db->select_sum('total_amount');
             $this->db->from('refunds');
             $this->db->where('sale_id', $data['sale_id']);
-            $this->db->where('status', 'Completed');
+            $this->db->where('status !=', 'Cancelled');
+            $this->db->where('status !=', 'Voided');
             $existing_refunds = $this->db->get()->row()->total_amount ?? 0;
             
             if (($existing_refunds + $total_refund) > $sale['total_amount']) {

@@ -50,6 +50,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
   const [selectedStock, setSelectedStock] = useState<PharmacyStock | null>(null);
   const [expiringStock, setExpiringStock] = useState<PharmacyStock[]>([]);
   const [lowStockAlerts, setLowStockAlerts] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -66,11 +67,25 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
   });
 
   useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
+
+  useEffect(() => {
     loadStock();
     loadMedicines();
     loadExpiringStock();
     loadLowStockAlerts();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'expiring') {
+      loadExpiringStock();
+    } else if (activeTab === 'low-stock') {
+      loadLowStockAlerts();
+    } else {
+      loadStock();
+    }
+  }, [activeTab]);
 
   const loadStock = async () => {
     try {
@@ -246,7 +261,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
         </div>
       </div>
 
-      <Tabs defaultValue={defaultTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="all">All Stock</TabsTrigger>
           <TabsTrigger value="expiring">Expiring Soon</TabsTrigger>
@@ -335,8 +350,8 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                             </div>
                           </TableCell>
                           <TableCell>{item.quantity}</TableCell>
-                          <TableCell>Rs. {item.cost_price.toFixed(2)}</TableCell>
-                          <TableCell>Rs. {item.selling_price.toFixed(2)}</TableCell>
+                          <TableCell>Rs. {parseFloat(item.cost_price?.toString() || '0').toFixed(2)}</TableCell>
+                          <TableCell>Rs. {parseFloat(item.selling_price?.toString() || '0').toFixed(2)}</TableCell>
                           <TableCell>{item.location || '-'}</TableCell>
                           <TableCell>
                             <Badge variant={item.status === 'Active' ? 'default' : 'secondary'}>
@@ -394,22 +409,39 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expiringStock.map((item) => {
-                    const days = getDaysUntilExpiry(item.expiry_date);
-                    return (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.medicine_name}</TableCell>
-                        <TableCell>{item.batch_number}</TableCell>
-                        <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Badge variant={days <= 7 ? 'destructive' : days <= 30 ? 'default' : 'secondary'}>
-                            {days} days
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span className="text-sm text-gray-500">Loading...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : expiringStock.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        No expiring stock found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    expiringStock.map((item) => {
+                      const days = getDaysUntilExpiry(item.expiry_date);
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.medicine_name}</TableCell>
+                          <TableCell>{item.batch_number}</TableCell>
+                          <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Badge variant={days <= 7 ? 'destructive' : days <= 30 ? 'default' : 'secondary'}>
+                              {days} days
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -433,24 +465,41 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lowStockAlerts.map((alert) => (
-                    <TableRow key={alert.medicine_id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{alert.name}</div>
-                          {alert.generic_name && (
-                            <div className="text-sm text-gray-500">{alert.generic_name}</div>
-                          )}
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span className="text-sm text-gray-500">Loading...</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="destructive">{alert.available_stock}</Badge>
-                      </TableCell>
-                      <TableCell>{alert.minimum_stock}</TableCell>
-                      <TableCell>{alert.reorder_quantity}</TableCell>
-                      <TableCell>{alert.preferred_supplier_name || '-'}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : lowStockAlerts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        No low stock alerts found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    lowStockAlerts.map((alert) => (
+                      <TableRow key={alert.medicine_id || alert.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{alert.name || alert.medicine_name}</div>
+                            {(alert.generic_name || alert.medicine_generic_name) && (
+                              <div className="text-sm text-gray-500">{alert.generic_name || alert.medicine_generic_name}</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="destructive">{alert.available_stock || alert.current_stock || 0}</Badge>
+                        </TableCell>
+                        <TableCell>{alert.minimum_stock || alert.min_stock || 0}</TableCell>
+                        <TableCell>{alert.reorder_quantity || (alert.minimum_stock || alert.min_stock || 0) * 2}</TableCell>
+                        <TableCell>{alert.preferred_supplier_name || alert.supplier_name || '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

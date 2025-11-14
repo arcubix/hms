@@ -34,6 +34,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -74,7 +75,14 @@ import {
   Info,
   Layers,
   Play,
-  RefreshCw
+  RefreshCw,
+  Ban,
+  Search as SearchIcon,
+  Calendar,
+  Edit,
+  Shield,
+  AlertTriangle,
+  Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, MedicineWithStock, CreateSaleData, Patient } from '../../services/api';
@@ -152,6 +160,69 @@ export function AdvancedPOS() {
   const [lastSaleId, setLastSaleId] = useState<number | null>(null);
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState<string | null>(null);
   const [reservedStock, setReservedStock] = useState<Map<number, number>>(new Map()); // medicine_id -> reserved quantity
+  
+  // Split Payment State
+  const [useSplitPayment, setUseSplitPayment] = useState(false);
+  const [splitPayments, setSplitPayments] = useState<Array<{payment_method: 'Cash' | 'Card' | 'Insurance' | 'Credit' | 'Wallet'; amount: number; reference_number?: string}>>([]);
+  
+  // Void Transaction State
+  const [isVoidDialogOpen, setIsVoidDialogOpen] = useState(false);
+  const [voidSaleId, setVoidSaleId] = useState<number | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidType, setVoidType] = useState<'Error' | 'Customer Request' | 'System Error' | 'Fraud' | 'Other'>('Other');
+  
+  // Transaction Lookup State
+  const [isLookupMode, setIsLookupMode] = useState(false);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
+  const [lookedUpSale, setLookedUpSale] = useState<any>(null);
+  const [isLookupDialogOpen, setIsLookupDialogOpen] = useState(false);
+  const [lookupInvoiceNumber, setLookupInvoiceNumber] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  
+  // Return/Refund State
+  const [isReturnMode, setIsReturnMode] = useState(false);
+  const [returnSale, setReturnSale] = useState<any>(null);
+  const [selectedReturnItems, setSelectedReturnItems] = useState<Set<number>>(new Set());
+  const [returnReason, setReturnReason] = useState('');
+  const [returnToStock, setReturnToStock] = useState(true);
+  const [processingReturn, setProcessingReturn] = useState(false);
+  
+  // Shift State
+  const [currentShift, setCurrentShift] = useState<any>(null);
+  const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false);
+  const [shiftOpeningCash, setShiftOpeningCash] = useState('');
+  const [isShiftClosingSummaryOpen, setIsShiftClosingSummaryOpen] = useState(false);
+  const [shiftClosingSummary, setShiftClosingSummary] = useState<any>(null);
+  const [isCloseShiftDialogOpen, setIsCloseShiftDialogOpen] = useState(false);
+  const [actualCashInput, setActualCashInput] = useState('');
+  const [shiftCashSales, setShiftCashSales] = useState<number>(0);
+  const [loadingShiftSales, setLoadingShiftSales] = useState(false);
+  
+  // Price Override State
+  const [isPriceOverrideDialogOpen, setIsPriceOverrideDialogOpen] = useState(false);
+  const [overrideItem, setOverrideItem] = useState<CartItem | null>(null);
+  const [overridePrice, setOverridePrice] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+
+  // Load current shift on mount
+  useEffect(() => {
+    const loadCurrentShift = async () => {
+      try {
+        // Try to get current shift
+        const shift = await api.getCurrentShift();
+        if (shift) {
+          setCurrentShift(shift);
+        }
+      } catch (error) {
+        // No open shift - that's okay
+        console.log('No open shift');
+      }
+    };
+    
+    loadCurrentShift();
+  }, []);
 
   // Load all medicines on mount
   useEffect(() => {
@@ -928,6 +999,22 @@ export function AdvancedPOS() {
       return;
     }
 
+    // Check if shift is open
+    if (!currentShift) {
+      toast.error('Please open a shift first before processing transactions');
+      setIsShiftDialogOpen(true);
+      return;
+    }
+
+    // Check if shift is for current date
+    const shiftDate = new Date(currentShift.start_time).toDateString();
+    const today = new Date().toDateString();
+    if (shiftDate !== today) {
+      toast.error('Current shift is not for today. Please open a new shift.');
+      setIsShiftDialogOpen(true);
+      return;
+    }
+
     // Check for prescription medicines
     const requiresPrescription = cart.some(item => item.medicine.requiresPrescription);
     if (requiresPrescription && !prescriptionNumber) {
@@ -935,9 +1022,18 @@ export function AdvancedPOS() {
       return;
     }
 
-    if (paymentMethod === 'cash' && parseFloat(receivedAmount || '0') < total) {
-      toast.error('Insufficient amount received');
-      return;
+    // Validate split payments if using split payment
+    if (useSplitPayment) {
+      const totalSplit = splitPayments.reduce((sum, p) => sum + p.amount, 0);
+      if (totalSplit < total) {
+        toast.error('Split payment total is less than sale total');
+        return;
+      }
+    } else {
+      if (paymentMethod === 'cash' && parseFloat(receivedAmount || '0') < total) {
+        toast.error('Insufficient amount received');
+        return;
+      }
     }
 
     try {
@@ -961,7 +1057,9 @@ export function AdvancedPOS() {
         discount_percentage: globalDiscount,
         tax_rate: 14,
         payment_method: paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'Insurance',
-        amount_received: paymentMethod === 'cash' ? parseFloat(receivedAmount || '0') : undefined,
+        amount_received: paymentMethod === 'cash' && !useSplitPayment ? parseFloat(receivedAmount || '0') : undefined,
+        payments: useSplitPayment ? splitPayments : undefined,
+        shift_id: currentShift?.id,
         notes: prescriptionNumber ? `Prescription: ${prescriptionNumber}` : undefined
       };
 
@@ -1039,6 +1137,8 @@ export function AdvancedPOS() {
         setReceivedAmount('');
         setPrescriptionNumber('');
         setIsPaymentDialogOpen(false);
+        setUseSplitPayment(false);
+        setSplitPayments([]);
       }, 2000);
     } catch (error: any) {
       toast.error(error.message || 'Failed to process payment');
@@ -1052,6 +1152,400 @@ export function AdvancedPOS() {
     const current = parseFloat(receivedAmount || '0');
     setReceivedAmount((current + amount).toString());
   };
+
+  // Lookup mode functions
+  const handleLookupClick = async () => {
+    setIsLookupMode(true);
+    await loadInvoices();
+  };
+
+  const loadInvoices = async () => {
+    try {
+      setInvoicesLoading(true);
+      const filters: any = {
+        limit: 100, // Load recent 100 invoices
+        status: 'Completed'
+      };
+      if (invoiceSearchTerm) {
+        filters.search = invoiceSearchTerm;
+      }
+      const data = await api.getSales(filters);
+      setInvoices(data || []);
+    } catch (error: any) {
+      console.error('Failed to load invoices:', error);
+      toast.error('Failed to load invoices');
+      setInvoices([]);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  };
+
+  const handleGoToSales = () => {
+    setIsLookupMode(false);
+    setInvoiceSearchTerm('');
+    setInvoices([]);
+  };
+
+  const handleViewInvoice = async (invoice: any) => {
+    try {
+      const sale = await api.getSale(invoice.id);
+      setLookedUpSale(sale);
+      setIsLookupDialogOpen(true);
+    } catch (error: any) {
+      toast.error('Failed to load invoice details');
+    }
+  };
+
+  const handleReturnInvoice = async (sale: any) => {
+    try {
+      // Load full sale details - use id if available, otherwise use invoice_number
+      const saleId = sale.id || sale.invoice_number;
+      if (!saleId) {
+        toast.error('Invalid sale data - missing ID or invoice number');
+        return;
+      }
+      
+      const fullSale = await api.getSale(saleId);
+      if (!fullSale) {
+        toast.error('Failed to load sale details');
+        return;
+      }
+      
+      // Ensure the sale has an ID - if not, try to extract it from the response
+      if (!fullSale.id) {
+        // Try to get ID from the original sale object or use the saleId we passed
+        fullSale.id = sale.id || (typeof saleId === 'number' ? saleId : null);
+        if (!fullSale.id) {
+          toast.error('Sale ID not found in response');
+          console.error('Sale object:', fullSale);
+          return;
+        }
+      }
+      
+      console.log('Return sale loaded:', { id: fullSale.id, invoice_number: fullSale.invoice_number });
+      setReturnSale(fullSale);
+      setIsReturnMode(true);
+      setIsLookupDialogOpen(false);
+      
+      // Load items into cart for return
+      if (fullSale.items && fullSale.items.length > 0) {
+        const returnCartItems: CartItem[] = fullSale.items.map((item: any) => {
+          // Find the medicine from our medicines list
+          const medicine = allMedicines.find(m => 
+            m.id === item.medicine_id || 
+            m.name === item.medicine_name
+          ) || {
+            id: item.medicine_id,
+            name: item.medicine_name,
+            genericName: item.generic_name || '',
+            strength: '',
+            form: '',
+            category: '',
+            price: parseFloat(item.unit_price || 0),
+            stock: 0,
+            available_stock: 0,
+            selling_price: parseFloat(item.unit_price || 0)
+          } as Medicine;
+
+          return {
+            medicine,
+            quantity: item.quantity,
+            discount: 0,
+            subtotal: parseFloat(item.subtotal || 0),
+            saleItemId: item.id // Store original sale item ID for refund
+          } as CartItem & { saleItemId?: number };
+        });
+        
+        setCart(returnCartItems);
+        // Select all items by default
+        setSelectedReturnItems(new Set(fullSale.items.map((item: any) => item.id)));
+        toast.success('Invoice items loaded for return');
+      }
+    } catch (error: any) {
+      toast.error('Failed to load invoice for return: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const handleProcessReturn = async () => {
+    if (!returnSale || selectedReturnItems.size === 0) {
+      toast.error('Please select items to return');
+      return;
+    }
+
+    if (!returnReason.trim()) {
+      toast.error('Please provide a return reason');
+      return;
+    }
+
+    try {
+      setProcessingReturn(true);
+      
+      // Get selected items from original sale items (not cart, to preserve original prices)
+      const returnItems = returnSale.items
+        .filter((saleItem: any) => selectedReturnItems.has(saleItem.id))
+        .map((saleItem: any) => ({
+          sale_item_id: saleItem.id,
+          medicine_id: typeof saleItem.medicine_id === 'string' ? parseInt(saleItem.medicine_id) : saleItem.medicine_id,
+          quantity: parseFloat(saleItem.quantity || 0),
+          unit_price: parseFloat(saleItem.unit_price || 0),
+          subtotal: parseFloat(saleItem.subtotal || 0),
+          return_to_stock: returnToStock ? 1 : 0
+        }));
+
+      if (returnItems.length === 0) {
+        toast.error('No items selected for return');
+        setProcessingReturn(false);
+        return;
+      }
+
+      // Ensure sale_id is a number
+      let saleId: number | null = null;
+      
+      if (returnSale.id) {
+        saleId = typeof returnSale.id === 'string' ? parseInt(returnSale.id) : returnSale.id;
+      }
+      
+      // If still no ID, log for debugging
+      if (!saleId || isNaN(saleId)) {
+        console.error('Return sale object:', returnSale);
+        console.error('Attempted sale ID:', saleId);
+        toast.error('Invalid sale ID. Please try again.');
+        setProcessingReturn(false);
+        return;
+      }
+
+      const refundData = {
+        sale_id: saleId,
+        refund_reason: returnReason,
+        payment_method: returnSale.payment_method === 'Cash' ? 'Cash' : 'Original',
+        items: returnItems,
+        notes: `Return processed for invoice ${returnSale.invoice_number}`
+      };
+
+      console.log('Creating refund with data:', refundData);
+      await api.createRefund(refundData);
+      toast.success('Return processed successfully');
+      
+      // Reset return state
+      setIsReturnMode(false);
+      setReturnSale(null);
+      setSelectedReturnItems(new Set());
+      setReturnReason('');
+      setReturnToStock(true);
+      setCart([]);
+      // Clear reservations if not in return mode
+      if (!isReturnMode) {
+        for (const [medId, quantity] of reservedStock.entries()) {
+          try {
+            await api.releaseStock(medId, quantity);
+          } catch (error: any) {
+            console.error(`Failed to release reservation for medicine ${medId}:`, error);
+          }
+        }
+        setReservedStock(new Map());
+      }
+      
+      // Reload invoices if in lookup mode
+      if (isLookupMode) {
+        await loadInvoices();
+      }
+    } catch (error: any) {
+      toast.error('Failed to process return: ' + (error.message || 'Unknown error'));
+    } finally {
+      setProcessingReturn(false);
+    }
+  };
+
+  const toggleReturnItem = (saleItemId: number) => {
+    const newSelected = new Set(selectedReturnItems);
+    if (newSelected.has(saleItemId)) {
+      newSelected.delete(saleItemId);
+    } else {
+      newSelected.add(saleItemId);
+    }
+    setSelectedReturnItems(newSelected);
+  };
+
+  // Lookup transaction (for dialog)
+  const handleLookupTransaction = async () => {
+    if (!lookupInvoiceNumber.trim()) {
+      toast.error('Please enter an invoice number');
+      return;
+    }
+
+    try {
+      setLookupLoading(true);
+      const sale = await api.getSale(lookupInvoiceNumber);
+      setLookedUpSale(sale);
+      toast.success('Sale found');
+    } catch (error: any) {
+      toast.error(error.message || 'Sale not found');
+      setLookedUpSale(null);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // Load invoices when search term changes in lookup mode
+  useEffect(() => {
+    if (isLookupMode) {
+      const debounceTimer = setTimeout(() => {
+        loadInvoices();
+      }, 300);
+      return () => clearTimeout(debounceTimer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceSearchTerm, isLookupMode]);
+
+  // Void transaction
+  const handleVoidTransaction = async () => {
+    if (!voidSaleId) {
+      toast.error('Sale ID required');
+      return;
+    }
+
+    if (!voidReason.trim()) {
+      toast.error('Void reason is required');
+      return;
+    }
+
+    try {
+      await api.voidSale(voidSaleId, {
+        void_reason: voidReason,
+        void_type: voidType,
+        restore_stock: true
+      });
+      toast.success('Sale voided successfully');
+      setIsVoidDialogOpen(false);
+      setVoidSaleId(null);
+      setVoidReason('');
+      setVoidType('Other');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to void sale');
+    }
+  };
+
+  // Open shift
+  const handleOpenShift = async () => {
+    if (!shiftOpeningCash) {
+      toast.error('Opening cash amount is required');
+      return;
+    }
+
+    try {
+      const shift = await api.openShift({
+        opening_cash: parseFloat(shiftOpeningCash || '0')
+      });
+      setCurrentShift(shift);
+      setShiftOpeningCash('');
+      toast.success('Shift opened successfully');
+      setIsShiftDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to open shift');
+    }
+  };
+
+  // Close shift - open dialog first
+  const handleCloseShiftClick = async () => {
+    if (!currentShift) return;
+    setActualCashInput('');
+    setLoadingShiftSales(true);
+    setIsCloseShiftDialogOpen(true);
+    
+    // Fetch cash sales for this shift
+    try {
+      const sales = await api.getSales({ 
+        shift_id: currentShift.id,
+        status: 'Completed'
+      });
+      
+      // Calculate cash sales - handle both single payment and split payments
+      const cashSales = sales.reduce((sum: number, sale: any) => {
+        let cashAmount = 0;
+        
+        // Check if sale has split payments
+        if (sale.payments && Array.isArray(sale.payments) && sale.payments.length > 0) {
+          // Sum cash payments from split payments
+          cashAmount = sale.payments
+            .filter((p: any) => p.payment_method === 'Cash')
+            .reduce((paymentSum: number, p: any) => paymentSum + parseFloat(p.amount || 0), 0);
+        } else {
+          // Single payment method
+          if (sale.payment_method === 'Cash') {
+            cashAmount = parseFloat(sale.total_amount || 0);
+          }
+        }
+        
+        return sum + cashAmount;
+      }, 0);
+      
+      setShiftCashSales(cashSales);
+    } catch (error) {
+      console.error('Failed to fetch shift sales:', error);
+      setShiftCashSales(0);
+    } finally {
+      setLoadingShiftSales(false);
+    }
+  };
+
+  // Close shift - confirm and process
+  const handleCloseShift = async () => {
+    if (!currentShift) return;
+
+    if (!actualCashInput || actualCashInput.trim() === '') {
+      toast.error('Please enter actual cash amount');
+      return;
+    }
+
+    const actualCash = parseFloat(actualCashInput);
+    if (isNaN(actualCash) || actualCash < 0) {
+      toast.error('Invalid cash amount');
+      return;
+    }
+
+    try {
+      // Close shift with actual cash
+      const closedShift = await api.closeShift(currentShift.id, {
+        actual_cash: actualCash
+      });
+
+      // Set closing summary and show dialog
+      console.log('Closed shift data:', closedShift); // Debug log
+      setShiftClosingSummary(closedShift);
+      setCurrentShift(null);
+      setIsShiftDialogOpen(false);
+      setIsCloseShiftDialogOpen(false);
+      setActualCashInput('');
+      // Small delay to ensure state updates
+      setTimeout(() => {
+        setIsShiftClosingSummaryOpen(true);
+      }, 100);
+      toast.success('Shift closed successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to close shift');
+    }
+  };
+
+  // Add split payment
+  const addSplitPayment = () => {
+    setSplitPayments([...splitPayments, { payment_method: 'Cash', amount: 0 }]);
+  };
+
+  // Remove split payment
+  const removeSplitPayment = (index: number) => {
+    setSplitPayments(splitPayments.filter((_, i) => i !== index));
+  };
+
+  // Update split payment
+  const updateSplitPayment = (index: number, field: string, value: any) => {
+    const updated = [...splitPayments];
+    updated[index] = { ...updated[index], [field]: value };
+    setSplitPayments(updated);
+  };
+
+  // Calculate split payment total
+  const splitPaymentTotal = splitPayments.reduce((sum, p) => sum + p.amount, 0);
+  const splitPaymentRemaining = total - splitPaymentTotal;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
@@ -1073,30 +1567,105 @@ export function AdvancedPOS() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            
+            {/* Shift Status */}
+            {currentShift ? (
+              <>
+                <Button 
+                  size="sm"
+                  onClick={() => setIsShiftDialogOpen(true)}
+                  className="!bg-blue-500 hover:!bg-blue-600 !text-white !border-blue-500 border-2 font-semibold"
+                  style={{ backgroundColor: '#3b82f6', color: 'white' }}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Shift: {currentShift.shift_number?.slice(-4)}
+                  <Badge className="ml-2 bg-blue-700 text-white border-0 h-5 px-1.5 rounded-md text-xs">
+                    Open
+                  </Badge>
+                </Button>
+                <Button 
+                  size="default"
+                  onClick={handleCloseShiftClick}
+                  className="!bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2 shadow-xl font-bold px-5 py-2.5 text-base transition-all hover:scale-105"
+                  style={{ backgroundColor: '#dc2626', color: 'white' }}
+                >
+                  <AlertTriangle className="w-5 h-5 mr-2" />
+                  Close Shift
+                </Button>
+              </>
+            ) : (
+              <Button 
+                size="sm"
+                onClick={() => setIsShiftDialogOpen(true)}
+                className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-semibold shadow-md"
+                style={{ backgroundColor: '#2563eb', color: 'white' }}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Open Shift
+              </Button>
+            )}
+            
+            {/* Transaction Lookup */}
+            <Button 
+              size="sm"
+              onClick={handleLookupClick}
+              className={`!border-2 font-semibold shadow-md ${
+                isLookupMode 
+                  ? '!bg-green-600 hover:!bg-green-700 !text-white !border-green-600' 
+                  : '!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600'
+              }`}
+              style={{ 
+                backgroundColor: isLookupMode ? '#16a34a' : '#2563eb', 
+                color: 'white' 
+              }}
+            >
+              <SearchIcon className="w-4 h-4 mr-2" />
+              {isLookupMode ? 'Lookup Mode' : 'Lookup'}
+            </Button>
+            
+            {/* Void Transaction */}
+            <Button 
+              size="sm"
+              onClick={() => {
+                if (lastSaleId) {
+                  setVoidSaleId(lastSaleId);
+                  setIsVoidDialogOpen(true);
+                } else {
+                  toast.error('No recent sale to void');
+                }
+              }}
+              className="!bg-red-600 hover:!bg-red-700 !text-white !border-red-600 font-semibold shadow-md border-2"
+              style={{ backgroundColor: '#dc2626', color: 'white' }}
+            >
+              <Ban className="w-4 h-4 mr-2" />
+              Void
+            </Button>
+            
             {heldBills.length > 0 && (
               <Button 
-                variant="secondary" 
                 size="sm"
                 onClick={() => setIsHeldBillsOpen(true)}
-                className="relative"
+                className="relative !bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 font-semibold shadow-md border-2"
+                style={{ backgroundColor: '#2563eb', color: 'white' }}
               >
                 <Layers className="w-4 h-4 mr-2" />
                 Held Bills
-                <Badge className="ml-2 bg-red-500 text-white border-0 h-5 px-1.5">
+                <Badge className="ml-2 bg-yellow-500 text-white border-0 h-5 px-1.5">
                   {heldBills.length}
                 </Badge>
               </Button>
             )}
             <Button 
-              variant="secondary" 
               size="sm"
               onClick={() => setIsShortcutsOpen(true)}
+              className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 font-semibold shadow-md border-2"
+              style={{ backgroundColor: '#2563eb', color: 'white' }}
             >
               <Keyboard className="w-4 h-4 mr-2" />
               Shortcuts
             </Button>
             <Dialog open={isShortcutsOpen} onOpenChange={setIsShortcutsOpen}>
-              <DialogContent className="max-w-md">
+              <DialogContent className="!max-w-sm !sm:max-w-sm w-[90%] sm:w-[384px]">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Keyboard className="w-5 h-5" />
@@ -1138,82 +1707,204 @@ export function AdvancedPOS() {
 
       {/* Main Content */}
       <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        {/* Left Panel - Products */}
+        {/* Left Panel - Products or Invoices */}
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-          {/* Search and Filters */}
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input
-                    placeholder="Search medicine by name, generic name, or scan barcode..."
-                    className="pl-10 h-12 text-lg"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchQuery(value);
-                      // If it looks like a barcode (numeric, 8+ digits), handle it separately
-                      if (/^\d{8,}$/.test(value)) {
-                        setBarcodeInput(value);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      // If Enter pressed and it's a barcode, trigger scan
-                      if (e.key === 'Enter' && /^\d{8,}$/.test(searchQuery)) {
-                        setBarcodeInput(searchQuery);
-                        setSearchQuery('');
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-                {loading && (
-                  <div className="flex items-center text-gray-500">
-                    <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                    Searching...
+          {isLookupMode ? (
+            <>
+              {/* Invoice Search and Go to Sales Button */}
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex gap-3 items-center">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <Input
+                        placeholder="Search invoices by invoice number, customer name, or phone..."
+                        className="pl-10 h-12 text-lg"
+                        value={invoiceSearchTerm}
+                        onChange={(e) => setInvoiceSearchTerm(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    {invoicesLoading && (
+                      <div className="flex items-center text-gray-500">
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        Loading...
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleGoToSales}
+                      className="!bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-semibold shadow-md"
+                      style={{ backgroundColor: '#16a34a', color: 'white' }}
+                    >
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                      Go to Sales
+                    </Button>
                   </div>
-                )}
-                <div className="flex gap-1 border border-gray-200 rounded-lg p-1">
-                  <Button
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                    className="h-10 w-10 p-0"
-                  >
-                    <Grid3x3 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="h-10 w-10 p-0"
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Categories */}
-              <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
-                {categories.map((category) => (
-                  <Button
-                    key={category}
-                    variant={selectedCategory === category ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedCategory(category)}
-                    className="whitespace-nowrap"
-                  >
-                    {category}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+              {/* Invoices List */}
+              <Card className="border-0 shadow-sm flex-1 overflow-hidden">
+                <CardHeader className="border-b border-gray-200">
+                  <CardTitle className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-blue-600" />
+                    Invoices ({invoices.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 h-full overflow-y-auto">
+                  {invoicesLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <RefreshCw className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">Loading invoices...</p>
+                      </div>
+                    </div>
+                  ) : invoices.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <Receipt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-gray-500">No invoices found</p>
+                        <p className="text-sm text-gray-400 mt-1">Try adjusting your search</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {invoices.map((invoice) => (
+                        <Card
+                          key={invoice.id}
+                          className="border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
+                          onClick={() => handleViewInvoice(invoice)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h3 className="font-bold text-gray-900">{invoice.invoice_number}</h3>
+                                  <Badge 
+                                    variant={invoice.status === 'Voided' ? 'destructive' : 'default'}
+                                    className={invoice.status === 'Voided' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}
+                                  >
+                                    {invoice.status}
+                                  </Badge>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <p className="text-xs text-gray-500">Customer</p>
+                                    <p className="font-medium text-gray-900">{invoice.customer_name || 'Walk-in Customer'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Date</p>
+                                    <p className="font-medium text-gray-900">
+                                      {new Date(invoice.sale_date).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Payment</p>
+                                    <p className="font-medium text-gray-900">{invoice.payment_method || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Total</p>
+                                    <p className="font-bold text-lg text-blue-600">
+                                      PKR {parseFloat(invoice.total_amount?.toString() || '0').toFixed(2)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-blue-300 hover:bg-blue-50"
+                                >
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  View
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              {/* Search and Filters */}
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <Input
+                        placeholder="Search medicine by name, generic name, or scan barcode..."
+                        className="pl-10 h-12 text-lg"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSearchQuery(value);
+                          // If it looks like a barcode (numeric, 8+ digits), handle it separately
+                          if (/^\d{8,}$/.test(value)) {
+                            setBarcodeInput(value);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          // If Enter pressed and it's a barcode, trigger scan
+                          if (e.key === 'Enter' && /^\d{8,}$/.test(searchQuery)) {
+                            setBarcodeInput(searchQuery);
+                            setSearchQuery('');
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                    {loading && (
+                      <div className="flex items-center text-gray-500">
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        Searching...
+                      </div>
+                    )}
+                    <div className="flex gap-1 border border-gray-200 rounded-lg p-1">
+                      <Button
+                        variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('grid')}
+                        className="h-10 w-10 p-0"
+                      >
+                        <Grid3x3 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={viewMode === 'list' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('list')}
+                        className="h-10 w-10 p-0"
+                      >
+                        <List className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
 
-          {/* Products Grid/List */}
-          <Card className="border-0 shadow-sm flex-1 overflow-hidden">
-            <CardContent className="p-4 h-full overflow-y-auto">
+                  {/* Categories */}
+                  <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+                    {categories.map((category) => (
+                      <Button
+                        key={category}
+                        variant={selectedCategory === category ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedCategory(category)}
+                        className="whitespace-nowrap"
+                      >
+                        {category}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Products Grid/List */}
+              <Card className="border-0 shadow-sm flex-1 overflow-hidden">
+                <CardContent className="p-4 h-full overflow-y-auto">
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {filteredMedicines.map((medicine) => (
@@ -1243,7 +1934,11 @@ export function AdvancedPOS() {
                             <p className="text-xl font-bold text-blue-600">PKR {(Number(medicine.price) || Number(medicine.selling_price) || 0).toFixed(2)}</p>
                             <p className="text-xs text-gray-500">Stock: {medicine.stock || medicine.available_stock || 0}</p>
                           </div>
-                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                          <Button 
+                            size="sm" 
+                            className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2"
+                            style={{ backgroundColor: '#2563eb', color: 'white' }}
+                          >
                             <Plus className="w-4 h-4" />
                           </Button>
                         </div>
@@ -1283,7 +1978,11 @@ export function AdvancedPOS() {
                             <p className="text-sm text-gray-500">Stock: {medicine.stock || medicine.available_stock || 0}</p>
                           </div>
                           
-                          <Button size="lg" className="bg-blue-600 hover:bg-blue-700 h-12 w-12 p-0 flex-shrink-0">
+                          <Button 
+                            size="lg" 
+                            className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 h-12 w-12 p-0 flex-shrink-0"
+                            style={{ backgroundColor: '#2563eb', color: 'white' }}
+                          >
                             <Plus className="w-5 h-5" />
                           </Button>
                         </div>
@@ -1304,6 +2003,8 @@ export function AdvancedPOS() {
               )}
             </CardContent>
           </Card>
+            </>
+          )}
         </div>
 
         {/* Right Panel - Cart & Payment */}
@@ -1322,15 +2023,16 @@ export function AdvancedPOS() {
                   </div>
                 </div>
                 <Button 
-                  variant="outline" 
                   size="sm"
                   onClick={() => setIsCustomerDialogOpen(true)}
+                  className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 font-semibold shadow-md border-2"
+                  style={{ backgroundColor: '#2563eb', color: 'white' }}
                 >
                   <User className="w-4 h-4 mr-1" />
                   Change
                 </Button>
                 <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-                  <DialogContent>
+                  <DialogContent className="!max-w-sm !sm:max-w-sm w-[90%] sm:w-[384px]">
                     <DialogHeader>
                       <DialogTitle>Customer Information</DialogTitle>
                       <DialogDescription>Add or select customer details</DialogDescription>
@@ -1419,7 +2121,11 @@ export function AdvancedPOS() {
                           onChange={(e) => setCustomer({...customer, address: e.target.value})}
                         />
                       </div>
-                      <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setIsCustomerDialogOpen(false)}>
+                      <Button 
+                        className="w-full !bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-semibold shadow-md" 
+                        onClick={() => setIsCustomerDialogOpen(false)}
+                        style={{ backgroundColor: '#16a34a', color: 'white' }}
+                      >
                         Save Customer
                       </Button>
                     </div>
@@ -1430,24 +2136,63 @@ export function AdvancedPOS() {
           </Card>
 
           {/* Cart Items */}
-          <Card className="border-0 shadow-sm flex-1 flex flex-col overflow-hidden">
+          <Card className={`border-0 shadow-sm flex-1 flex flex-col overflow-hidden ${isReturnMode ? 'border-l-4 border-l-orange-500' : ''}`}>
             <CardHeader className="border-b border-gray-200 pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-blue-600" />
-                  Cart ({cart.length} items)
+                  {isReturnMode ? (
+                    <>
+                      <RotateCcw className="w-5 h-5 text-orange-600" />
+                      <span>Return Items ({selectedReturnItems.size} selected)</span>
+                      <Badge className="bg-orange-100 text-orange-800 border-0 ml-2">
+                        Return Mode
+                      </Badge>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5 text-blue-600" />
+                      Cart ({cart.length} items)
+                    </>
+                  )}
                 </CardTitle>
-                {cart.length > 0 && (
+                {cart.length > 0 && !isReturnMode && (
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={holdBill}>
-                      <Save className="w-4 h-4 mr-1 text-blue-600" />
+                    <Button 
+                      size="sm" 
+                      onClick={holdBill}
+                      className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-semibold shadow-md"
+                      style={{ backgroundColor: '#2563eb', color: 'white' }}
+                    >
+                      <Save className="w-4 h-4 mr-1" />
                       Hold
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={clearCart}>
-                      <Trash2 className="w-4 h-4 mr-1 text-red-600" />
+                    <Button 
+                      size="sm" 
+                      onClick={clearCart}
+                      className="!bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2 font-semibold shadow-md"
+                      style={{ backgroundColor: '#dc2626', color: 'white' }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
                       Clear
                     </Button>
                   </div>
+                )}
+                {isReturnMode && (
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      setIsReturnMode(false);
+                      setReturnSale(null);
+                      setSelectedReturnItems(new Set());
+                      setReturnReason('');
+                      setCart([]);
+                    }}
+                    className="!bg-gray-600 hover:!bg-gray-700 !text-white !border-gray-600 border-2 font-semibold shadow-md"
+                    style={{ backgroundColor: '#4b5563', color: 'white' }}
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Cancel Return
+                  </Button>
                 )}
               </div>
             </CardHeader>
@@ -1462,22 +2207,41 @@ export function AdvancedPOS() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
-                  {cart.map((item) => (
-                    <div key={item.medicine.id} className="p-4 hover:bg-gray-50 transition-colors">
+                  {cart.map((item) => {
+                    const saleItemId = (item as any).saleItemId;
+                    const isSelected = saleItemId ? selectedReturnItems.has(saleItemId) : false;
+                    
+                    return (
+                    <div key={item.medicine.id} className={`p-4 hover:bg-gray-50 transition-colors ${isReturnMode && isSelected ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''}`}>
                       <div className="flex items-start justify-between mb-3">
+                        {isReturnMode && saleItemId && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleReturnItem(saleItemId)}
+                            className="mt-1 mr-3 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                          />
+                        )}
                         <div className="flex-1">
                           <h4 className="font-semibold text-gray-900 mb-1">{item.medicine.name}</h4>
                           <p className="text-xs text-gray-600">{item.medicine.genericName}</p>
                           <p className="text-xs text-gray-500">{item.medicine.form} • {item.medicine.strength}</p>
+                          {isReturnMode && returnSale && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              Invoice: {returnSale.invoice_number}
+                            </p>
+                          )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => removeFromCart(item.medicine.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {!isReturnMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => removeFromCart(item.medicine.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 mb-2">
@@ -1521,11 +2285,25 @@ export function AdvancedPOS() {
                             min="0"
                             max="100"
                           />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setOverrideItem(item);
+                              setOverridePrice(item.medicine.price.toString());
+                              setIsPriceOverrideDialogOpen(true);
+                            }}
+                            className="h-7 px-2 text-xs"
+                            title="Override price"
+                          >
+                            <Edit className="w-3 h-3" />
+                          </Button>
                         </div>
                         <p className="text-lg font-bold text-blue-600">PKR {(Number(item.subtotal) || 0).toFixed(2)}</p>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1589,7 +2367,82 @@ export function AdvancedPOS() {
             </CardContent>
           </Card>
 
+          {/* Return Mode UI */}
+          {isReturnMode && returnSale && (
+            <Card className="border-0 shadow-sm border-l-4 border-l-orange-500">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-orange-600" />
+                  Process Return
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Return Reason *</Label>
+                  <Textarea
+                    placeholder="Enter reason for return (e.g., Defective item, Wrong item, Customer request)"
+                    value={returnReason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    className="mt-2"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="returnToStock"
+                    checked={returnToStock}
+                    onChange={(e) => setReturnToStock(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <Label htmlFor="returnToStock" className="text-sm cursor-pointer">
+                    Return items to stock
+                  </Label>
+                </div>
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-600">Selected Items:</span>
+                    <span className="font-semibold">{selectedReturnItems.size}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Return Amount:</span>
+                    <span className="font-bold text-orange-600">
+                      PKR {(
+                        cart
+                          .filter(item => {
+                            const saleItemId = (item as any).saleItemId;
+                            return saleItemId && selectedReturnItems.has(saleItemId);
+                          })
+                          .reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0)
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  size="lg"
+                  onClick={handleProcessReturn}
+                  disabled={processingReturn || selectedReturnItems.size === 0 || !returnReason.trim()}
+                  className="w-full !bg-orange-600 hover:!bg-orange-700 !text-white !border-orange-600 border-2 font-bold shadow-lg disabled:opacity-50"
+                  style={{ backgroundColor: '#ea580c', color: 'white' }}
+                >
+                  {processingReturn ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-5 h-5 mr-2" />
+                      Process Return
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Action Buttons */}
+          {!isReturnMode && (
           <div className="grid grid-cols-2 gap-3">
             <Button
               variant="outline"
@@ -1609,47 +2462,153 @@ export function AdvancedPOS() {
               <CreditCard className="w-5 h-5 mr-2" />
               Pay PKR {total.toFixed(2)}
             </Button>
+          </div>
+          )}
             <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="!max-w-sm !sm:max-w-sm max-h-[90vh] overflow-y-auto w-[90%] sm:w-[384px]">
                 <DialogHeader>
                   <DialogTitle className="text-2xl">Process Payment</DialogTitle>
                   <DialogDescription>Complete the transaction</DialogDescription>
                 </DialogHeader>
                 
                 <div className="space-y-6 py-6">
-                  {/* Payment Method */}
-                  <div>
-                    <Label className="text-base font-semibold mb-3 block">Payment Method</Label>
-                    <div className="grid grid-cols-3 gap-3">
-                      <Button
-                        variant={paymentMethod === 'cash' ? 'default' : 'outline'}
-                        className="h-20 flex-col gap-2"
-                        onClick={() => setPaymentMethod('cash')}
-                      >
-                        <DollarSign className="w-6 h-6" />
-                        Cash
-                      </Button>
-                      <Button
-                        variant={paymentMethod === 'card' ? 'default' : 'outline'}
-                        className="h-20 flex-col gap-2"
-                        onClick={() => setPaymentMethod('card')}
-                      >
-                        <CreditCard className="w-6 h-6" />
-                        Card
-                      </Button>
-                      <Button
-                        variant={paymentMethod === 'insurance' ? 'default' : 'outline'}
-                        className="h-20 flex-col gap-2"
-                        onClick={() => setPaymentMethod('insurance')}
-                      >
-                        <Building className="w-6 h-6" />
-                        Insurance
-                      </Button>
+                  {/* Split Payment Toggle */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="split-payment"
+                        checked={useSplitPayment}
+                        onChange={(e) => {
+                          setUseSplitPayment(e.target.checked);
+                          if (!e.target.checked) {
+                            setSplitPayments([]);
+                          } else {
+                            setSplitPayments([{ payment_method: 'Cash', amount: 0 }]);
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="split-payment" className="font-semibold cursor-pointer">
+                        Split Payment
+                      </Label>
                     </div>
+                    <Info className="w-4 h-4 text-gray-400" />
                   </div>
 
+                  {/* Payment Method */}
+                  {!useSplitPayment && (
+                    <div>
+                      <Label className="text-base font-semibold mb-3 block">Payment Method</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <Button
+                          variant={paymentMethod === 'cash' ? 'default' : 'outline'}
+                          className={`h-20 flex-col gap-2 ${
+                            paymentMethod === 'cash' 
+                              ? '!bg-green-600 hover:!bg-green-700 !text-white border-2 border-green-500' 
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                          onClick={() => setPaymentMethod('cash')}
+                        >
+                          <DollarSign className="w-6 h-6" />
+                          Cash
+                        </Button>
+                        <Button
+                          variant={paymentMethod === 'card' ? 'default' : 'outline'}
+                          className={`h-20 flex-col gap-2 ${
+                            paymentMethod === 'card' 
+                              ? '!bg-blue-600 hover:!bg-blue-700 !text-white border-2 border-blue-500' 
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                          onClick={() => setPaymentMethod('card')}
+                        >
+                          <CreditCard className="w-6 h-6" />
+                          Card
+                        </Button>
+                        <Button
+                          variant={paymentMethod === 'insurance' ? 'default' : 'outline'}
+                          className={`h-20 flex-col gap-2 ${
+                            paymentMethod === 'insurance' 
+                              ? '!bg-purple-600 hover:!bg-purple-700 !text-white border-2 border-purple-500' 
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                          onClick={() => setPaymentMethod('insurance')}
+                        >
+                          <Building className="w-6 h-6" />
+                          Insurance
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Split Payment UI */}
+                  {useSplitPayment && (
+                    <div className="space-y-4">
+                      <Label className="text-base font-semibold block">Split Payments</Label>
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {splitPayments.map((payment, index) => (
+                          <Card key={index} className="p-3">
+                            <div className="flex items-center gap-3">
+                              <Select
+                                value={payment.payment_method}
+                                onValueChange={(value: any) => updateSplitPayment(index, 'payment_method', value)}
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Cash">Cash</SelectItem>
+                                  <SelectItem value="Card">Card</SelectItem>
+                                  <SelectItem value="Insurance">Insurance</SelectItem>
+                                  <SelectItem value="Credit">Credit</SelectItem>
+                                  <SelectItem value="Wallet">Wallet</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                placeholder="Amount"
+                                value={payment.amount || ''}
+                                onChange={(e) => updateSplitPayment(index, 'amount', parseFloat(e.target.value) || 0)}
+                                className="flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeSplitPayment(index)}
+                                className="text-red-600"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addSplitPayment}
+                        className="w-full"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Payment Method
+                      </Button>
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Total Paid:</span>
+                          <span className="font-bold">PKR {splitPaymentTotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Remaining:</span>
+                          <span className={`font-bold ${splitPaymentRemaining <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            PKR {splitPaymentRemaining.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Cash Payment */}
-                  {paymentMethod === 'cash' && (
+                  {!useSplitPayment && paymentMethod === 'cash' && (
                     <div>
                       <Label className="text-base font-semibold mb-3 block">Cash Received</Label>
                       <Input
@@ -1726,19 +2685,40 @@ export function AdvancedPOS() {
                       <span className="text-gray-600">Total Amount:</span>
                       <span className="font-bold text-xl text-blue-600">PKR {total.toFixed(2)}</span>
                     </div>
-                    {paymentMethod === 'cash' && receivedAmount && (
+                    {useSplitPayment ? (
                       <>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Received:</span>
-                          <span className="font-medium">PKR {parseFloat(receivedAmount).toFixed(2)}</span>
+                          <span className="text-gray-600">Total Paid:</span>
+                          <span className="font-medium">PKR {splitPaymentTotal.toFixed(2)}</span>
                         </div>
-                        {changeAmount >= 0 && (
+                        {splitPaymentRemaining <= 0 && (
                           <div className="flex justify-between text-green-600">
                             <span className="font-medium">Change:</span>
-                            <span className="font-bold">PKR {changeAmount.toFixed(2)}</span>
+                            <span className="font-bold">PKR {Math.abs(splitPaymentRemaining).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {splitPaymentRemaining > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span className="font-medium">Remaining:</span>
+                            <span className="font-bold">PKR {splitPaymentRemaining.toFixed(2)}</span>
                           </div>
                         )}
                       </>
+                    ) : (
+                      paymentMethod === 'cash' && receivedAmount && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Received:</span>
+                            <span className="font-medium">PKR {parseFloat(receivedAmount).toFixed(2)}</span>
+                          </div>
+                          {changeAmount >= 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span className="font-medium">Change:</span>
+                              <span className="font-bold">PKR {changeAmount.toFixed(2)}</span>
+                            </div>
+                          )}
+                        </>
+                      )
                     )}
                   </div>
 
@@ -1749,14 +2729,16 @@ export function AdvancedPOS() {
                       size="lg"
                       onClick={() => setIsPaymentDialogOpen(false)}
                       disabled={processingSale}
+                      className="border-gray-300 hover:bg-gray-50 font-semibold"
                     >
                       Cancel
                     </Button>
                     <Button
                       size="lg"
-                      className="bg-green-600 hover:bg-green-700"
+                      className="!bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-bold shadow-lg"
                       onClick={processPayment}
                       disabled={processingSale}
+                      style={{ backgroundColor: '#16a34a', color: 'white' }}
                     >
                       {processingSale ? (
                         <>
@@ -1774,29 +2756,36 @@ export function AdvancedPOS() {
                 </div>
               </DialogContent>
             </Dialog>
-          </div>
 
           {/* Quick Actions */}
           <div className="grid grid-cols-3 gap-2">
-            <Button variant="outline" size="sm" onClick={holdBill} disabled={cart.length === 0}>
+            <Button 
+              size="sm" 
+              onClick={holdBill} 
+              disabled={cart.length === 0}
+              className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-semibold shadow-md disabled:opacity-50"
+              style={{ backgroundColor: '#2563eb', color: 'white' }}
+            >
               <Clock className="w-4 h-4 mr-1" />
               Hold
             </Button>
             <Button 
-              variant="outline" 
               size="sm" 
               onClick={saveCurrentSale}
               disabled={cart.length === 0}
+              className="!bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-semibold shadow-md disabled:opacity-50"
+              style={{ backgroundColor: '#16a34a', color: 'white' }}
             >
               <Save className="w-4 h-4 mr-1" />
               Save
             </Button>
             <Button 
-              variant="outline" 
               size="sm" 
               onClick={() => printReceipt()}
               disabled={!lastSaleId}
               title={lastSaleId ? 'Print last receipt' : 'Complete a sale first'}
+              className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-semibold shadow-md disabled:opacity-50"
+              style={{ backgroundColor: '#2563eb', color: 'white' }}
             >
               <Printer className="w-4 h-4 mr-1" />
               Print
@@ -1807,7 +2796,7 @@ export function AdvancedPOS() {
 
       {/* Held Bills Dialog */}
       <Dialog open={isHeldBillsOpen} onOpenChange={setIsHeldBillsOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
+        <DialogContent className="!max-w-sm !sm:max-w-sm max-h-[85vh] overflow-y-auto w-[90%] sm:w-[384px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Layers className="w-6 h-6 text-blue-600" />
@@ -1907,6 +2896,638 @@ export function AdvancedPOS() {
                   </Card>
                 ))}
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Transaction Dialog */}
+      <Dialog open={isVoidDialogOpen} onOpenChange={setIsVoidDialogOpen}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-5 h-5" />
+              Void Transaction
+            </DialogTitle>
+            <DialogDescription>Void a sale transaction. Stock will be restored.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Sale ID / Invoice Number</Label>
+              <Input
+                placeholder="Enter sale ID or invoice number"
+                value={voidSaleId?.toString() || ''}
+                onChange={(e) => setVoidSaleId(e.target.value ? parseInt(e.target.value) : null)}
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label>Void Type</Label>
+              <Select value={voidType} onValueChange={(v: any) => setVoidType(v)}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Error">Error</SelectItem>
+                  <SelectItem value="Customer Request">Customer Request</SelectItem>
+                  <SelectItem value="System Error">System Error</SelectItem>
+                  <SelectItem value="Fraud">Fraud</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Void Reason *</Label>
+              <Textarea
+                placeholder="Enter reason for voiding this transaction"
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                className="mt-2"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-gray-300 hover:bg-gray-50 font-semibold"
+                onClick={() => {
+                  setIsVoidDialogOpen(false);
+                  setVoidSaleId(null);
+                  setVoidReason('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 !bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2 font-bold shadow-md disabled:opacity-50"
+                onClick={handleVoidTransaction}
+                disabled={!voidSaleId || !voidReason.trim()}
+                style={{ backgroundColor: '#dc2626', color: 'white' }}
+              >
+                <Ban className="w-4 h-4 mr-2" />
+                Void Transaction
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transaction Lookup Dialog */}
+      <Dialog open={isLookupDialogOpen} onOpenChange={setIsLookupDialogOpen}>
+        <DialogContent className="!max-w-sm !sm:max-w-sm max-h-[90vh] overflow-y-auto w-[90%] sm:w-[384px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SearchIcon className="w-5 h-5" />
+              Transaction Lookup
+            </DialogTitle>
+            <DialogDescription>Search for a sale by invoice number</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter invoice number (e.g., INV-20240115-0001)"
+                value={lookupInvoiceNumber}
+                onChange={(e) => setLookupInvoiceNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleLookupTransaction();
+                  }
+                }}
+                className="flex-1"
+              />
+              <Button onClick={handleLookupTransaction} disabled={lookupLoading}>
+                {lookupLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <SearchIcon className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+
+            {lookedUpSale && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Invoice: {lookedUpSale.invoice_number}</span>
+                    <Badge variant={lookedUpSale.status === 'Voided' ? 'destructive' : 'default'}>
+                      {lookedUpSale.status}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-gray-500">Date</Label>
+                      <p className="font-medium">{new Date(lookedUpSale.sale_date).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Customer</Label>
+                      <p className="font-medium">{lookedUpSale.customer_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Payment Method</Label>
+                      <p className="font-medium">{lookedUpSale.payment_method}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Total Amount</Label>
+                      <p className="font-medium text-blue-600">PKR {parseFloat(lookedUpSale.total_amount?.toString() || '0').toFixed(2)}</p>
+                    </div>
+                  </div>
+
+                  {lookedUpSale.items && lookedUpSale.items.length > 0 && (
+                    <div>
+                      <Label className="text-xs text-gray-500 mb-2 block">Items</Label>
+                      <div className="space-y-2">
+                        {lookedUpSale.items.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
+                            <span>{item.medicine_name} × {item.quantity}</span>
+                            <span className="font-medium">PKR {parseFloat(item.subtotal?.toString() || '0').toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {lookedUpSale.payments && lookedUpSale.payments.length > 0 && (
+                    <div>
+                      <Label className="text-xs text-gray-500 mb-2 block">Split Payments</Label>
+                      <div className="space-y-2">
+                        {lookedUpSale.payments.map((payment: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-sm p-2 bg-blue-50 rounded">
+                            <span>{payment.payment_method}</span>
+                            <span className="font-medium">PKR {parseFloat(payment.amount?.toString() || '0').toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => printReceiptByInvoice(lookedUpSale.invoice_number)}
+                      className="w-full border-blue-300 hover:bg-blue-50"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Reprint Receipt
+                    </Button>
+                    {lookedUpSale.status !== 'Voided' && lookedUpSale.status !== 'Refunded' && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setVoidSaleId(lookedUpSale.id);
+                            setIsVoidDialogOpen(true);
+                            setIsLookupDialogOpen(false);
+                          }}
+                          className="flex-1 !bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2"
+                          style={{ backgroundColor: '#dc2626', color: 'white' }}
+                        >
+                          <Ban className="w-4 h-4 mr-2" />
+                          Void
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Navigate to refund processing or open refund dialog
+                            window.location.href = '#refunds';
+                            toast.info('Please use the Returns section to process refunds');
+                            setIsLookupDialogOpen(false);
+                          }}
+                          className="flex-1 !bg-orange-600 hover:!bg-orange-700 !text-white !border-orange-600 border-2"
+                          style={{ backgroundColor: '#ea580c', color: 'white' }}
+                        >
+                          <RotateCcw className="w-4 h-4 mr-2" />
+                          Return
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shift Management Dialog */}
+      <Dialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Shift Management
+            </DialogTitle>
+            <DialogDescription>
+              {currentShift ? 'Manage your current shift' : 'Open a new shift'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {currentShift ? (
+              <>
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-gray-500">Shift Number</Label>
+                      <p className="font-bold">{currentShift.shift_number}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Status</Label>
+                      <Badge className="bg-blue-500">Open</Badge>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Opening Cash</Label>
+                      <p className="font-medium">PKR {parseFloat(currentShift.opening_cash || 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Started At</Label>
+                      <p className="font-medium text-sm">
+                        {new Date(currentShift.start_time).toLocaleString()}
+                      </p>
+                    </div>
+                    {currentShift.total_sales !== undefined && (
+                      <>
+                        <div>
+                          <Label className="text-xs text-gray-500">Total Sales</Label>
+                          <p className="font-medium">{currentShift.total_sales}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Total Revenue</Label>
+                          <p className="font-medium text-blue-600">PKR {parseFloat(currentShift.total_revenue || 0).toFixed(2)}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-gray-300 hover:bg-gray-50 font-semibold"
+                    onClick={() => setIsShiftDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 !bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2 font-bold shadow-md"
+                    onClick={handleCloseShiftClick}
+                    style={{ backgroundColor: '#dc2626', color: 'white' }}
+                  >
+                    Close Shift
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label>Opening Cash *</Label>
+                  <Input
+                    type="number"
+                    value={shiftOpeningCash}
+                    onChange={(e) => setShiftOpeningCash(e.target.value)}
+                    className="mt-2"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Enter the starting cash amount for this shift</p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-gray-300 hover:bg-gray-50 font-semibold"
+                    onClick={() => setIsShiftDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 !bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-bold shadow-md disabled:opacity-50"
+                    onClick={handleOpenShift}
+                    disabled={!shiftOpeningCash}
+                    style={{ backgroundColor: '#16a34a', color: 'white' }}
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Open Shift
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Shift Confirmation Dialog */}
+      <Dialog open={isCloseShiftDialogOpen} onOpenChange={setIsCloseShiftDialogOpen}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              Close Shift
+            </DialogTitle>
+            <DialogDescription>
+              Enter the actual cash count to close this shift
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {currentShift && (
+              <>
+                {loadingShiftSales ? (
+                  <div className="p-4 text-center">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    <p className="text-sm text-gray-600">Calculating cash sales...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                      <div className="text-sm space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700 font-medium">Shift:</span>
+                          <span className="font-bold text-lg">{currentShift.shift_number}</span>
+                        </div>
+                        <div className="border-t border-blue-200 pt-2 mt-2 space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Opening Cash:</span>
+                            <span className="font-semibold">PKR {parseFloat(currentShift.opening_cash || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Cash Sales:</span>
+                            <span className="font-semibold text-green-600">+ PKR {shiftCashSales.toFixed(2)}</span>
+                          </div>
+                          <div className="border-t border-blue-300 pt-2 mt-2 flex justify-between items-center">
+                            <span className="text-gray-800 font-bold">Expected Closing Cash:</span>
+                            <span className="font-bold text-lg text-blue-700">
+                              PKR {(parseFloat(currentShift.opening_cash || 0) + shiftCashSales).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Actual Cash Count *</Label>
+                      <Input
+                        type="number"
+                        value={actualCashInput}
+                        onChange={(e) => setActualCashInput(e.target.value)}
+                        className="mt-2 text-lg font-semibold"
+                        placeholder="0.00"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCloseShift();
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Enter the actual cash amount counted</p>
+                      {actualCashInput && !isNaN(parseFloat(actualCashInput)) && (
+                        <div className="mt-2 p-2 rounded-lg bg-gray-50">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Difference:</span>
+                            <span className={`font-bold ${
+                              parseFloat(actualCashInput) >= (parseFloat(currentShift.opening_cash || 0) + shiftCashSales) 
+                                ? 'text-green-600' 
+                                : 'text-red-600'
+                            }`}>
+                              {parseFloat(actualCashInput) >= (parseFloat(currentShift.opening_cash || 0) + shiftCashSales) ? '+' : ''}
+                              PKR {(parseFloat(actualCashInput) - (parseFloat(currentShift.opening_cash || 0) + shiftCashSales)).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-gray-300 hover:bg-gray-50 font-semibold"
+                    onClick={() => {
+                      setIsCloseShiftDialogOpen(false);
+                      setActualCashInput('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 !bg-red-600 hover:!bg-red-700 !text-white !border-red-600 border-2 font-bold shadow-md disabled:opacity-50"
+                    onClick={handleCloseShift}
+                    disabled={!actualCashInput || actualCashInput.trim() === ''}
+                    style={{ backgroundColor: '#dc2626', color: 'white' }}
+                  >
+                    Close Shift
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shift Closing Summary Dialog */}
+      <Dialog open={isShiftClosingSummaryOpen} onOpenChange={setIsShiftClosingSummaryOpen}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5" />
+              Shift Closing Summary
+            </DialogTitle>
+            <DialogDescription>Summary of all transactions for this shift</DialogDescription>
+          </DialogHeader>
+          {shiftClosingSummary && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <Label className="text-xs text-gray-500">Shift Number</Label>
+                    <p className="font-bold">{shiftClosingSummary.shift_number}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">Status</Label>
+                    <Badge className="bg-gray-500">Closed</Badge>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">Start Time</Label>
+                    <p className="font-medium text-sm">
+                      {new Date(shiftClosingSummary.start_time).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">End Time</Label>
+                    <p className="font-medium text-sm">
+                      {new Date(shiftClosingSummary.end_time).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <span className="font-medium">Opening Cash:</span>
+                  <span className="font-bold">PKR {parseFloat(shiftClosingSummary.opening_cash || 0).toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <span className="font-medium">Total Sales:</span>
+                  <span className="font-bold">{shiftClosingSummary.total_sales || 0}</span>
+                </div>
+
+                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                  <span className="font-medium">Total Revenue:</span>
+                  <span className="font-bold text-green-600">PKR {parseFloat(shiftClosingSummary.total_revenue || 0).toFixed(2)}</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label className="text-xs text-gray-500">Cash Sales</Label>
+                    <p className="font-medium">PKR {parseFloat(shiftClosingSummary.cash_sales || 0).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">Card Sales</Label>
+                    <p className="font-medium">PKR {parseFloat(shiftClosingSummary.card_sales || 0).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">Other Sales</Label>
+                    <p className="font-medium">PKR {parseFloat(shiftClosingSummary.other_sales || 0).toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                  <span className="font-medium">Expected Cash:</span>
+                  <span className="font-bold">PKR {parseFloat(shiftClosingSummary.expected_cash || 0).toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                  <span className="font-medium">Actual Cash:</span>
+                  <span className="font-bold">PKR {parseFloat(shiftClosingSummary.actual_cash || 0).toFixed(2)}</span>
+                </div>
+
+                <div className={`flex justify-between items-center p-3 rounded-lg ${
+                  parseFloat(shiftClosingSummary.difference || 0) >= 0 
+                    ? 'bg-green-50' 
+                    : 'bg-red-50'
+                }`}>
+                  <span className="font-medium">Difference:</span>
+                  <span className={`font-bold ${
+                    parseFloat(shiftClosingSummary.difference || 0) >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {parseFloat(shiftClosingSummary.difference || 0) >= 0 ? '+' : ''}
+                    PKR {parseFloat(shiftClosingSummary.difference || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  className="flex-1 !bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-semibold shadow-md"
+                  onClick={() => {
+                    setIsShiftClosingSummaryOpen(false);
+                    setShiftClosingSummary(null);
+                  }}
+                  style={{ backgroundColor: '#2563eb', color: 'white' }}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Price Override Dialog */}
+      <Dialog open={isPriceOverrideDialogOpen} onOpenChange={setIsPriceOverrideDialogOpen}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Price Override
+            </DialogTitle>
+            <DialogDescription>
+              Request a price override for {overrideItem?.medicine.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {overrideItem && (
+              <>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600">Original Price:</span>
+                    <span className="font-bold">PKR {overrideItem.medicine.price.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">New Price:</span>
+                    <Input
+                      type="number"
+                      value={overridePrice}
+                      onChange={(e) => setOverridePrice(e.target.value)}
+                      className="w-32 h-8 text-right"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Reason for Override *</Label>
+                  <Input
+                    placeholder="Enter reason (e.g., Bulk discount, Special offer)"
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-blue-800">
+                    <Shield className="w-4 h-4" />
+                    <span>This request requires manager approval</span>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-gray-300 hover:bg-gray-50 font-semibold"
+                    onClick={() => {
+                      setIsPriceOverrideDialogOpen(false);
+                      setOverrideItem(null);
+                      setOverridePrice('');
+                      setOverrideReason('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 !bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 font-bold shadow-md"
+                    style={{ backgroundColor: '#2563eb', color: 'white' }}
+                    onClick={async () => {
+                      if (!overrideItem || !overridePrice || !overrideReason) {
+                        toast.error('Please fill all fields');
+                        return;
+                      }
+
+                      try {
+                        await api.createPriceOverride({
+                          medicine_id: typeof overrideItem.medicine.id === 'string' 
+                            ? parseInt(overrideItem.medicine.id) 
+                            : overrideItem.medicine.id,
+                          original_price: overrideItem.medicine.price,
+                          override_price: parseFloat(overridePrice),
+                          override_reason: overrideReason
+                        });
+                        toast.success('Price override request submitted. Waiting for approval.');
+                        setIsPriceOverrideDialogOpen(false);
+                        setOverrideItem(null);
+                        setOverridePrice('');
+                        setOverrideReason('');
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to create price override request');
+                      }
+                    }}
+                    disabled={!overridePrice || !overrideReason.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md disabled:opacity-50"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Request Override
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         </DialogContent>

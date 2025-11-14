@@ -10,6 +10,7 @@ class Pharmacy_sales extends Api {
         $this->load->model('Sale_model');
         $this->load->model('Medicine_model');
         $this->load->model('Patient_model');
+        $this->load->model('Voided_sale_model');
         
         // Verify token for all requests
         if (!$this->verify_token()) {
@@ -53,6 +54,10 @@ class Pharmacy_sales extends Api {
             
             if ($this->input->get('end_date')) {
                 $filters['end_date'] = $this->input->get('end_date');
+            }
+            
+            if ($this->input->get('shift_id')) {
+                $filters['shift_id'] = (int)$this->input->get('shift_id');
             }
             
             if ($this->input->get('limit')) {
@@ -170,7 +175,8 @@ class Pharmacy_sales extends Api {
 
     /**
      * GET /api/pharmacy/sales/:id - Get sale by ID
-     * GET /api/pharmacy/sales/invoice/:invoice_number - Get sale by invoice number
+     * GET /api/pharmacy/sales/:invoice_number - Get sale by invoice number
+     * GET /api/pharmacy/sales/search/:query - Search sales by partial invoice number
      */
     public function get($id = null) {
         if (!$id) {
@@ -178,18 +184,77 @@ class Pharmacy_sales extends Api {
             return;
         }
         
-        // Check if it's an invoice number (starts with INV-)
-        if (strpos($id, 'INV-') === 0) {
-            $sale = $this->Sale_model->get_by_invoice_number($id);
-        } else {
-            $sale = $this->Sale_model->get_by_id($id);
+        // URL decode the ID in case it's an invoice number with special characters
+        $id = urldecode($id);
+        
+        // Check if it's a search query (contains search parameter)
+        if ($this->input->get('search') === 'true' || strlen($id) < 10) {
+            // If it's a short string or search flag, try partial matching
+            $results = $this->Sale_model->search_by_invoice_number($id, 10);
+            if (count($results) === 1) {
+                // If only one result, return it directly
+                $sale = $this->Sale_model->get_by_id($results[0]['id']);
+                if ($sale) {
+                    $this->success($sale);
+                    return;
+                }
+            } elseif (count($results) > 1) {
+                // Multiple results - return list
+                $this->success($results);
+                return;
+            }
         }
         
-        if ($sale) {
-            $this->success($sale);
+        // Try exact match first
+        // Check if it's an invoice number (starts with INV- or contains INV)
+        if (strpos($id, 'INV-') === 0 || strpos($id, 'INV') !== false) {
+            $sale = $this->Sale_model->get_by_invoice_number($id);
+            if ($sale) {
+                $this->success($sale);
+                return;
+            }
+            // If exact match fails, try partial search
+            $results = $this->Sale_model->search_by_invoice_number($id, 10);
+            if (count($results) === 1) {
+                $sale = $this->Sale_model->get_by_id($results[0]['id']);
+                if ($sale) {
+                    $this->success($sale);
+                    return;
+                }
+            } elseif (count($results) > 1) {
+                $this->success($results);
+                return;
+            }
         } else {
-            $this->error('Sale not found', 404);
+            // Try as numeric ID first
+            if (is_numeric($id)) {
+                $sale = $this->Sale_model->get_by_id($id);
+                if ($sale) {
+                    $this->success($sale);
+                    return;
+                }
+            }
+            // If not numeric, try as invoice number (exact then partial)
+            $sale = $this->Sale_model->get_by_invoice_number($id);
+            if ($sale) {
+                $this->success($sale);
+                return;
+            }
+            // Try partial search
+            $results = $this->Sale_model->search_by_invoice_number($id, 10);
+            if (count($results) === 1) {
+                $sale = $this->Sale_model->get_by_id($results[0]['id']);
+                if ($sale) {
+                    $this->success($sale);
+                    return;
+                }
+            } elseif (count($results) > 1) {
+                $this->success($results);
+                return;
+            }
         }
+        
+        $this->error('Sale not found', 404);
     }
 
     /**
@@ -253,6 +318,90 @@ class Pharmacy_sales extends Api {
         
         $medicines = $this->Sale_model->get_top_selling_medicines($limit, $start_date, $end_date);
         $this->success($medicines);
+    }
+
+    /**
+     * POST /api/pharmacy/sales/:id/void - Void a sale
+     */
+    public function void($id = null) {
+        if (!$id) {
+            $this->error('Sale ID required', 400);
+            return;
+        }
+        
+        try {
+            $data = $this->get_request_data();
+            
+            // Validate required fields
+            if (empty($data['void_reason'])) {
+                $this->error('Void reason is required', 400);
+                return;
+            }
+            
+            // Set voided_by from current user
+            if ($this->user) {
+                $data['voided_by'] = $this->user['id'];
+            } else {
+                $this->error('User not authenticated', 401);
+                return;
+            }
+            
+            // Check if manager authorization is required (can be configured)
+            $require_authorization = $data['require_authorization'] ?? true;
+            if ($require_authorization && empty($data['authorized_by'])) {
+                // Create pending void request (if you implement approval workflow)
+                // For now, we'll allow void with manager role check
+                if (!isset($this->user['role']) || $this->user['role'] !== 'manager') {
+                    $this->error('Manager authorization required to void sale', 403);
+                    return;
+                }
+                $data['authorized_by'] = $this->user['id'];
+            }
+            
+            // Restore stock by default
+            $data['restore_stock'] = $data['restore_stock'] ?? true;
+            
+            $result = $this->Voided_sale_model->void_sale($id, $data);
+            
+            if ($result['success']) {
+                $this->success($result, 'Sale voided successfully');
+            } else {
+                $this->error($result['message'] ?? 'Failed to void sale', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Void sale error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * GET /api/pharmacy/sales/voided - Get voided sales
+     */
+    public function voided() {
+        $filters = array();
+        
+        if ($this->input->get('start_date')) {
+            $filters['start_date'] = $this->input->get('start_date');
+        }
+        
+        if ($this->input->get('end_date')) {
+            $filters['end_date'] = $this->input->get('end_date');
+        }
+        
+        if ($this->input->get('voided_by')) {
+            $filters['voided_by'] = $this->input->get('voided_by');
+        }
+        
+        if ($this->input->get('limit')) {
+            $filters['limit'] = (int)$this->input->get('limit');
+        }
+        
+        if ($this->input->get('offset')) {
+            $filters['offset'] = (int)$this->input->get('offset');
+        }
+        
+        $voided_sales = $this->Voided_sale_model->get_all($filters);
+        $this->success($voided_sales);
     }
 }
 
