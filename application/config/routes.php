@@ -180,3 +180,24 @@ $route['api/pharmacy/price-overrides/(:num)'] = 'price_overrides/get/$1';
 $route['api/pharmacy/price-overrides/(:num)/approve'] = 'price_overrides/approve/$1';
 $route['api/pharmacy/price-overrides/(:num)/reject'] = 'price_overrides/reject/$1';
 $route['api/pharmacy/price-overrides/pending'] = 'price_overrides/pending';
+
+// POS Settings
+$route['api/pharmacy/pos-settings'] = 'pos_settings/index';
+$route['api/pharmacy/pos-settings/category/(:any)'] = 'pos_settings/category/$1';
+$route['api/pharmacy/pos-settings/(:any)'] = 'pos_settings/update_setting/$1';
+$route['api/pharmacy/pos-settings/reset'] = 'pos_settings/reset';
+
+// GST Rates
+$route['api/pharmacy/gst-rates'] = 'gst_rates/index';
+$route['api/pharmacy/gst-rates/active'] = 'gst_rates/active';
+$route['api/pharmacy/gst-rates/default'] = 'gst_rates/default_rate';
+$route['api/pharmacy/gst-rates/(:num)'] = 'gst_rates/get/$1';
+$route['api/pharmacy/gst-rates/(:num)/set-default'] = 'gst_rates/set_default/$1';
+
+// Reports
+$route['api/pharmacy/reports/sales-summary'] = 'pharmacy_reports/sales_summary';
+$route['api/pharmacy/reports/daily-sales'] = 'pharmacy_reports/daily_sales';
+$route['api/pharmacy/reports/payment-method'] = 'pharmacy_reports/payment_method';
+$route['api/pharmacy/reports/top-selling'] = 'pharmacy_reports/top_selling';
+$route['api/pharmacy/reports/cashier-performance'] = 'pharmacy_reports/cashier_performance';
+$route['api/pharmacy/reports/shift-summary'] = 'pharmacy_reports/shift_summary';

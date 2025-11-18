@@ -131,6 +131,45 @@ interface HeldBill {
   reservedStock?: Map<number, number>; // Store reservation info
 }
 
+// Helper function to get medicine image URL with fallback to random medicine images
+const getMedicineImageUrl = (medicine: Medicine): string => {
+  // Check if medicine has image_url property (may be in different formats)
+  const imageUrl = (medicine as any).image_url || (medicine as any).image || (medicine as any).imageUrl;
+  if (imageUrl) {
+    return imageUrl;
+  }
+  
+  // Use a curated list of medicine/pharmaceutical image URLs from reliable sources
+  // These are actual medicine images that will display properly
+  const medicineImages = [
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1550572017-edd951b55104?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1550572017-edd951b55104?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1550572017-edd951b55104?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&h=400&fit=crop'
+  ];
+  
+  // Use medicine ID or name to get a consistent but varied image
+  const imageIndex = (medicine.id || medicine.name?.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || Math.floor(Math.random() * 1000)) % medicineImages.length;
+  
+  return medicineImages[imageIndex];
+};
+
 export function AdvancedPOS() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -151,6 +190,9 @@ export function AdvancedPOS() {
   const [prescriptionNumber, setPrescriptionNumber] = useState('');
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
+  const [isSearchingPatients, setIsSearchingPatients] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [heldBills, setHeldBills] = useState<HeldBill[]>([]);
@@ -205,6 +247,62 @@ export function AdvancedPOS() {
   const [overrideItem, setOverrideItem] = useState<CartItem | null>(null);
   const [overridePrice, setOverridePrice] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
+
+  // POS Settings State
+  const [posSettings, setPosSettings] = useState<any>({});
+  const [gstRates, setGstRates] = useState<any[]>([]);
+  const [defaultGstRate, setDefaultGstRate] = useState<number>(14); // Default to 14%
+
+  // Load POS settings and GST rates on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        // Load POS settings
+        const settings = await api.getPOSSettings();
+        const flattened: any = {};
+        Object.keys(settings).forEach(category => {
+          Object.keys(settings[category]).forEach(key => {
+            if (settings[category][key].value !== undefined) {
+              flattened[key] = settings[category][key].value;
+            } else {
+              flattened[key] = settings[category][key];
+            }
+          });
+        });
+        setPosSettings(flattened);
+
+        // Load GST rates
+        const rates = await api.getActiveGSTRates();
+        setGstRates(rates);
+        
+        // Get default GST rate
+        try {
+          const defaultRate = await api.getDefaultGSTRate();
+          if (defaultRate) {
+            setDefaultGstRate(defaultRate.rate_percentage);
+          } else if (flattened.default_tax_rate) {
+            setDefaultGstRate(flattened.default_tax_rate);
+          }
+        } catch (error) {
+          // Use default from settings or fallback to 14%
+          setDefaultGstRate(flattened.default_tax_rate || 14);
+        }
+
+        // Apply UI settings
+        if (flattened.default_view_mode) {
+          setViewMode(flattened.default_view_mode);
+        }
+        if (flattened.default_payment_method) {
+          setPaymentMethod(flattened.default_payment_method);
+        }
+      } catch (error) {
+        console.error('Failed to load POS settings:', error);
+        // Continue with defaults
+      }
+    };
+    
+    loadSettings();
+  }, []);
 
   // Load current shift on mount
   useEffect(() => {
@@ -271,7 +369,7 @@ export function AdvancedPOS() {
             stock: stock,
             available_stock: stock,
             barcode: '',
-            requiresPrescription: med.requires_prescription || false,
+            requiresPrescription: med.requires_prescription === true || med.requires_prescription === 1 || med.requires_prescription === '1',
             selling_price: price
           };
         });
@@ -337,7 +435,7 @@ export function AdvancedPOS() {
               stock: stock.quantity - stock.reserved_quantity,
               available_stock: stock.quantity - stock.reserved_quantity,
               barcode: barcodeInput,
-              requiresPrescription: medicine.requires_prescription || false,
+              requiresPrescription: medicine.requires_prescription === true || medicine.requires_prescription === 1 || medicine.requires_prescription === '1',
               selling_price: stock.selling_price
             };
             addToCart(med);
@@ -547,11 +645,34 @@ export function AdvancedPOS() {
     toast.success(`Removed ${item.medicine.name} from cart`);
   };
 
+  // Get GST rate for a medicine (by category or default)
+  const getGSTRateForMedicine = (medicine: Medicine): number => {
+    if (!medicine.category) {
+      return defaultGstRate / 100;
+    }
+    
+    // Find GST rate for this category
+    const categoryRate = gstRates.find(rate => 
+      rate.category && rate.category.toLowerCase() === medicine.category?.toLowerCase()
+    );
+    
+    if (categoryRate) {
+      return categoryRate.rate_percentage / 100;
+    }
+    
+    // Use default rate
+    return defaultGstRate / 100;
+  };
+
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
   const discountAmount = (subtotal * (Number(globalDiscount) || 0)) / 100;
   const taxableAmount = subtotal - discountAmount;
-  const tax = taxableAmount * 0.14; // 14% GST
+  
+  // Calculate tax based on items in cart (use average or item-specific rates)
+  // For simplicity, use default rate for now. Can be enhanced to calculate per-item
+  const taxRate = defaultGstRate / 100;
+  const tax = taxableAmount * taxRate;
   const total = taxableAmount + tax;
   const changeAmount = receivedAmount ? parseFloat(receivedAmount) - total : 0;
 
@@ -882,7 +1003,7 @@ export function AdvancedPOS() {
             </div>
             ` : ''}
             <div class="info-row">
-              <span>Tax (${invoice.tax_rate || 14}%):</span>
+              <span>Tax (${invoice.tax_rate || defaultGstRate}%):</span>
               <span>PKR ${Number(invoice.tax_amount || 0).toFixed(2)}</span>
             </div>
             <div class="total-row" style="font-size: 14px; border-top: 1px solid #000; padding-top: 5px; margin-top: 5px;">
@@ -966,7 +1087,7 @@ export function AdvancedPOS() {
           amount_received: sale.amount_received,
           change_amount: sale.change_amount,
           cashier: sale.cashier_name || 'Cashier',
-          tax_rate: sale.tax_rate || 14
+          tax_rate: sale.tax_rate || defaultGstRate
         };
       }
       
@@ -1016,9 +1137,9 @@ export function AdvancedPOS() {
     }
 
     // Check for prescription medicines
-    const requiresPrescription = cart.some(item => item.medicine.requiresPrescription);
-    if (requiresPrescription && !prescriptionNumber) {
-      toast.error('Prescription number required');
+    const requiresPrescription = cart.some(item => item.medicine.requiresPrescription === true);
+    if (requiresPrescription && !prescriptionNumber.trim()) {
+      toast.error('Prescription number is required for items that require a prescription');
       return;
     }
 
@@ -1055,7 +1176,7 @@ export function AdvancedPOS() {
           discount_percentage: item.discount
         })),
         discount_percentage: globalDiscount,
-        tax_rate: 14,
+        tax_rate: defaultGstRate,
         payment_method: paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'Insurance',
         amount_received: paymentMethod === 'cash' && !useSplitPayment ? parseFloat(receivedAmount || '0') : undefined,
         payments: useSplitPayment ? splitPayments : undefined,
@@ -1906,40 +2027,61 @@ export function AdvancedPOS() {
               <Card className="border-0 shadow-sm flex-1 overflow-hidden">
                 <CardContent className="p-4 h-full overflow-y-auto">
               {viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-6 gap-2">
                   {filteredMedicines.map((medicine) => (
                     <Card
                       key={medicine.id}
                       className="border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group"
                       onClick={() => addToCart(medicine)}
                     >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <Pill className="w-6 h-6 text-blue-600" />
+                      <CardContent className="p-2">
+                        {/* Medicine Image */}
+                        <div className="w-full mb-2 rounded-lg overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 relative" style={{ aspectRatio: '1 / 1', minHeight: '80px' }}>
+                          <img 
+                            src={getMedicineImageUrl(medicine)} 
+                            alt={medicine.name}
+                            className="w-full h-full object-cover"
+                            style={{ objectFit: 'cover', objectPosition: 'center', width: '100%', height: '100%' }}
+                            loading="lazy"
+                            onError={(e) => {
+                              // Fallback to a medicine-themed gradient with pill icon
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent && !parent.querySelector('.fallback-icon')) {
+                                const icon = document.createElement('div');
+                                icon.className = 'fallback-icon w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-100';
+                                icon.innerHTML = '<svg class="w-10 h-10 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                        </div>
+                        
+                        <div className="flex items-start justify-between mb-1.5">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm text-gray-900 mb-0.5 line-clamp-1">{medicine.name}</h3>
+                            <p className="text-xs text-gray-600 mb-0.5 line-clamp-1">{medicine.genericName}</p>
+                            <p className="text-xs text-gray-500 line-clamp-1">{medicine.form} • {medicine.strength}</p>
                           </div>
                           {medicine.requiresPrescription && (
-                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 ml-1 text-xs px-1 py-0">
                               Rx
                             </Badge>
                           )}
                         </div>
                         
-                        <h3 className="font-bold text-gray-900 mb-1 line-clamp-1">{medicine.name}</h3>
-                        <p className="text-xs text-gray-600 mb-2 line-clamp-1">{medicine.genericName}</p>
-                        <p className="text-xs text-gray-500 mb-3">{medicine.form} • {medicine.strength}</p>
-                        
-                        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                          <div>
-                            <p className="text-xl font-bold text-blue-600">PKR {(Number(medicine.price) || Number(medicine.selling_price) || 0).toFixed(2)}</p>
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-base font-bold text-blue-600">PKR {(Number(medicine.price) || Number(medicine.selling_price) || 0).toFixed(2)}</p>
                             <p className="text-xs text-gray-500">Stock: {medicine.stock || medicine.available_stock || 0}</p>
                           </div>
                           <Button 
                             size="sm" 
-                            className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2"
+                            className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 border-2 h-7 w-7 p-0 ml-1"
                             style={{ backgroundColor: '#2563eb', color: 'white' }}
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3 h-3" />
                           </Button>
                         </div>
                       </CardContent>
@@ -1956,8 +2098,27 @@ export function AdvancedPOS() {
                     >
                       <CardContent className="p-3">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center flex-shrink-0">
-                            <Pill className="w-6 h-6 text-blue-600" />
+                          {/* Medicine Image */}
+                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center flex-shrink-0 relative">
+                            <img 
+                              src={getMedicineImageUrl(medicine)} 
+                              alt={medicine.name}
+                              className="w-full h-full object-cover"
+                              style={{ objectFit: 'cover', objectPosition: 'center' }}
+                              loading="lazy"
+                              onError={(e) => {
+                                // Fallback to a medicine-themed gradient with pill icon
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector('.fallback-icon')) {
+                                  const icon = document.createElement('div');
+                                  icon.className = 'fallback-icon w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-100';
+                                  icon.innerHTML = '<svg class="w-10 h-10 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+                                  parent.appendChild(icon);
+                                }
+                              }}
+                            />
                           </div>
                           
                           <div className="flex-1 min-w-0">
@@ -2031,18 +2192,115 @@ export function AdvancedPOS() {
                   <User className="w-4 h-4 mr-1" />
                   Change
                 </Button>
-                <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-                  <DialogContent className="!max-w-sm !sm:max-w-sm w-[90%] sm:w-[384px]">
+                <Dialog open={isCustomerDialogOpen} onOpenChange={(open) => {
+                  setIsCustomerDialogOpen(open);
+                  if (!open) {
+                    // Reset search when dialog closes
+                    setPatientSearchTerm('');
+                    setPatientSearchResults([]);
+                  }
+                }}>
+                  <DialogContent className="!max-w-md !sm:max-w-md w-[90%] sm:w-[448px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Customer Information</DialogTitle>
-                      <DialogDescription>Add or select customer details</DialogDescription>
+                      <DialogTitle>Select or Add Customer</DialogTitle>
+                      <DialogDescription>Search for existing customer or add new customer details</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
+                      {/* Search for Existing Customers */}
+                      <div>
+                        <Label>Search Existing Customer</Label>
+                        <div className="relative mt-2">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <Input 
+                            className="pl-10" 
+                            placeholder="Search by name or phone..."
+                            value={patientSearchTerm}
+                            onChange={async (e) => {
+                              const searchTerm = e.target.value;
+                              setPatientSearchTerm(searchTerm);
+                              
+                              if (searchTerm.length >= 2) {
+                                setIsSearchingPatients(true);
+                                try {
+                                  const patients = await api.getPatients({ search: searchTerm });
+                                  setPatientSearchResults(patients);
+                                } catch (error) {
+                                  console.error('Failed to search patients:', error);
+                                  setPatientSearchResults([]);
+                                } finally {
+                                  setIsSearchingPatients(false);
+                                }
+                              } else {
+                                setPatientSearchResults([]);
+                              }
+                            }}
+                          />
+                        </div>
+                        
+                        {/* Search Results */}
+                        {patientSearchTerm.length >= 2 && (
+                          <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                            {isSearchingPatients ? (
+                              <div className="p-4 text-center text-sm text-gray-500">Searching...</div>
+                            ) : patientSearchResults.length > 0 ? (
+                              <div className="divide-y">
+                                {patientSearchResults.map((patient) => (
+                                  <div
+                                    key={patient.id}
+                                    className="p-3 hover:bg-blue-50 cursor-pointer transition-colors"
+                                    onClick={() => {
+                                      setPatient(patient);
+                                      setCustomer({
+                                        name: patient.name,
+                                        phone: patient.phone || '',
+                                        email: patient.email || '',
+                                        address: patient.address || '',
+                                        type: 'registered'
+                                      });
+                                      setPatientSearchTerm('');
+                                      setPatientSearchResults([]);
+                                    }}
+                                  >
+                                    <div className="font-medium text-gray-900">{patient.name}</div>
+                                    <div className="text-sm text-gray-600">
+                                      {patient.phone && <span>{patient.phone}</span>}
+                                      {patient.patient_id && <span className="ml-2">ID: {patient.patient_id}</span>}
+                                    </div>
+                                    {patient.email && (
+                                      <div className="text-xs text-gray-500">{patient.email}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-4 text-center text-sm text-gray-500">No customers found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Divider */}
+                      <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-white px-2 text-gray-500">Or Add New Customer</span>
+                        </div>
+                      </div>
+
+                      {/* Customer Type Selection */}
                       <div>
                         <Label>Customer Type</Label>
                         <Select 
                           value={customer.type} 
-                          onValueChange={(v: any) => setCustomer({...customer, type: v})}
+                          onValueChange={(v: any) => {
+                            setCustomer({...customer, type: v});
+                            if (v === 'walk-in') {
+                              setCustomer({...customer, name: 'Walk-in Customer', type: v});
+                              setPatient(null);
+                            }
+                          }}
                         >
                           <SelectTrigger className="mt-2">
                             <SelectValue />
@@ -2054,79 +2312,71 @@ export function AdvancedPOS() {
                           </SelectContent>
                         </Select>
                       </div>
-                      {customer.type === 'registered' && (
-                        <div>
-                          <Label>Search Patient</Label>
-                          <Input 
-                            className="mt-2" 
-                            placeholder="Search by name or phone..."
-                            onChange={async (e) => {
-                              const searchTerm = e.target.value;
-                              if (searchTerm.length >= 2) {
-                                try {
-                                  const patients = await api.getPatients({ search: searchTerm });
-                                  if (patients.length > 0) {
-                                    const selectedPatient = patients[0];
-                                    setPatient(selectedPatient);
-                                    setCustomer({
-                                      name: selectedPatient.name,
-                                      phone: selectedPatient.phone,
-                                      email: selectedPatient.email,
-                                      address: selectedPatient.address,
-                                      type: 'registered'
-                                    });
-                                  }
-                                } catch (error) {
-                                  console.error('Failed to search patients:', error);
-                                }
-                              }
-                            }}
-                          />
-                        </div>
+
+                      {/* Customer Details Form */}
+                      {customer.type !== 'walk-in' && (
+                        <>
+                          {patient && customer.type === 'registered' && (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="text-sm font-medium text-blue-900">Selected Patient</div>
+                              <div className="text-sm text-blue-700">{patient.name} • {patient.patient_id}</div>
+                            </div>
+                          )}
+                          
+                          <div>
+                            <Label>Name {customer.type === 'registered' && patient ? '(from patient record)' : '*'}</Label>
+                            <Input 
+                              className="mt-2" 
+                              placeholder="Enter customer name" 
+                              value={customer.name}
+                              onChange={(e) => setCustomer({...customer, name: e.target.value})}
+                              disabled={customer.type === 'registered' && patient !== null}
+                            />
+                          </div>
+                          <div>
+                            <Label>Phone Number {customer.type === 'registered' && patient ? '(from patient record)' : '*'}</Label>
+                            <Input 
+                              className="mt-2" 
+                              placeholder="+92-XXX-XXXXXXX" 
+                              value={customer.phone}
+                              onChange={(e) => setCustomer({...customer, phone: e.target.value})}
+                              disabled={customer.type === 'registered' && patient !== null}
+                            />
+                          </div>
+                          <div>
+                            <Label>Email (Optional)</Label>
+                            <Input 
+                              type="email" 
+                              className="mt-2" 
+                              placeholder="customer@email.com" 
+                              value={customer.email || ''}
+                              onChange={(e) => setCustomer({...customer, email: e.target.value})}
+                              disabled={customer.type === 'registered' && patient !== null}
+                            />
+                          </div>
+                          <div>
+                            <Label>Address (Optional)</Label>
+                            <Input 
+                              className="mt-2" 
+                              placeholder="Address" 
+                              value={customer.address || ''}
+                              onChange={(e) => setCustomer({...customer, address: e.target.value})}
+                              disabled={customer.type === 'registered' && patient !== null}
+                            />
+                          </div>
+                        </>
                       )}
-                      <div>
-                        <Label>Name</Label>
-                        <Input 
-                          className="mt-2" 
-                          placeholder="Enter customer name" 
-                          value={customer.name}
-                          onChange={(e) => setCustomer({...customer, name: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <Label>Phone Number</Label>
-                        <Input 
-                          className="mt-2" 
-                          placeholder="+92-XXX-XXXXXXX" 
-                          value={customer.phone}
-                          onChange={(e) => setCustomer({...customer, phone: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <Label>Email (Optional)</Label>
-                        <Input 
-                          type="email" 
-                          className="mt-2" 
-                          placeholder="customer@email.com" 
-                          value={customer.email || ''}
-                          onChange={(e) => setCustomer({...customer, email: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <Label>Address (Optional)</Label>
-                        <Input 
-                          className="mt-2" 
-                          placeholder="Address" 
-                          value={customer.address || ''}
-                          onChange={(e) => setCustomer({...customer, address: e.target.value})}
-                        />
-                      </div>
+
                       <Button 
                         className="w-full !bg-green-600 hover:!bg-green-700 !text-white !border-green-600 border-2 font-semibold shadow-md" 
-                        onClick={() => setIsCustomerDialogOpen(false)}
+                        onClick={() => {
+                          setIsCustomerDialogOpen(false);
+                          setPatientSearchTerm('');
+                          setPatientSearchResults([]);
+                        }}
                         style={{ backgroundColor: '#16a34a', color: 'white' }}
                       >
-                        Save Customer
+                        {customer.type === 'walk-in' ? 'Continue with Walk-in Customer' : 'Save Customer'}
                       </Button>
                     </div>
                   </DialogContent>
@@ -2309,8 +2559,8 @@ export function AdvancedPOS() {
             </CardContent>
           </Card>
 
-          {/* Prescription */}
-          {cart.some(item => item.medicine.requiresPrescription) && (
+          {/* Prescription - Only show when cart contains items requiring prescription */}
+          {cart.length > 0 && cart.some(item => item.medicine.requiresPrescription === true) && (
             <Card className="border-0 shadow-sm border-l-4 border-l-red-500">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -2322,7 +2572,11 @@ export function AdvancedPOS() {
                   value={prescriptionNumber}
                   onChange={(e) => setPrescriptionNumber(e.target.value)}
                   className="h-9"
+                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  One or more items in your cart require a valid prescription
+                </p>
               </CardContent>
             </Card>
           )}
@@ -2354,7 +2608,7 @@ export function AdvancedPOS() {
               </div>
 
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Tax (14%):</span>
+                <span className="text-gray-600">Tax ({defaultGstRate}%):</span>
                 <span className="font-medium">PKR {tax.toFixed(2)}</span>
               </div>
 

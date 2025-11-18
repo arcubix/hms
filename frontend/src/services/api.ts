@@ -1246,6 +1246,69 @@ class ApiService {
     return data.data || [];
   }
 
+  // Report methods
+  async getDailySalesReport(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/reports/daily-sales?${queryString}` : '/api/pharmacy/reports/daily-sales';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: DailySalesReport[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getPaymentMethodReport(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/reports/payment-method?${queryString}` : '/api/pharmacy/reports/payment-method';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: PaymentMethodBreakdown[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getCashierPerformanceReport(startDate?: string, endDate?: string, cashierId?: number) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (cashierId) params.append('cashier_id', cashierId.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/reports/cashier-performance?${queryString}` : '/api/pharmacy/reports/cashier-performance';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: CashierPerformance[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getShiftSummaryReport(startDate?: string, endDate?: string, shiftId?: number) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (shiftId) params.append('shift_id', shiftId.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/reports/shift-summary?${queryString}` : '/api/pharmacy/reports/shift-summary';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: ShiftSummary[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
   async voidSale(saleId: number, voidData: { void_reason: string; void_type?: string; restore_stock?: boolean; notes?: string }) {
     const data = await this.request<{
       success: boolean;
@@ -1849,6 +1912,149 @@ class ApiService {
     });
     return data.data;
   }
+
+  // POS Settings
+  async getPOSSettings(category?: string) {
+    const endpoint = category 
+      ? `/api/pharmacy/pos-settings/category/${category}`
+      : '/api/pharmacy/pos-settings';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(endpoint);
+    return data.data || {};
+  }
+
+  async updatePOSSettings(settings: Record<string, any>) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        message: string;
+        updated_count: number;
+      };
+      message: string;
+    }>('/api/pharmacy/pos-settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    return data.data;
+  }
+
+  async updatePOSSetting(key: string, value: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        message: string;
+        setting: any;
+      };
+      message: string;
+    }>(`/api/pharmacy/pos-settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+    return data.data;
+  }
+
+  async resetPOSSettings() {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        message: string;
+        updated_count: number;
+      };
+      message: string;
+    }>('/api/pharmacy/pos-settings/reset', {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  // GST Rates
+  async getGSTRates(filters?: { active_only?: boolean; search?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.active_only) params.append('active_only', '1');
+    if (filters?.search) params.append('search', filters.search);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/gst-rates?${queryString}` : '/api/pharmacy/gst-rates';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getActiveGSTRates() {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate[];
+    }>('/api/pharmacy/gst-rates/active');
+    return data.data || [];
+  }
+
+  async getDefaultGSTRate() {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate;
+    }>('/api/pharmacy/gst-rates/default');
+    return data.data;
+  }
+
+  async getGSTRate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate;
+    }>(`/api/pharmacy/gst-rates/${id}`);
+    return data.data;
+  }
+
+  async createGSTRate(gstRateData: CreateGSTRateData) {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate;
+      message: string;
+    }>('/api/pharmacy/gst-rates', {
+      method: 'POST',
+      body: JSON.stringify(gstRateData),
+    });
+    return data.data;
+  }
+
+  async updateGSTRate(id: number, gstRateData: Partial<CreateGSTRateData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate;
+      message: string;
+    }>(`/api/pharmacy/gst-rates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(gstRateData),
+    });
+    return data.data;
+  }
+
+  async deleteGSTRate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: { id: number };
+      message: string;
+    }>(`/api/pharmacy/gst-rates/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async setDefaultGSTRate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: GSTRate;
+      message: string;
+    }>(`/api/pharmacy/gst-rates/${id}/set-default`, {
+      method: 'PUT',
+    });
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -2148,6 +2354,7 @@ export interface Medicine {
   strength?: string;
   description?: string;
   status: 'Active' | 'Inactive' | 'Discontinued';
+  requires_prescription?: boolean | number;
   created_at: string;
   updated_at: string;
 }
@@ -2671,6 +2878,55 @@ export interface TopSellingMedicine {
   total_revenue: number;
 }
 
+export interface DailySalesReport {
+  sale_day: string;
+  transaction_count: number;
+  daily_revenue: number;
+  daily_subtotal: number;
+  daily_discount: number;
+  daily_tax: number;
+  avg_transaction_value: number;
+}
+
+export interface PaymentMethodBreakdown {
+  payment_method: string;
+  transaction_count: number;
+  total_amount: number;
+  avg_amount: number;
+  percentage: number;
+}
+
+export interface CashierPerformance {
+  cashier_id: number;
+  cashier_name: string;
+  sales_count: number;
+  total_revenue: number;
+  avg_transaction_value: number;
+  min_transaction: number;
+  max_transaction: number;
+}
+
+export interface ShiftSummary {
+  shift_id: number;
+  shift_number: string;
+  start_time: string;
+  end_time?: string;
+  status: string;
+  total_sales?: number;
+  total_revenue?: number;
+  cash_sales?: number;
+  card_sales?: number;
+  other_sales?: number;
+  opening_cash?: number;
+  closing_cash?: number;
+  expected_cash?: number;
+  actual_cash?: number;
+  difference?: number;
+  cashier_name?: string;
+  drawer_number?: string;
+  location?: string;
+}
+
 export interface Refund {
   id: number;
   refund_number: string;
@@ -2833,6 +3089,28 @@ export interface CreateBarcodeData {
   barcode: string;
   barcode_type?: string;
   is_primary?: boolean;
+}
+
+export interface GSTRate {
+  id: number;
+  rate_name: string;
+  rate_percentage: number;
+  category?: string;
+  description?: string;
+  is_active: boolean;
+  is_default: boolean;
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateGSTRateData {
+  rate_name: string;
+  rate_percentage: number;
+  category?: string;
+  description?: string;
+  is_active?: boolean;
+  is_default?: boolean;
 }
 
 export const api = new ApiService();

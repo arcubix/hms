@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Textarea } from '../ui/textarea';
+import { Checkbox } from '../ui/checkbox';
 import { 
   Package, 
   Plus, 
@@ -29,16 +30,26 @@ import {
   XCircle,
   Clock,
   TrendingDown,
-  MapPin
+  MapPin,
+  FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, PharmacyStock, Medicine } from '../../services/api';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from '../ui/pagination';
 
 interface StockManagementProps {
-  defaultTab?: 'all' | 'expiring' | 'low-stock';
+  defaultTab?: 'items' | 'expired' | 'low-stock';
 }
 
-export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
+export function StockManagement({ defaultTab = 'items' }: StockManagementProps) {
   const [stock, setStock] = useState<PharmacyStock[]>([]);
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +62,8 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
   const [expiringStock, setExpiringStock] = useState<PharmacyStock[]>([]);
   const [lowStockAlerts, setLowStockAlerts] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -63,7 +76,8 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
     selling_price: '',
     location: '',
     supplier_id: '',
-    notes: ''
+    notes: '',
+    requires_prescription: false
   });
 
   useEffect(() => {
@@ -78,7 +92,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'expiring') {
+    if (activeTab === 'expired') {
       loadExpiringStock();
     } else if (activeTab === 'low-stock') {
       loadLowStockAlerts();
@@ -86,6 +100,23 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
       loadStock();
     }
   }, [activeTab]);
+
+  // Reload stock when search term or category changes (only for items tab)
+  // Debounce search to avoid too many API calls
+  useEffect(() => {
+    if (activeTab !== 'items') {
+      return; // Only search when on items tab
+    }
+    
+    // Reset to page 1 when search or category changes
+    setCurrentPage(1);
+    
+    const timer = setTimeout(() => {
+      loadStock();
+    }, 500); // Wait 500ms after user stops typing
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm, selectedCategory, activeTab]);
 
   const loadStock = async () => {
     try {
@@ -136,6 +167,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
         return;
       }
 
+      // Create stock
       await api.createStock({
         medicine_id: parseInt(formData.medicine_id),
         batch_number: formData.batch_number,
@@ -148,6 +180,16 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : undefined,
         notes: formData.notes || undefined
       });
+
+      // Update medicine's requires_prescription if changed
+      try {
+        await api.updateMedicine(formData.medicine_id, {
+          requires_prescription: formData.requires_prescription ? 1 : 0
+        });
+      } catch (error) {
+        console.error('Failed to update medicine requires_prescription:', error);
+        // Don't fail the whole operation if medicine update fails
+      }
 
       toast.success('Stock added successfully');
       setShowAddDialog(false);
@@ -164,6 +206,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
     if (!selectedStock) return;
 
     try {
+      // Update stock
       await api.updateStock(selectedStock.id, {
         batch_number: formData.batch_number,
         manufacture_date: formData.manufacture_date || undefined,
@@ -174,6 +217,16 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
         location: formData.location || undefined,
         notes: formData.notes || undefined
       });
+
+      // Update medicine's requires_prescription if changed
+      try {
+        await api.updateMedicine(formData.medicine_id, {
+          requires_prescription: formData.requires_prescription ? 1 : 0
+        });
+      } catch (error) {
+        console.error('Failed to update medicine requires_prescription:', error);
+        // Don't fail the whole operation if medicine update fails
+      }
 
       toast.success('Stock updated successfully');
       setShowEditDialog(false);
@@ -196,12 +249,23 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
       selling_price: '',
       location: '',
       supplier_id: '',
-      notes: ''
+      notes: '',
+      requires_prescription: false
     });
   };
 
-  const openEditDialog = (stockItem: PharmacyStock) => {
+  const openEditDialog = async (stockItem: PharmacyStock) => {
     setSelectedStock(stockItem);
+    
+    // Fetch medicine data to get requires_prescription
+    let requiresPrescription = false;
+    try {
+      const medicine = await api.getMedicine(stockItem.medicine_id.toString());
+      requiresPrescription = medicine.requires_prescription === true || medicine.requires_prescription === 1 || medicine.requires_prescription === '1';
+    } catch (error) {
+      console.error('Failed to load medicine data:', error);
+    }
+    
     setFormData({
       medicine_id: stockItem.medicine_id.toString(),
       batch_number: stockItem.batch_number,
@@ -212,7 +276,8 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
       selling_price: stockItem.selling_price.toString(),
       location: stockItem.location || '',
       supplier_id: stockItem.supplier_id?.toString() || '',
-      notes: stockItem.notes || ''
+      notes: stockItem.notes || '',
+      requires_prescription: requiresPrescription
     });
     setShowEditDialog(true);
   };
@@ -242,6 +307,70 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
 
   const categories = Array.from(new Set(medicines.map(m => m.category).filter(Boolean)));
 
+  // Pagination calculations
+  const totalItems = stock.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedStock = stock.slice(startIndex, endIndex);
+
+  // Reset to page 1 when items per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of table
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 7;
+    
+    if (totalPages <= maxVisible) {
+      // Show all pages if total pages is less than max visible
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+      return pages;
+    }
+    
+    // Always show first page
+    pages.push(1);
+    
+    if (currentPage <= 4) {
+      // Near the start: show 1, 2, 3, 4, 5, ..., last
+      for (let i = 2; i <= Math.min(5, totalPages - 1); i++) {
+        pages.push(i);
+      }
+      if (totalPages > 6) {
+        pages.push('ellipsis-end');
+      }
+    } else if (currentPage >= totalPages - 3) {
+      // Near the end: show 1, ..., last-4, last-3, last-2, last-1, last
+      if (totalPages > 6) {
+        pages.push('ellipsis-start');
+      }
+      for (let i = Math.max(2, totalPages - 4); i < totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // In the middle: show 1, ..., current-1, current, current+1, ..., last
+      pages.push('ellipsis-start');
+      pages.push(currentPage - 1, currentPage, currentPage + 1);
+      pages.push('ellipsis-end');
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -263,12 +392,21 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all">All Stock</TabsTrigger>
-          <TabsTrigger value="expiring">Expiring Soon</TabsTrigger>
-          <TabsTrigger value="low-stock">Low Stock Alerts</TabsTrigger>
+          <TabsTrigger value="items">
+            <Package className="w-4 h-4 mr-2" />
+            Inventory Items
+          </TabsTrigger>
+          <TabsTrigger value="low-stock">
+            <AlertTriangle className="w-4 h-4 mr-2" />
+            Low Stock
+          </TabsTrigger>
+          <TabsTrigger value="expired">
+            <Clock className="w-4 h-4 mr-2" />
+            Expired Items
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all" className="space-y-4">
+        <TabsContent value="items" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -278,6 +416,11 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                     placeholder="Search stock..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        loadStock();
+                      }
+                    }}
                     className="w-64"
                   />
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -289,6 +432,17 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                       {categories.map(cat => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={itemsPerPage.toString()} onValueChange={(v) => setItemsPerPage(parseInt(v))}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="25">25 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" size="icon" onClick={loadStock}>
@@ -326,7 +480,7 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    stock.map((item) => {
+                    paginatedStock.map((item) => {
                       const daysUntilExpiry = getDaysUntilExpiry(item.expiry_date);
                       return (
                         <TableRow key={item.id}>
@@ -373,15 +527,76 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                   )}
                 </TableBody>
               </Table>
+              
+              {/* Pagination */}
+              {totalItems > 0 && (
+                <div className="flex items-center justify-between px-4 py-4 border-t">
+                  <div className="text-sm text-gray-600">
+                    Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of {totalItems} items
+                  </div>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage > 1) {
+                              handlePageChange(currentPage - 1);
+                            }
+                          }}
+                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                      {getPageNumbers().map((page, index) => {
+                        if (page === 'ellipsis-start' || page === 'ellipsis-end') {
+                          return (
+                            <PaginationItem key={`ellipsis-${index}`}>
+                              <PaginationEllipsis />
+                            </PaginationItem>
+                          );
+                        }
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePageChange(page as number);
+                              }}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage < totalPages) {
+                              handlePageChange(currentPage + 1);
+                            }
+                          }}
+                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="expiring" className="space-y-4">
+        <TabsContent value="expired" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Expiring Stock</CardTitle>
+                <CardTitle>Expired Items</CardTitle>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -517,7 +732,20 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Medicine *</Label>
-              <Select value={formData.medicine_id} onValueChange={(v) => setFormData({...formData, medicine_id: v})}>
+              <Select 
+                value={formData.medicine_id} 
+                onValueChange={async (v) => {
+                  setFormData({...formData, medicine_id: v});
+                  // Load medicine's requires_prescription value
+                  try {
+                    const medicine = await api.getMedicine(v);
+                    const requiresPrescription = medicine.requires_prescription === true || medicine.requires_prescription === 1 || medicine.requires_prescription === '1';
+                    setFormData(prev => ({...prev, medicine_id: v, requires_prescription: requiresPrescription}));
+                  } catch (error) {
+                    console.error('Failed to load medicine data:', error);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select medicine" />
                 </SelectTrigger>
@@ -603,6 +831,22 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                 placeholder="Additional notes..."
               />
             </div>
+            <div className="space-y-2 col-span-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="requires_prescription_add"
+                  checked={formData.requires_prescription}
+                  onCheckedChange={(checked) => setFormData({...formData, requires_prescription: checked === true})}
+                />
+                <Label htmlFor="requires_prescription_add" className="flex items-center gap-2 cursor-pointer">
+                  <FileText className="w-4 h-4 text-red-600" />
+                  <span>Requires Prescription</span>
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500 ml-6">
+                Check this if this medicine requires a valid prescription to be sold
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
@@ -685,6 +929,22 @@ export function StockManagement({ defaultTab = 'all' }: StockManagementProps) {
                 value={formData.notes}
                 onChange={(e) => setFormData({...formData, notes: e.target.value})}
               />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="requires_prescription_edit"
+                  checked={formData.requires_prescription}
+                  onCheckedChange={(checked) => setFormData({...formData, requires_prescription: checked === true})}
+                />
+                <Label htmlFor="requires_prescription_edit" className="flex items-center gap-2 cursor-pointer">
+                  <FileText className="w-4 h-4 text-red-600" />
+                  <span>Requires Prescription</span>
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500 ml-6">
+                Check this if this medicine requires a valid prescription to be sold
+              </p>
             </div>
           </div>
           <DialogFooter>

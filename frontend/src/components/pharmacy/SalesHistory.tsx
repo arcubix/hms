@@ -305,10 +305,10 @@ export function SalesHistory() {
                   <h3 className="font-medium mb-2">Payment Information</h3>
                   <p><strong>Method:</strong> {invoiceData.payment_method}</p>
                   {invoiceData.amount_received && (
-                    <p><strong>Amount Received:</strong> Rs. {invoiceData.amount_received.toFixed(2)}</p>
+                    <p><strong>Amount Received:</strong> Rs. {(Number(invoiceData.amount_received) || 0).toFixed(2)}</p>
                   )}
                   {invoiceData.change_amount > 0 && (
-                    <p><strong>Change:</strong> Rs. {invoiceData.change_amount.toFixed(2)}</p>
+                    <p><strong>Change:</strong> Rs. {(Number(invoiceData.change_amount) || 0).toFixed(2)}</p>
                   )}
                   <p><strong>Cashier:</strong> {invoiceData.cashier}</p>
                 </div>

@@ -58,6 +58,8 @@ import { StockManagement } from '../pharmacy/StockManagement';
 import { PurchaseOrders } from '../pharmacy/PurchaseOrders';
 import { SalesHistory } from '../pharmacy/SalesHistory';
 import { RefundProcessing } from '../pharmacy/RefundProcessing';
+import { POSSettings } from '../pharmacy/POSSettings';
+import { GSTRatesManagement } from '../pharmacy/GSTRatesManagement';
 
 interface Medicine {
   id: string;
@@ -2119,6 +2121,10 @@ export function PharmacyManagement() {
         return <StockMovements />;
       case 'stock-management':
         return <StockManagement />;
+      case 'pos-settings':
+        return <POSSettings />;
+      case 'gst-rates':
+        return <GSTRatesManagement />;
       default:
         return renderDashboard();
     }
@@ -2149,7 +2155,7 @@ export function PharmacyManagement() {
 
       <div className="flex">
         {/* Sidebar Navigation */}
-        <div className="w-72 bg-slate-800 text-white min-h-screen p-4">
+        <div className="w-72 bg-slate-800 text-white h-screen sticky top-0 p-4 overflow-y-auto">
           <div className="space-y-6">
             {/* Pharmacy Section */}
             <div>
@@ -2282,6 +2288,26 @@ export function PharmacyManagement() {
                   label="Stock Movements"
                   active={activeSection === 'stock-movements'}
                   onClick={() => setActiveSection('stock-movements')}
+                />
+              </nav>
+            </div>
+
+            {/* Settings Section */}
+            <div>
+              <div className="flex items-center gap-2 px-3 py-2 mb-2">
+                <Settings className="w-5 h-5" />
+                <h3 className="font-semibold">Settings</h3>
+              </div>
+              <nav className="space-y-1">
+                <NavItem
+                  label="POS Settings"
+                  active={activeSection === 'pos-settings'}
+                  onClick={() => setActiveSection('pos-settings')}
+                />
+                <NavItem
+                  label="GST Rates"
+                  active={activeSection === 'gst-rates'}
+                  onClick={() => setActiveSection('gst-rates')}
                 />
               </nav>
             </div>

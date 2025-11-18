@@ -9,6 +9,7 @@ class Sale_model extends CI_Model {
         $this->load->model('Medicine_stock_model');
         $this->load->model('Stock_movement_model');
         $this->load->model('Sale_payment_model');
+        $this->load->model('Gst_rate_model');
     }
 
     /**
@@ -183,7 +184,22 @@ class Sale_model extends CI_Model {
             $data['discount_percentage'] = $global_discount;
             
             $taxable_amount = $subtotal - $discount_amount;
-            $tax_rate = $data['tax_rate'] ?? 14.00;
+            
+            // Get tax rate from data, or get default GST rate from database, or fallback to 14%
+            if (isset($data['tax_rate']) && $data['tax_rate'] > 0) {
+                $tax_rate = $data['tax_rate'];
+            } else {
+                // Try to get default GST rate from database
+                $default_gst_rate = $this->Gst_rate_model->get_default();
+                if ($default_gst_rate && isset($default_gst_rate['rate_percentage'])) {
+                    $tax_rate = $default_gst_rate['rate_percentage'];
+                } else {
+                    // Fallback to 14% if no default rate found
+                    $tax_rate = 14.00;
+                }
+            }
+            
+            $data['tax_rate'] = $tax_rate;
             $data['tax_amount'] = ($taxable_amount * $tax_rate) / 100;
             $data['total_amount'] = $taxable_amount + $data['tax_amount'];
             
@@ -365,6 +381,114 @@ class Sale_model extends CI_Model {
         $this->db->group_by('m.id, m.name, m.generic_name');
         $this->db->order_by('total_quantity_sold', 'DESC');
         $this->db->limit($limit);
+        
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Get daily sales report
+     */
+    public function get_daily_sales_report($start_date = null, $end_date = null) {
+        $this->db->select('
+            DATE(sale_date) as sale_day,
+            COUNT(*) as transaction_count,
+            SUM(total_amount) as daily_revenue,
+            SUM(subtotal) as daily_subtotal,
+            SUM(discount_amount) as daily_discount,
+            SUM(tax_amount) as daily_tax,
+            AVG(total_amount) as avg_transaction_value
+        ');
+        $this->db->from('sales');
+        $this->db->where('status', 'Completed');
+        
+        if ($start_date) {
+            $this->db->where('DATE(sale_date) >=', $start_date);
+        }
+        
+        if ($end_date) {
+            $this->db->where('DATE(sale_date) <=', $end_date);
+        }
+        
+        $this->db->group_by('DATE(sale_date)');
+        $this->db->order_by('sale_day', 'ASC');
+        
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Get payment method breakdown
+     */
+    public function get_payment_method_breakdown($start_date = null, $end_date = null) {
+        $this->db->select('
+            payment_method,
+            COUNT(*) as transaction_count,
+            SUM(total_amount) as total_amount,
+            AVG(total_amount) as avg_amount
+        ');
+        $this->db->from('sales');
+        $this->db->where('status', 'Completed');
+        
+        if ($start_date) {
+            $this->db->where('DATE(sale_date) >=', $start_date);
+        }
+        
+        if ($end_date) {
+            $this->db->where('DATE(sale_date) <=', $end_date);
+        }
+        
+        $this->db->group_by('payment_method');
+        $this->db->order_by('total_amount', 'DESC');
+        
+        $query = $this->db->get();
+        $results = $query->result_array();
+        
+        // Calculate total for percentage calculation
+        $total_revenue = 0;
+        foreach ($results as $row) {
+            $total_revenue += (float)$row['total_amount'];
+        }
+        
+        // Add percentage to each result
+        foreach ($results as &$row) {
+            $row['percentage'] = $total_revenue > 0 ? round((($row['total_amount'] / $total_revenue) * 100), 2) : 0;
+        }
+        
+        return $results;
+    }
+
+    /**
+     * Get cashier performance report
+     */
+    public function get_cashier_performance($start_date = null, $end_date = null, $cashier_id = null) {
+        $this->db->select('
+            s.cashier_id,
+            u.name as cashier_name,
+            COUNT(*) as sales_count,
+            SUM(s.total_amount) as total_revenue,
+            AVG(s.total_amount) as avg_transaction_value,
+            MIN(s.total_amount) as min_transaction,
+            MAX(s.total_amount) as max_transaction
+        ');
+        $this->db->from('sales s');
+        $this->db->join('users u', 's.cashier_id = u.id', 'left');
+        $this->db->where('s.status', 'Completed');
+        
+        if ($cashier_id) {
+            $this->db->where('s.cashier_id', $cashier_id);
+        }
+        
+        if ($start_date) {
+            $this->db->where('DATE(s.sale_date) >=', $start_date);
+        }
+        
+        if ($end_date) {
+            $this->db->where('DATE(s.sale_date) <=', $end_date);
+        }
+        
+        $this->db->group_by('s.cashier_id, u.name');
+        $this->db->order_by('total_revenue', 'DESC');
         
         $query = $this->db->get();
         return $query->result_array();

@@ -24,7 +24,10 @@ import {
   Edit,
   Upload,
   FileText,
-  ShoppingBag
+  ShoppingBag,
+  Settings,
+  Percent,
+  BarChart3
 } from 'lucide-react';
 import { User } from '../../App';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -37,9 +40,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
 import { PurchaseOrders } from '../pharmacy/PurchaseOrders';
 import { StockManagement } from '../pharmacy/StockManagement';
-import { SalesHistory } from '../pharmacy/SalesHistory';
-import { RefundProcessing } from '../pharmacy/RefundProcessing';
+import { Transactions } from '../pharmacy/Transactions';
 import { ShiftManagement } from '../pharmacy/ShiftManagement';
+import { POSSettings } from '../pharmacy/POSSettings';
+import { GSTRatesManagement } from '../pharmacy/GSTRatesManagement';
+import { POSReports } from '../pharmacy/POSReports';
 import { api, SalesSummary, LowStockAlert, PurchaseOrder, ExpiringStock } from '../../services/api';
 import { toast } from 'sonner';
 
@@ -54,11 +59,10 @@ const navigationItems: NavigationItem[] = [
   { icon: <Calendar className="w-5 h-5" />, label: 'Shift Management', id: 'shifts' },
   { icon: <ShoppingCart className="w-5 h-5" />, label: 'Prescriptions', id: 'prescriptions', badge: '8' },
   { icon: <Package className="w-5 h-5" />, label: 'Inventory', id: 'inventory' },
-  { icon: <Receipt className="w-5 h-5" />, label: 'Sales History', id: 'sales' },
-  { icon: <RotateCcw className="w-5 h-5" />, label: 'Returns', id: 'refunds' },
-  { icon: <AlertTriangle className="w-5 h-5" />, label: 'Low Stock', id: 'lowstock', badge: '5' },
-  { icon: <Clock className="w-5 h-5" />, label: 'Expired Items', id: 'expired' },
-  { icon: <CheckCircle className="w-5 h-5" />, label: 'Orders', id: 'orders' }
+  { icon: <Receipt className="w-5 h-5" />, label: 'Transactions', id: 'transactions' },
+  { icon: <BarChart3 className="w-5 h-5" />, label: 'POS Reports', id: 'reports' },
+  { icon: <CheckCircle className="w-5 h-5" />, label: 'Orders', id: 'orders' },
+  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
 ];
 
 const pendingPrescriptions = [
@@ -143,7 +147,8 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
     min_stock: '',
     max_stock: '',
     requires_prescription: false,
-    status: 'Active'
+    status: 'Active',
+    image_url: ''
   });
   
   // Form state for Stock via Order
@@ -300,7 +305,8 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
       min_stock: '',
       max_stock: '',
       requires_prescription: false,
-      status: 'Active'
+      status: 'Active',
+      image_url: ''
     });
     setShowAddItemDialog(true);
   };
@@ -317,7 +323,8 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
         min_stock: medicine.min_stock?.toString() || '',
         max_stock: medicine.max_stock?.toString() || '',
         requires_prescription: medicine.requires_prescription || false,
-        status: medicine.status || 'Active'
+        status: medicine.status || 'Active',
+        image_url: (medicine as any).image_url || (medicine as any).image || ''
       });
       setSelectedItem(item);
       setShowEditItemDialog(true);
@@ -331,7 +338,7 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
         return;
       }
 
-      const medicineData = {
+      const medicineData: any = {
         name: itemFormData.name,
         generic_name: itemFormData.generic_name,
         category: itemFormData.category,
@@ -342,6 +349,11 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
         requires_prescription: itemFormData.requires_prescription ? 1 : 0,
         status: itemFormData.status
       };
+      
+      // Add image_url if provided
+      if (itemFormData.image_url) {
+        medicineData.image_url = itemFormData.image_url;
+      }
 
       if (selectedItem) {
         // Update existing medicine
@@ -530,19 +542,40 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
       case 'orders':
         return <PurchaseOrders />;
       
-      case 'lowstock':
-        return <StockManagement defaultTab="low-stock" />;
+      case 'transactions':
+        return <Transactions />;
       
-      case 'expired':
-        return <StockManagement defaultTab="expiring" />;
+      case 'reports':
+        return <POSReports />;
       
-      case 'sales':
-        return <SalesHistory />;
-      
-      case 'refunds':
-        return <RefundProcessing />;
+      case 'settings':
+        return (
+          <div className="p-6 space-y-6">
+            <Tabs defaultValue="pos-settings" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="pos-settings" className="flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  POS Settings
+                </TabsTrigger>
+                <TabsTrigger value="gst-rates" className="flex items-center gap-2">
+                  <Percent className="w-4 h-4" />
+                  GST Rates
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="pos-settings">
+                <POSSettings />
+              </TabsContent>
+              <TabsContent value="gst-rates">
+                <GSTRatesManagement />
+              </TabsContent>
+            </Tabs>
+          </div>
+        );
       
       case 'inventory':
+        return <StockManagement />;
+      
+      case 'inventory-old':
         return (
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
@@ -694,6 +727,52 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
                   <DialogDescription>Add a new medicine to the inventory</DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 py-4">
+                  {/* Image Preview/Upload */}
+                  <div className="col-span-2 space-y-2">
+                    <Label>Medicine Image</Label>
+                    <div className="flex items-center gap-4">
+                      {itemFormData.image_url ? (
+                        <div className="relative w-32 h-32 border-2 border-gray-300 rounded-lg overflow-hidden">
+                          <img 
+                            src={itemFormData.image_url} 
+                            alt={itemFormData.name || 'Medicine'} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to placeholder if image fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.src = `https://source.unsplash.com/200x200/?medicine,pill&sig=${itemFormData.name?.charCodeAt(0) || 1}`;
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                          <Pill className="w-8 h-8 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          type="url"
+                          value={itemFormData.image_url}
+                          onChange={(e) => setItemFormData({...itemFormData, image_url: e.target.value})}
+                          placeholder="Enter image URL or leave empty for placeholder"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Generate a random placeholder image from Unsplash
+                            const randomId = Math.floor(Math.random() * 1000);
+                            setItemFormData({...itemFormData, image_url: `https://source.unsplash.com/400x400/?medicine,pill,pharmaceutical&sig=${randomId}`});
+                          }}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Use Placeholder Image
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="space-y-2">
                     <Label>Medicine Name *</Label>
                     <Input
@@ -795,6 +874,52 @@ export function PharmacyDashboard({ user, onLogout }: PharmacyDashboardProps) {
                   <DialogDescription>Update medicine information</DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 py-4">
+                  {/* Image Preview/Upload */}
+                  <div className="col-span-2 space-y-2">
+                    <Label>Medicine Image</Label>
+                    <div className="flex items-center gap-4">
+                      {itemFormData.image_url ? (
+                        <div className="relative w-32 h-32 border-2 border-gray-300 rounded-lg overflow-hidden">
+                          <img 
+                            src={itemFormData.image_url} 
+                            alt={itemFormData.name || 'Medicine'} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to placeholder if image fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.src = `https://source.unsplash.com/200x200/?medicine,pill&sig=${itemFormData.name?.charCodeAt(0) || 1}`;
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                          <Pill className="w-8 h-8 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          type="url"
+                          value={itemFormData.image_url}
+                          onChange={(e) => setItemFormData({...itemFormData, image_url: e.target.value})}
+                          placeholder="Enter image URL or leave empty for placeholder"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Generate a random placeholder image from Unsplash
+                            const randomId = Math.floor(Math.random() * 1000);
+                            setItemFormData({...itemFormData, image_url: `https://source.unsplash.com/400x400/?medicine,pill,pharmaceutical&sig=${randomId}`});
+                          }}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Use Placeholder Image
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="space-y-2">
                     <Label>Medicine Name *</Label>
                     <Input

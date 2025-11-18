@@ -214,5 +214,51 @@ class Shift_model extends CI_Model {
         $this->db->trans_rollback();
         return array('success' => false, 'message' => 'Failed to close shift');
     }
+
+    /**
+     * Get shift sales summary report
+     */
+    public function get_shift_sales_summary($start_date = null, $end_date = null, $shift_id = null) {
+        $this->db->select('
+            s.id as shift_id,
+            s.shift_number,
+            s.start_time,
+            s.end_time,
+            s.status,
+            s.total_sales,
+            s.total_revenue,
+            s.cash_sales,
+            s.card_sales,
+            s.other_sales,
+            s.opening_cash,
+            s.closing_cash,
+            s.expected_cash,
+            s.actual_cash,
+            s.difference,
+            u.name as cashier_name,
+            cd.drawer_number,
+            cd.location
+        ');
+        $this->db->from('shifts s');
+        $this->db->join('users u', 's.cashier_id = u.id', 'left');
+        $this->db->join('cash_drawers cd', 's.drawer_id = cd.id', 'left');
+        
+        if ($shift_id) {
+            $this->db->where('s.id', $shift_id);
+        }
+        
+        if ($start_date) {
+            $this->db->where('DATE(s.start_time) >=', $start_date);
+        }
+        
+        if ($end_date) {
+            $this->db->where('DATE(s.start_time) <=', $end_date);
+        }
+        
+        $this->db->order_by('s.start_time', 'DESC');
+        
+        $query = $this->db->get();
+        return $query->result_array();
+    }
 }
 
