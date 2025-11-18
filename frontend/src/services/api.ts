@@ -1,9 +1,12 @@
 // Try without index.php first, fallback to with index.php if needed
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost/hms';
-const API_URL_WITH_INDEX = import.meta.env.VITE_API_URL || 'http://localhost/hms/index.php';
+// @ts-ignore - Vite environment variables
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://0neconnect.com/backendhospital' : 'http://localhost/hms');
+// @ts-ignore - Vite environment variables
+const API_URL_WITH_INDEX = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://0neconnect.com/backendhospital/index.php' : 'http://localhost/hms/index.php');
 
 class ApiService {
   private token: string | null = null;
+  private onUnauthorizedCallback: (() => void) | null = null;
 
   constructor() {
     // Load token from localStorage on initialization
@@ -18,6 +21,20 @@ class ApiService {
   clearToken() {
     this.token = null;
     localStorage.removeItem('hms-token');
+  }
+
+  // Set callback to be called when 401 Unauthorized is detected
+  setOnUnauthorized(callback: () => void) {
+    this.onUnauthorizedCallback = callback;
+  }
+
+  // Clear user data and notify callback
+  private handleUnauthorized() {
+    this.clearToken();
+    localStorage.removeItem('hms-user');
+    if (this.onUnauthorizedCallback) {
+      this.onUnauthorizedCallback();
+    }
   }
 
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -52,6 +69,11 @@ class ApiService {
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         if (!response.ok) {
+          // Handle 401 Unauthorized even for non-JSON responses
+          if (response.status === 401) {
+            this.handleUnauthorized();
+            throw new Error('Session expired. Please login again.');
+          }
           const text = await response.text();
           throw new Error(`HTTP error! status: ${response.status}, message: ${text}`);
         }
@@ -61,6 +83,11 @@ class ApiService {
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle 401 Unauthorized - session expired or invalid token
+        if (response.status === 401) {
+          this.handleUnauthorized();
+          throw new Error('Session expired. Please login again.');
+        }
         throw new Error(data.message || `API Error: ${response.statusText}`);
       }
 
@@ -458,13 +485,6 @@ class ApiService {
     return data.data || [];
   }
 
-  async getMedicine(id: string) {
-    const data = await this.request<{
-      success: boolean;
-      data: Medicine;
-    }>(`/api/medicines/${id}`);
-    return data.data;
-  }
 
   async createMedicine(medicineData: {
     name: string;
@@ -2055,6 +2075,125 @@ class ApiService {
     });
     return data.data;
   }
+
+  // ============================================
+  // USER MANAGEMENT API METHODS
+  // ============================================
+
+  async getUsers(filters?: { search?: string; status?: string; role?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.role) params.append('role', filters.role);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/users?${queryString}` : '/api/users';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: User[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getUser(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: User;
+    }>(`/api/users/${id}`);
+    return data.data;
+  }
+
+  async createUser(userData: UserFormData) {
+    const data = await this.request<{
+      success: boolean;
+      data: User;
+      message: string;
+    }>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+    return data.data;
+  }
+
+  async updateUser(id: string | number, userData: Partial<UserFormData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: User;
+      message: string;
+    }>(`/api/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+    return data.data;
+  }
+
+  async deleteUser(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/users/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getUserPermissions(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>(`/api/users/${id}/permissions`);
+    return data.data || [];
+  }
+
+  async updateUserPermissions(id: string | number, permissions: Record<string, boolean>) {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+      message: string;
+    }>(`/api/users/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions }),
+    });
+    return data.data;
+  }
+
+  async getUserSettings(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: UserSettings;
+    }>(`/api/users/${id}/settings`);
+    return data.data;
+  }
+
+  async updateUserSettings(id: string | number, settings: Partial<UserSettings>) {
+    const data = await this.request<{
+      success: boolean;
+      data: UserSettings;
+      message: string;
+    }>(`/api/users/${id}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    return data.data;
+  }
+
+  async getAvailableRoles() {
+    const data = await this.request<{
+      success: boolean;
+      data: AvailableRole;
+    }>('/api/users/roles');
+    return data.data || {};
+  }
+
+  async getPermissionDefinitions(category?: string) {
+    const params = category ? `?category=${category}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: RolePermission[];
+    }>(`/api/users/permissions/definitions${params}`);
+    return data.data || [];
+  }
 }
 
 export interface Patient {
@@ -3111,6 +3250,136 @@ export interface CreateGSTRateData {
   description?: string;
   is_active?: boolean;
   is_default?: boolean;
+}
+
+// ============================================
+// USER MANAGEMENT INTERFACES
+// ============================================
+
+export interface TimingEntry {
+  day_of_week: 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+  start_time: string;
+  end_time: string;
+  duration: number;
+  is_available: boolean;
+}
+
+export interface FAQEntry {
+  question: string;
+  answer: string;
+}
+
+export interface ShareProcedure {
+  procedure_name: string;
+  share_type: 'percentage' | 'rupees';
+  share_value: number;
+}
+
+export interface UserFormData {
+  name: string;
+  gender: 'Male' | 'Female' | 'Other';
+  phone: string;
+  email: string;
+  password?: string;
+  departments: string[];
+  shift: string;
+  roles: string[];
+  opd_access: boolean;
+  ipd_access: boolean;
+  booking_type: 'Token' | 'Appointment';
+  professional_statement?: string;
+  awards?: string;
+  expertise?: string;
+  registrations?: string;
+  professional_memberships?: string;
+  languages?: string;
+  experience?: string;
+  degree_completion_date?: string;
+  summary?: string;
+  pmdc?: string;
+  qualifications: string[];
+  services: string[];
+  timings: TimingEntry[];
+  faqs: FAQEntry[];
+  share_procedures: ShareProcedure[];
+  follow_up_share_types: string[];
+  // Financial settings
+  consultation_fee?: number;
+  share_price?: number;
+  share_type?: 'Rupees' | 'Percentage';
+  follow_up_charges?: number;
+  follow_up_share_price?: number;
+  follow_up_share_type?: 'percentage' | 'rupees';
+  lab_share_value?: number;
+  lab_share_type?: 'percentage' | 'rupees';
+  radiology_share_value?: number;
+  radiology_share_type?: 'percentage' | 'rupees';
+  instant_booking?: boolean;
+  visit_charges?: boolean;
+  invoice_edit_count?: number;
+}
+
+export interface UserSettings {
+  consultation_fee?: number;
+  follow_up_charges?: number;
+  follow_up_share_price?: number;
+  share_price?: number;
+  share_type: 'Rupees' | 'Percentage';
+  follow_up_share_types: string[];
+  lab_share_value?: number;
+  lab_share_type: 'percentage' | 'rupees';
+  radiology_share_value?: number;
+  radiology_share_type: 'percentage' | 'rupees';
+  instant_booking: boolean;
+  visit_charges: boolean;
+  invoice_edit_count: number;
+}
+
+export interface RolePermission {
+  permission_key: string;
+  permission_name: string;
+  description?: string;
+  category?: string;
+}
+
+export interface RolePermissions {
+  doctor: string[];
+  admin: string[];
+  labManager: string[];
+  labTechnician: string[];
+  radiologyTechnician: string[];
+  radiologyManager: string[];
+}
+
+export interface UserSettingsFormData extends UserSettings {
+  rolePermissions: RolePermissions;
+}
+
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  status: 'active' | 'inactive';
+  role?: string;
+  avatar?: string;
+  roles?: string[];
+  departments?: string[];
+  qualifications?: string[];
+  services?: string[];
+  timings?: TimingEntry[];
+  faqs?: FAQEntry[];
+  share_procedures?: ShareProcedure[];
+  follow_up_share_types?: string[];
+  permissions?: string[];
+  settings?: UserSettings;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AvailableRole {
+  [key: string]: string;
 }
 
 export const api = new ApiService();

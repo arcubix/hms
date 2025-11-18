@@ -51,7 +51,10 @@
     },
     build: {
       target: 'esnext',
-      outDir: 'build',
+      outDir: 'dist',
+      emptyOutDir: true,
+      sourcemap: false,
+      minify: 'esbuild', // Using esbuild (faster, built-in) instead of terser
     },
     server: {
       port: 3000,

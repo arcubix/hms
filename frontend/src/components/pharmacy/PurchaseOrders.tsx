@@ -191,6 +191,14 @@ export function PurchaseOrders() {
     ));
   };
 
+  // Helper function to safely format numbers
+  const formatNumber = (value: number | string | null | undefined, decimals: number = 2): string => {
+    if (value === null || value === undefined) return '0.00';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) return '0.00';
+    return num.toFixed(decimals);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -386,7 +394,7 @@ export function PurchaseOrders() {
             <Card className="border-0 shadow-sm">
               <CardContent className="p-6 text-center">
                 <div className="text-2xl text-blue-600 mb-2">
-                  Rs. {purchaseOrders.reduce((sum, o) => sum + o.total_amount, 0).toLocaleString()}
+                  Rs. {purchaseOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0).toLocaleString()}
                 </div>
                 <div className="text-sm text-gray-600">Total Value</div>
               </CardContent>
@@ -454,8 +462,8 @@ export function PurchaseOrders() {
                             <span className="text-sm text-gray-400">-</span>
                           )}
                       </TableCell>
-                        <TableCell className="text-sm text-gray-600">{order.items?.length || 0}</TableCell>
-                        <TableCell className="text-sm text-gray-900 font-medium">Rs. {order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{order.items?.length || order.items_count || 0}</TableCell>
+                        <TableCell className="text-sm text-gray-900 font-medium">Rs. {formatNumber(order.total_amount, 2)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {getStatusIcon(order.status)}
@@ -510,8 +518,8 @@ export function PurchaseOrders() {
                     </div>
                     {supplier.rating && (
                     <div className="flex items-center gap-1">
-                      {renderStars(supplier.rating)}
-                        <span className="text-sm text-gray-600 ml-1">{supplier.rating.toFixed(1)}</span>
+                      {renderStars(Number(supplier.rating) || 0)}
+                        <span className="text-sm text-gray-600 ml-1">{formatNumber(supplier.rating, 1)}</span>
                     </div>
                     )}
                   </div>
@@ -545,7 +553,7 @@ export function PurchaseOrders() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-600">Credit Limit</p>
-                      <p className="text-sm text-gray-900">Rs. {supplier.credit_limit.toFixed(2)}</p>
+                      <p className="text-sm text-gray-900">Rs. {formatNumber(supplier.credit_limit, 2)}</p>
                     </div>
                   </div>
 

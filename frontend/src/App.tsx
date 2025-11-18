@@ -62,6 +62,16 @@ export default function App() {
         localStorage.removeItem('hms-user');
       }
     }
+
+    // Set up API service to handle 401 errors and redirect to login
+    const setupApiErrorHandling = async () => {
+      const { api } = await import('./services/api');
+      api.setOnUnauthorized(() => {
+        setUser(null);
+        localStorage.removeItem('hms-user');
+      });
+    };
+    setupApiErrorHandling();
   }, []);
 
   // Save user to localStorage when user state changes

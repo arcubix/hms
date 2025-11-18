@@ -194,6 +194,13 @@ $route['api/pharmacy/gst-rates/default'] = 'gst_rates/default_rate';
 $route['api/pharmacy/gst-rates/(:num)'] = 'gst_rates/get/$1';
 $route['api/pharmacy/gst-rates/(:num)/set-default'] = 'gst_rates/set_default/$1';
 
+// User Management Routes
+$route['api/users'] = 'users/index';
+$route['api/users/(:num)'] = 'users/get/$1';
+$route['api/users/(:num)/permissions'] = 'users/permissions/$1';
+$route['api/users/permissions/definitions'] = 'users/permission_definitions';
+$route['api/users/roles'] = 'users/roles';
+
 // Reports
 $route['api/pharmacy/reports/sales-summary'] = 'pharmacy_reports/sales_summary';
 $route['api/pharmacy/reports/daily-sales'] = 'pharmacy_reports/daily_sales';

@@ -36,7 +36,8 @@ class Purchase_order_model extends CI_Model {
      * Get all purchase orders with optional filters
      */
     public function get_all($filters = array()) {
-        $this->db->select('po.*, s.name as supplier_name, s.supplier_code, u.name as created_by_name, a.name as approved_by_name');
+        $this->db->select('po.*, s.name as supplier_name, s.supplier_code, u.name as created_by_name, a.name as approved_by_name, 
+            (SELECT COUNT(*) FROM purchase_order_items poi WHERE poi.purchase_order_id = po.id) as items_count');
         $this->db->from('purchase_orders po');
         $this->db->join('suppliers s', 'po.supplier_id = s.id', 'left');
         $this->db->join('users u', 'po.created_by = u.id', 'left');
@@ -74,7 +75,19 @@ class Purchase_order_model extends CI_Model {
         }
         
         $query = $this->db->get();
-        return $query->result_array();
+        $pos = $query->result_array();
+        
+        // Add items array to each PO
+        foreach ($pos as &$po) {
+            $this->db->select('poi.*, m.name as medicine_name, m.medicine_code, m.generic_name, m.category');
+            $this->db->from('purchase_order_items poi');
+            $this->db->join('medicines m', 'poi.medicine_id = m.id', 'left');
+            $this->db->where('poi.purchase_order_id', $po['id']);
+            $items_query = $this->db->get();
+            $po['items'] = $items_query->result_array();
+        }
+        
+        return $pos;
     }
 
     /**
@@ -112,10 +125,13 @@ class Purchase_order_model extends CI_Model {
             $data['po_number'] = $this->generate_po_number();
         }
         
+        // Store items separately before removing from data
+        $items = !empty($data['items']) && is_array($data['items']) ? $data['items'] : array();
+        
         // Calculate totals if items provided
-        if (!empty($data['items']) && is_array($data['items'])) {
+        if (!empty($items)) {
             $subtotal = 0;
-            foreach ($data['items'] as $item) {
+            foreach ($items as $item) {
                 $subtotal += ($item['quantity'] * $item['unit_cost']);
             }
             
@@ -125,16 +141,32 @@ class Purchase_order_model extends CI_Model {
             $data['total_amount'] = $subtotal + $data['tax_amount'] + ($data['shipping_cost'] ?? 0) - ($data['discount'] ?? 0);
         }
         
+        // Remove items from data before inserting into purchase_orders table
+        unset($data['items']);
+        
+        // Set default status if not provided
+        if (empty($data['status'])) {
+            $data['status'] = 'Draft';
+        }
+        
         // Insert PO
         if ($this->db->insert('purchase_orders', $data)) {
             $po_id = $this->db->insert_id();
             
-            // Insert items
-            if (!empty($data['items']) && is_array($data['items'])) {
-                foreach ($data['items'] as $item) {
-                    $item['purchase_order_id'] = $po_id;
-                    $item['total_cost'] = $item['quantity'] * $item['unit_cost'];
-                    $this->db->insert('purchase_order_items', $item);
+            // Insert items into purchase_order_items table
+            if (!empty($items)) {
+                foreach ($items as $item) {
+                    $item_data = array(
+                        'purchase_order_id' => $po_id,
+                        'medicine_id' => $item['medicine_id'],
+                        'quantity' => $item['quantity'],
+                        'unit_cost' => $item['unit_cost'],
+                        'total_cost' => $item['quantity'] * $item['unit_cost']
+                    );
+                    if (!empty($item['notes'])) {
+                        $item_data['notes'] = $item['notes'];
+                    }
+                    $this->db->insert('purchase_order_items', $item_data);
                 }
             }
             
@@ -192,15 +224,81 @@ class Purchase_order_model extends CI_Model {
     }
 
     /**
-     * Approve purchase order
+     * Approve purchase order and add stock
      */
     public function approve($id, $approved_by) {
+        $this->db->trans_start();
+        
+        // Get PO details
+        $po = $this->get_by_id($id);
+        if (!$po) {
+            $this->db->trans_rollback();
+            return false;
+        }
+        
+        // Update PO status
         $this->db->where('id', $id);
-        return $this->db->update('purchase_orders', array(
+        $update_result = $this->db->update('purchase_orders', array(
             'status' => 'Approved',
             'approved_by' => $approved_by,
             'approved_at' => date('Y-m-d H:i:s')
         ));
+        
+        if (!$update_result) {
+            $this->db->trans_rollback();
+            return false;
+        }
+        
+        // Add stock for each item in the PO
+        if (!empty($po['items']) && is_array($po['items'])) {
+            $this->load->model('Medicine_stock_model');
+            
+            foreach ($po['items'] as $item) {
+                // Generate batch number
+                $batch_number = $po['po_number'] . '-ITEM-' . $item['id'];
+                
+                // Calculate expiry date (expected_delivery_date + 365 days, or current date + 365 if not set)
+                if (!empty($po['expected_delivery_date'])) {
+                    $expiry_date = date('Y-m-d', strtotime($po['expected_delivery_date'] . ' +365 days'));
+                } else {
+                    $expiry_date = date('Y-m-d', strtotime('+365 days'));
+                }
+                
+                // Calculate selling price (20% margin on cost)
+                $cost_price = (float)$item['unit_cost'];
+                $selling_price = $cost_price * 1.2;
+                
+                // Prepare stock data
+                $stock_data = array(
+                    'medicine_id' => $item['medicine_id'],
+                    'batch_number' => $batch_number,
+                    'expiry_date' => $expiry_date,
+                    'quantity' => (int)$item['quantity'],
+                    'cost_price' => $cost_price,
+                    'selling_price' => $selling_price,
+                    'supplier_id' => $po['supplier_id'],
+                    'purchase_order_id' => $id,
+                    'status' => 'Active',
+                    'reserved_quantity' => 0
+                );
+                
+                // Add stock
+                $stock_id = $this->Medicine_stock_model->add_stock($stock_data);
+                
+                if (!$stock_id) {
+                    log_message('error', 'Failed to add stock for PO item: ' . $item['id']);
+                    // Continue with other items even if one fails
+                }
+            }
+        }
+        
+        $this->db->trans_complete();
+        
+        if ($this->db->trans_status() === FALSE) {
+            return false;
+        }
+        
+        return true;
     }
 
     /**

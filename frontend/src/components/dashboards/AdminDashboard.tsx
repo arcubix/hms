@@ -36,6 +36,9 @@ import { AddDoctorPage } from '../pages/AddDoctorPage';
 import { EditDoctorPage } from '../pages/EditDoctorPage';
 import { ViewDoctorPage } from '../pages/ViewDoctorPage';
 import { ScheduleAppointmentPage } from '../pages/ScheduleAppointmentPage';
+import { UserList } from '../modules/UserList';
+import { AddUserPage } from '../pages/AddUserPage';
+import { UserSettings } from '../modules/UserSettings';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 // Import new modules (will be created if they don't exist)
 import { OPDSchedule } from '../modules/OPDSchedule';
@@ -59,7 +62,8 @@ const navigationItems: NavigationItem[] = [
   { icon: <Activity className="w-5 h-5" />, label: 'Analytics', id: 'analytics' },
   { icon: <Ambulance className="w-5 h-5" />, label: 'Emergency', id: 'emergency', badge: '3' },
   { icon: <Users className="w-5 h-5" />, label: 'Patients', id: 'patients', badge: '12' },
-  { icon: <Stethoscope className="w-5 h-5" />, label: 'Doctors', id: 'doctors' },
+  // { icon: <Stethoscope className="w-5 h-5" />, label: 'Doctors', id: 'doctors' },
+  { icon: <UserCheck className="w-5 h-5" />, label: 'Users', id: 'users' },
   { icon: <Calendar className="w-5 h-5" />, label: 'Appointments', id: 'appointments', badge: '5' },
   { icon: <Activity className="w-5 h-5" />, label: 'OPD', id: 'opd' },
   { icon: <Hospital className="w-5 h-5" />, label: 'IPD Management', id: 'ipd', badge: '80' },
@@ -99,6 +103,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
   const [appointmentView, setAppointmentView] = useState<'list' | 'schedule'>('list');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [userView, setUserView] = useState<'list' | 'add' | 'edit' | 'settings'>('list');
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -152,6 +158,31 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setAppointmentView('list');
   };
 
+  const handleViewUser = (userId: number) => {
+    setSelectedUserId(userId);
+    setUserView('edit');
+  };
+
+  const handleEditUser = (userId: number) => {
+    setSelectedUserId(userId);
+    setUserView('edit');
+  };
+
+  const handleAddUser = () => {
+    setSelectedUserId(null);
+    setUserView('add');
+  };
+
+  const handleUserSettings = (userId: number) => {
+    setSelectedUserId(userId);
+    setUserView('settings');
+  };
+
+  const handleBackToUserList = () => {
+    setUserView('list');
+    setSelectedUserId(null);
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'patients':
@@ -183,6 +214,32 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           return <ViewDoctorPage doctorId={selectedDoctorId} onBack={handleBackToDoctorList} onEdit={handleEditDoctor} />;
         } else {
           return <DoctorList onViewDoctor={handleViewDoctor} onAddDoctor={handleAddDoctor} onEditDoctor={handleEditDoctor} />;
+        }
+      case 'users':
+        if (userView === 'add') {
+          return <AddUserPage onBack={handleBackToUserList} onSuccess={handleBackToUserList} />;
+        } else if (userView === 'edit' && selectedUserId) {
+          return <AddUserPage userId={selectedUserId} onBack={handleBackToUserList} onSuccess={handleBackToUserList} />;
+        } else if (userView === 'settings' && selectedUserId) {
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold">User Settings</h1>
+                <Button variant="outline" onClick={handleBackToUserList}>
+                  Back to Users
+                </Button>
+              </div>
+              <UserSettings userId={selectedUserId} onSuccess={handleBackToUserList} />
+            </div>
+          );
+        } else {
+          return (
+            <UserList
+              onAddUser={handleAddUser}
+              onViewUser={handleViewUser}
+              onEditUser={handleEditUser}
+            />
+          );
         }
       case 'appointments':
         if (appointmentView === 'schedule') {
