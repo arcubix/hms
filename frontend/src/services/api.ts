@@ -530,6 +530,29 @@ class ApiService {
     return data.data;
   }
 
+  // Radiology test endpoints
+  async getRadiologyTests(filters?: {
+    search?: string;
+    test_type?: string;
+    category?: string;
+    status?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.test_type) params.append('test_type', filters.test_type);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/radiology-tests?${queryString}` : '/api/radiology-tests';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: RadiologyTest[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
   // Lab test endpoints
   async getLabTests(filters?: {
     search?: string;
@@ -2194,6 +2217,34 @@ class ApiService {
     }>(`/api/users/permissions/definitions${params}`);
     return data.data || [];
   }
+
+  async getRolePermissionMappings() {
+    const data = await this.request<{
+      success: boolean;
+      data: Record<string, string[]>;
+    }>('/api/users/permissions/role-mappings');
+    return data.data || {};
+  }
+
+  async getRolePermissions(role: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>(`/api/users/roles/${encodeURIComponent(role)}/permissions`);
+    return data.data || [];
+  }
+
+  async updateRolePermissions(role: string, permissions: string[]) {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+      message?: string;
+    }>(`/api/users/roles/${encodeURIComponent(role)}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions })
+    });
+    return data.data || [];
+  }
 }
 
 export interface Patient {
@@ -2536,6 +2587,32 @@ export interface PrescriptionLabTest {
   status?: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
 }
 
+export interface RadiologyTest {
+  id: number;
+  test_code: string;
+  test_name: string;
+  test_type?: string;
+  category?: string;
+  description?: string;
+  preparation_instructions?: string;
+  duration?: string;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PrescriptionRadiologyTest {
+  id?: number;
+  radiology_test_id?: number;
+  test_name: string;
+  test_type?: string;
+  body_part?: string;
+  indication?: string;
+  instructions?: string;
+  priority?: 'Normal' | 'Urgent' | 'Emergency';
+  status?: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+}
+
 export interface Prescription {
   id: number;
   prescription_number: string;
@@ -2558,6 +2635,20 @@ export interface Prescription {
   lab_tests?: PrescriptionLabTest[];
   appointment_date?: string;
   appointment_number?: string;
+  vitals_pulse?: number;
+  vitals_temperature?: number;
+  vitals_blood_pressure?: string;
+  vitals_respiratory_rate?: number;
+  vitals_blood_sugar?: string;
+  vitals_weight?: string;
+  vitals_height?: string;
+  vitals_bmi?: string;
+  vitals_oxygen_saturation?: number;
+  vitals_body_surface_area?: string;
+  radiology_tests?: string; // JSON array of selected tests
+  radiology_body_part?: string;
+  radiology_indication?: string;
+  investigation?: string;
   created_at: string;
   updated_at: string;
 }
@@ -2574,6 +2665,18 @@ export interface CreatePrescriptionData {
   medicines?: PrescriptionMedicine[];
   lab_tests?: PrescriptionLabTest[];
   status?: 'Draft' | 'Active' | 'Completed' | 'Cancelled';
+  vitals_pulse?: number;
+  vitals_temperature?: number;
+  vitals_blood_pressure?: string;
+  vitals_respiratory_rate?: number;
+  vitals_blood_sugar?: string;
+  vitals_weight?: string;
+  vitals_height?: string;
+  vitals_bmi?: string;
+  vitals_oxygen_saturation?: number;
+  vitals_body_surface_area?: string;
+  radiology_tests?: PrescriptionRadiologyTest[];
+  investigation?: string;
 }
 
 // Emergency interfaces
@@ -3343,12 +3446,26 @@ export interface RolePermission {
 }
 
 export interface RolePermissions {
-  doctor: string[];
-  admin: string[];
-  labManager: string[];
-  labTechnician: string[];
-  radiologyTechnician: string[];
-  radiologyManager: string[];
+  doctor?: string[];
+  admin?: string[];
+  staff?: string[];
+  bloodBankManager?: string[];
+  nurse?: string[];
+  inventoryManager?: string[];
+  labManager?: string[];
+  accountant?: string[];
+  labTechnician?: string[];
+  radiologyTechnician?: string[];
+  radiologyManager?: string[];
+  pharmacist?: string[];
+  labReceptionist?: string[];
+  emergencyManager?: string[];
+  emergencyNurse?: string[];
+  emergencyReceptionist?: string[];
+  receptionist?: string[];
+  qualityControlManager?: string[];
+  radiologyReceptionist?: string[];
+  [key: string]: string[] | undefined; // Allow dynamic role keys
 }
 
 export interface UserSettingsFormData extends UserSettings {

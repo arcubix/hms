@@ -91,12 +91,26 @@ export interface RolePermission {
 }
 
 export interface RolePermissions {
-  doctor: string[];
-  admin: string[];
-  labManager: string[];
-  labTechnician: string[];
-  radiologyTechnician: string[];
-  radiologyManager: string[];
+  doctor?: string[];
+  admin?: string[];
+  staff?: string[];
+  bloodBankManager?: string[];
+  nurse?: string[];
+  inventoryManager?: string[];
+  labManager?: string[];
+  accountant?: string[];
+  labTechnician?: string[];
+  radiologyTechnician?: string[];
+  radiologyManager?: string[];
+  pharmacist?: string[];
+  labReceptionist?: string[];
+  emergencyManager?: string[];
+  emergencyNurse?: string[];
+  emergencyReceptionist?: string[];
+  receptionist?: string[];
+  qualityControlManager?: string[];
+  radiologyReceptionist?: string[];
+  [key: string]: string[] | undefined; // Allow dynamic role keys
 }
 
 export interface UserSettingsFormData extends UserSettings {

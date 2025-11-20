@@ -16,22 +16,28 @@ import {
   FileText, 
   MessageCircle,
   Calendar,
-  Filter
+  Filter,
+  Activity
 } from 'lucide-react';
 import { api, Patient } from '../../services/api';
+import { HealthRecords } from './HealthRecords';
 
 interface PatientListProps {
   onViewProfile?: (patientId: string) => void;
   onAddPatient?: () => void;
   onEditPatient?: (patientId: string) => void;
+  onAddHealthRecord?: (patientId: string, patientName: string) => void;
+  isFromAdmin?: boolean; // Indicates if called from admin dashboard
 }
 
-export function PatientList({ onViewProfile, onAddPatient, onEditPatient }: PatientListProps = {}) {
+export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddHealthRecord, isFromAdmin = false }: PatientListProps = {}) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Critical' | 'Inactive'>('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [viewingHealthRecords, setViewingHealthRecords] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
   useEffect(() => {
     loadPatients();
@@ -67,6 +73,22 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient }: Pati
   const handleEdit = (patient: Patient) => {
     if (onEditPatient) {
       onEditPatient(patient.id.toString());
+    }
+  };
+
+  const handleViewHealthRecords = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setViewingHealthRecords(true);
+  };
+
+  const handleBackToPatientList = () => {
+    setViewingHealthRecords(false);
+    setSelectedPatient(null);
+  };
+
+  const handleAddHealthRecord = (patient: Patient) => {
+    if (onAddHealthRecord) {
+      onAddHealthRecord(patient.id.toString(), patient.name);
     }
   };
 
@@ -118,6 +140,19 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient }: Pati
         return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
+
+  // If viewing health records, show HealthRecords component
+  if (viewingHealthRecords && selectedPatient) {
+    return (
+      <HealthRecords
+        patientId={selectedPatient.id.toString()}
+        patientName={selectedPatient.name}
+        patientMRN={selectedPatient.patient_id}
+        onBack={handleBackToPatientList}
+        isFromAdmin={isFromAdmin}
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-4">
@@ -280,10 +315,22 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient }: Pati
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
-                              title="Medical Record"
+                              onClick={() => handleViewHealthRecords(patient)}
+                              title="View Medical Records"
                             >
                               <Stethoscope className="w-4 h-4 text-gray-600" />
                             </Button>
+                            {onAddHealthRecord && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleAddHealthRecord(patient)}
+                                title="Add Health Record"
+                              >
+                                <Activity className="w-4 h-4 text-blue-600" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"

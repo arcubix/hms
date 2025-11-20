@@ -595,6 +595,7 @@ class User_model extends CI_Model {
 
     /**
      * Get user permissions (effective permissions from roles + custom)
+     * Returns permission keys for backward compatibility
      */
     public function get_user_permissions($user_id) {
         $user = $this->get_user_by_id($user_id);
@@ -607,20 +608,25 @@ class User_model extends CI_Model {
         // Get roles
         $roles = $this->get_user_roles($user_id);
         
-        // Get permissions from roles
+        // Get permissions from roles (using permission_id with join to get permission_key)
         if (!empty($roles)) {
-            $this->db->select('permission_key');
-            $this->db->where_in('role', $roles);
-            $query = $this->db->get('role_permissions');
+            $this->db->select('pd.permission_key');
+            $this->db->from('role_permissions rp');
+            $this->db->join('permission_definitions pd', 'rp.permission_id = pd.id', 'inner');
+            $this->db->where_in('rp.role', $roles);
+            $query = $this->db->get();
             $role_permissions = $query->result_array();
             foreach ($role_permissions as $rp) {
                 $permissions[$rp['permission_key']] = true;
             }
         }
         
-        // Override with custom permissions
-        $this->db->where('user_id', $user_id);
-        $query = $this->db->get('user_custom_permissions');
+        // Override with custom permissions (using permission_id with join to get permission_key)
+        $this->db->select('pd.permission_key, ucp.granted');
+        $this->db->from('user_custom_permissions ucp');
+        $this->db->join('permission_definitions pd', 'ucp.permission_id = pd.id', 'inner');
+        $this->db->where('ucp.user_id', $user_id);
+        $query = $this->db->get();
         $custom_permissions = $query->result_array();
         foreach ($custom_permissions as $cp) {
             if ($cp['granted']) {
@@ -635,6 +641,7 @@ class User_model extends CI_Model {
 
     /**
      * Update user permissions
+     * Accepts permission_key from frontend and converts to permission_id for storage
      */
     public function update_user_permissions($user_id, $permissions) {
         // Delete existing custom permissions
@@ -644,11 +651,19 @@ class User_model extends CI_Model {
         // Insert new custom permissions
         if (!empty($permissions) && is_array($permissions)) {
             foreach ($permissions as $permission_key => $granted) {
-                $this->db->insert('user_custom_permissions', array(
-                    'user_id' => $user_id,
-                    'permission_key' => $permission_key,
-                    'granted' => $granted ? 1 : 0
-                ));
+                // Get permission_id from permission_key
+                $this->db->select('id');
+                $this->db->where('permission_key', $permission_key);
+                $query = $this->db->get('permission_definitions');
+                $perm = $query->row_array();
+                
+                if ($perm) {
+                    $this->db->insert('user_custom_permissions', array(
+                        'user_id' => $user_id,
+                        'permission_id' => $perm['id'],
+                        'granted' => $granted ? 1 : 0
+                    ));
+                }
             }
         }
         
@@ -731,13 +746,25 @@ class User_model extends CI_Model {
      */
     public function get_available_roles() {
         return array(
+            'Admin' => 'Complete system access with full administrative privileges',
             'Doctor' => 'Access to appointments and reports of patients specific to the doctor only',
-            'Administrator' => 'Complete Access',
+            'Staff' => 'General staff access with comprehensive permissions for patient management, invoicing, and reporting',
+            'Blood Bank Manager' => 'Access to blood bank management, donor management, and blood inventory',
+            'Nurse' => 'Access to nursing functions, patient care, and medical records',
+            'Inventory Manager' => 'Access to inventory management, stock control, and procurement',
             'Lab Manager' => 'Access to Laboratory Module, can Validate Lab Tests',
+            'Accountant' => 'Access to financial reports, invoices, expenses, and accounting functions',
             'Lab Technician' => 'Access to Laboratory Module, cannot view other modules',
             'Radiology Technician' => 'Access to Radiology Module only, cannot access other modules',
             'Radiology Manager' => 'Access to Radiology Module with management capabilities',
-            'Emergency Manager Access' => 'Access to Emergency Department management'
+            'Pharmacist' => 'Access to Pharmacy Module, medication dispensing, and inventory management',
+            'Lab Receptionist' => 'Access to Laboratory reception, patient registration, and sample collection',
+            'Emergency Manager' => 'Access to Emergency Department management and operations',
+            'Emergency Nurse' => 'Access to Emergency Department nursing functions and patient care',
+            'Emergency Receptionist' => 'Access to Emergency Department reception and patient registration',
+            'Quality Control Manager' => 'Access to quality control, compliance, and audit functions',
+            'Radiology Receptionist' => 'Access to Radiology reception, patient registration, and appointment scheduling',
+            'Receptionist' => 'Access to general reception, patient registration, and appointment scheduling'
         );
     }
 
@@ -753,6 +780,74 @@ class User_model extends CI_Model {
         $this->db->order_by('permission_name', 'ASC');
         $query = $this->db->get('permission_definitions');
         return $query->result_array();
+    }
+
+    /**
+     * Get permissions for a specific role
+     * Returns array of permission keys
+     */
+    public function get_role_permissions($role) {
+        $this->db->select('pd.permission_key');
+        $this->db->from('role_permissions rp');
+        $this->db->join('permission_definitions pd', 'rp.permission_id = pd.id', 'inner');
+        $this->db->where('rp.role', $role);
+        $query = $this->db->get();
+        $result = $query->result_array();
+        return array_column($result, 'permission_key');
+    }
+
+    /**
+     * Get all role-permission mappings
+     * Returns array with role as key and array of permission keys as value
+     */
+    public function get_all_role_permissions() {
+        $this->db->select('rp.role, pd.permission_key');
+        $this->db->from('role_permissions rp');
+        $this->db->join('permission_definitions pd', 'rp.permission_id = pd.id', 'inner');
+        $query = $this->db->get();
+        $result = $query->result_array();
+        
+        $mappings = array();
+        foreach ($result as $row) {
+            if (!isset($mappings[$row['role']])) {
+                $mappings[$row['role']] = array();
+            }
+            $mappings[$row['role']][] = $row['permission_key'];
+        }
+        
+        return $mappings;
+    }
+
+    /**
+     * Update permissions for a specific role
+     * @param string $role Role name
+     * @param array $permission_keys Array of permission keys to assign to the role
+     * @return bool Success status
+     */
+    public function update_role_permissions($role, $permission_keys) {
+        // Delete existing permissions for this role
+        $this->db->where('role', $role);
+        $this->db->delete('role_permissions');
+        
+        // Insert new permissions
+        if (!empty($permission_keys) && is_array($permission_keys)) {
+            foreach ($permission_keys as $permission_key) {
+                // Get permission_id from permission_key
+                $this->db->select('id');
+                $this->db->where('permission_key', $permission_key);
+                $query = $this->db->get('permission_definitions');
+                $perm = $query->row_array();
+                
+                if ($perm) {
+                    $this->db->insert('role_permissions', array(
+                        'role' => $role,
+                        'permission_id' => $perm['id']
+                    ));
+                }
+            }
+        }
+        
+        return true;
     }
 }
 

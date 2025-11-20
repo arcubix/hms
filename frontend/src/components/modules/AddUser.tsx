@@ -46,13 +46,25 @@ interface AddUserProps {
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 const AVAILABLE_ROLES = [
+  { value: 'Admin', label: 'Admin', description: 'Complete system access with full administrative privileges' },
   { value: 'Doctor', label: 'Doctor', description: 'Access to appointments and reports of patients specific to the doctor only' },
-  { value: 'Administrator', label: 'Administrator', description: 'Complete Access' },
+  { value: 'Staff', label: 'Staff', description: 'General staff access with comprehensive permissions for patient management, invoicing, and reporting' },
+  { value: 'Blood Bank Manager', label: 'Blood Bank Manager', description: 'Access to blood bank management, donor management, and blood inventory' },
+  { value: 'Nurse', label: 'Nurse', description: 'Access to nursing functions, patient care, and medical records' },
+  { value: 'Inventory Manager', label: 'Inventory Manager', description: 'Access to inventory management, stock control, and procurement' },
   { value: 'Lab Manager', label: 'Lab Manager', description: 'Access to Laboratory Module, can Validate Lab Tests' },
+  { value: 'Accountant', label: 'Accountant', description: 'Access to financial reports, invoices, expenses, and accounting functions' },
   { value: 'Lab Technician', label: 'Lab Technician', description: 'Access to Laboratory Module, cannot view other modules' },
   { value: 'Radiology Technician', label: 'Radiology Technician', description: 'Access to Radiology Module only, cannot access other modules' },
   { value: 'Radiology Manager', label: 'Radiology Manager', description: 'Access to Radiology Module with management capabilities' },
-  { value: 'Emergency Manager Access', label: 'Emergency Manager Access', description: 'Access to Emergency Department management' }
+  { value: 'Pharmacist', label: 'Pharmacist', description: 'Access to Pharmacy Module, medication dispensing, and inventory management' },
+  { value: 'Lab Receptionist', label: 'Lab Receptionist', description: 'Access to Laboratory reception, patient registration, and sample collection' },
+  { value: 'Emergency Manager', label: 'Emergency Manager', description: 'Access to Emergency Department management and operations' },
+  { value: 'Emergency Nurse', label: 'Emergency Nurse', description: 'Access to Emergency Department nursing functions and patient care' },
+  { value: 'Emergency Receptionist', label: 'Emergency Receptionist', description: 'Access to Emergency Department reception and patient registration' },
+  { value: 'Quality Control Manager', label: 'Quality Control Manager', description: 'Access to quality control, compliance, and audit functions' },
+  { value: 'Radiology Receptionist', label: 'Radiology Receptionist', description: 'Access to Radiology reception, patient registration, and appointment scheduling' },
+  { value: 'Receptionist', label: 'Receptionist', description: 'Access to general reception, patient registration, and appointment scheduling' }
 ];
 
 const FOLLOW_UP_SHARE_TYPES = [
@@ -124,14 +136,8 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
   const [availableRoles, setAvailableRoles] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [permissionDefinitions, setPermissionDefinitions] = useState<any[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
-    doctor: [],
-    admin: [],
-    labManager: [],
-    labTechnician: [],
-    radiologyTechnician: [],
-    radiologyManager: []
-  });
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
+  const [rolePermissionMappings, setRolePermissionMappings] = useState<Record<string, string[]>>({});
   const [schedule, setSchedule] = useState<DoctorSchedule[]>([]);
 
   // Form state
@@ -186,35 +192,138 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
   });
 
   useEffect(() => {
-    loadAvailableRoles();
-    loadPermissionDefinitions();
-    if (userId) {
-      loadUserData();
-    } else {
-      // Initialize schedule with default values
-      const initialSchedule: DoctorSchedule[] = DAYS_OF_WEEK.map(day => ({
-        day_of_week: day as DoctorSchedule['day_of_week'],
-        start_time: '17:00',
-        end_time: '21:00',
-        is_available: true,
-        slot_order: 0,
-        slot_name: null,
-        max_appointments_per_slot: 1,
-        appointment_duration: 30,
-        break_start: null,
-        break_end: null,
-        notes: null
-      }));
-      setSchedule(initialSchedule);
-    }
+    const initializeData = async () => {
+      await loadAvailableRoles();
+      await loadPermissionDefinitions();
+      if (userId) {
+        // Load user data after permission definitions are loaded
+        await loadUserData();
+      } else {
+        // Initialize schedule with default values
+        const initialSchedule: DoctorSchedule[] = DAYS_OF_WEEK.map(day => ({
+          day_of_week: day as DoctorSchedule['day_of_week'],
+          start_time: '17:00',
+          end_time: '21:00',
+          is_available: true,
+          slot_order: 0,
+          slot_name: null,
+          max_appointments_per_slot: 1,
+          appointment_duration: 30,
+          break_start: null,
+          break_end: null,
+          notes: null
+        }));
+        setSchedule(initialSchedule);
+      }
+    };
+    initializeData();
   }, [userId]);
+
+  // Load user permissions when editing and permission definitions are available
+  useEffect(() => {
+    const loadUserPermissions = async () => {
+      if (!userId || permissionDefinitions.length === 0) return;
+      
+      // Wait a bit for roles to be loaded if they're not available yet
+      if (userId && formData.roles.length === 0) {
+        // Give it a moment for roles to load
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // If still no roles after waiting, proceed anyway (roles might be empty)
+      }
+      
+      try {
+        // Get user permissions and role-permission mappings
+        const [userPermissions, roleMappings] = await Promise.all([
+          api.getUserPermissions(userId),
+          api.getRolePermissionMappings()
+        ]);
+        
+        console.log('Loading permissions for user:', userId);
+        console.log('User permissions from API:', userPermissions);
+        console.log('User roles:', formData.roles);
+        
+        // Check if user has Admin role
+        const hasAdminRole = formData.roles.includes('Admin');
+        console.log('Has Admin role:', hasAdminRole);
+        
+        // Map role names to role keys (as used in the frontend)
+        const roleNameToKey: Record<string, string> = {
+          'Admin': 'admin',
+          'Doctor': 'doctor',
+          'Staff': 'staff',
+          'Blood Bank Manager': 'bloodBankManager',
+          'Nurse': 'nurse',
+          'Inventory Manager': 'inventoryManager',
+          'Lab Manager': 'labManager',
+          'Accountant': 'accountant',
+          'Lab Technician': 'labTechnician',
+          'Radiology Technician': 'radiologyTechnician',
+          'Radiology Manager': 'radiologyManager',
+          'Pharmacist': 'pharmacist',
+          'Lab Receptionist': 'labReceptionist',
+          'Emergency Manager': 'emergencyManager',
+          'Emergency Nurse': 'emergencyNurse',
+          'Emergency Receptionist': 'emergencyReceptionist',
+          'Receptionist': 'receptionist',
+          'Quality Control Manager': 'qualityControlManager',
+          'Radiology Receptionist': 'radiologyReceptionist'
+        };
+        
+        // Group permissions by role based on role-permission mappings
+        const rolePerms: Record<string, string[]> = {};
+        
+        // If user has Admin role, add ALL user permissions to admin array
+        // (since Admin shows all permissions in one section)
+        if (hasAdminRole) {
+          rolePerms['admin'] = [...userPermissions];
+          console.log('Added all permissions to admin array:', rolePerms['admin']);
+        }
+        
+        // For each permission the user has, find which roles it belongs to
+        userPermissions.forEach(permKey => {
+          // Check each role to see if this permission belongs to it
+          Object.keys(roleMappings).forEach(roleName => {
+            const roleKey = roleNameToKey[roleName];
+            if (roleKey && roleMappings[roleName].includes(permKey)) {
+              if (!rolePerms[roleKey]) {
+                rolePerms[roleKey] = [];
+              }
+              if (!rolePerms[roleKey].includes(permKey)) {
+                rolePerms[roleKey].push(permKey);
+              }
+            }
+          });
+        });
+        
+        console.log('Final role permissions mapping:', rolePerms);
+        setRolePermissions(rolePerms);
+      } catch (permError) {
+        console.error('Failed to load user permissions:', permError);
+      }
+    };
+    
+    loadUserPermissions();
+  }, [userId, permissionDefinitions, formData.roles]);
+
+  // Handle tab switching when Admin role is selected/deselected
+  useEffect(() => {
+    const isAdmin = formData.roles.includes('Admin');
+    // If Admin is selected and user is on any tab other than biography-data, switch to biography-data
+    if (isAdmin && currentTab !== 'biography-data') {
+      setCurrentTab('biography-data');
+    }
+  }, [formData.roles, currentTab]);
 
   const loadPermissionDefinitions = async () => {
     try {
       setLoading(true);
-      const definitions = await api.getPermissionDefinitions();
+      const [definitions, mappings] = await Promise.all([
+        api.getPermissionDefinitions(),
+        api.getRolePermissionMappings()
+      ]);
       console.log('Loaded permission definitions:', definitions);
       setPermissionDefinitions(definitions);
+      setRolePermissionMappings(mappings);
       
       // Initialize role permissions if not already set (preserve user selections)
       setRolePermissions(prev => {
@@ -319,6 +428,9 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
         follow_up_share_types: user.follow_up_share_types || []
       });
       
+      // Load user permissions and map to rolePermissions
+      // This will be handled in a separate useEffect that depends on permissionDefinitions
+      
       // Convert timings to schedule format
       if (user.timings && user.timings.length > 0) {
         const userSchedule: DoctorSchedule[] = user.timings.map((t, index) => ({
@@ -421,16 +533,19 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
   };
 
   const handleToggleRole = (role: string) => {
-    if (formData.roles.includes(role)) {
-      setFormData({
-        ...formData,
-        roles: formData.roles.filter(r => r !== role)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        roles: [...formData.roles, role]
-      });
+    const isAddingAdmin = role === 'Admin' && !formData.roles.includes(role);
+    const newRoles = formData.roles.includes(role)
+      ? formData.roles.filter(r => r !== role)
+      : [...formData.roles, role];
+    
+    setFormData({
+      ...formData,
+      roles: newRoles
+    });
+    
+    // If Admin is being selected and user is on any tab other than biography-data, switch to biography-data tab
+    if (isAddingAdmin && currentTab !== 'biography-data') {
+      setCurrentTab('biography-data');
     }
   };
 
@@ -489,63 +604,78 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
         break;
 
       case 'qualification':
-        const validQualifications = formData.qualifications.filter(q => q.trim().length > 0);
-        if (validQualifications.length === 0) {
-          errors.push({ field: 'qualifications', message: 'At least one qualification is required' });
+        // Skip validation if Admin role is selected
+        if (!formData.roles.includes('Admin')) {
+          const validQualifications = formData.qualifications.filter(q => q.trim().length > 0);
+          if (validQualifications.length === 0) {
+            errors.push({ field: 'qualifications', message: 'At least one qualification is required' });
+          }
         }
         break;
 
       case 'service':
-        const validServices = formData.services.filter(s => s.trim().length > 0);
-        if (validServices.length === 0) {
-          errors.push({ field: 'services', message: 'At least one service is required' });
+        // Skip validation if Admin role is selected
+        if (!formData.roles.includes('Admin')) {
+          const validServices = formData.services.filter(s => s.trim().length > 0);
+          if (validServices.length === 0) {
+            errors.push({ field: 'services', message: 'At least one service is required' });
+          }
         }
         break;
 
       case 'timings':
-        const availableSlots = schedule.filter(s => s.is_available);
-        if (availableSlots.length === 0) {
-          errors.push({ field: 'timings', message: 'At least one time slot must be available' });
-        }
-        // Validate each available slot
-        schedule.forEach((slot, index) => {
-          if (slot.is_available) {
-            if (!slot.start_time || !slot.end_time) {
-              errors.push({
-                field: `timing_${index}`,
-                message: `Start time and end time are required for ${slot.day_of_week}`
-              });
-            }
-            if (slot.appointment_duration && (slot.appointment_duration < 5 || slot.appointment_duration > 120)) {
-              errors.push({
-                field: `timing_duration_${index}`,
-                message: `Duration must be between 5 and 120 minutes for ${slot.day_of_week}`
-              });
-            }
+        // Skip validation if Admin role is selected
+        if (!formData.roles.includes('Admin')) {
+          const availableSlots = schedule.filter(s => s.is_available);
+          if (availableSlots.length === 0) {
+            errors.push({ field: 'timings', message: 'At least one time slot must be available' });
           }
-        });
+          // Validate each available slot
+          schedule.forEach((slot, index) => {
+            if (slot.is_available) {
+              if (!slot.start_time || !slot.end_time) {
+                errors.push({
+                  field: `timing_${index}`,
+                  message: `Start time and end time are required for ${slot.day_of_week}`
+                });
+              }
+              if (slot.appointment_duration && (slot.appointment_duration < 5 || slot.appointment_duration > 120)) {
+                errors.push({
+                  field: `timing_duration_${index}`,
+                  message: `Duration must be between 5 and 120 minutes for ${slot.day_of_week}`
+                });
+              }
+            }
+          });
+        }
         break;
 
       case 'faqs':
-        formData.faqs.forEach((faq, index) => {
-          if (!faq.question || faq.question.trim().length === 0) {
-            errors.push({ field: `faq_question_${index}`, message: 'FAQ question is required' });
-          }
-          if (!faq.answer || faq.answer.trim().length === 0) {
-            errors.push({ field: `faq_answer_${index}`, message: 'FAQ answer is required' });
-          }
-        });
+        // Skip validation if Admin role is selected
+        if (!formData.roles.includes('Admin')) {
+          formData.faqs.forEach((faq, index) => {
+            if (!faq.question || faq.question.trim().length === 0) {
+              errors.push({ field: `faq_question_${index}`, message: 'FAQ question is required' });
+            }
+            if (!faq.answer || faq.answer.trim().length === 0) {
+              errors.push({ field: `faq_answer_${index}`, message: 'FAQ answer is required' });
+            }
+          });
+        }
         break;
 
       case 'share-procedures':
-        formData.share_procedures.forEach((procedure, index) => {
-          if (!procedure.procedure_name || procedure.procedure_name.trim().length === 0) {
-            errors.push({ field: `procedure_name_${index}`, message: 'Procedure name is required' });
-          }
-          if (procedure.share_value <= 0) {
-            errors.push({ field: `procedure_value_${index}`, message: 'Share value must be greater than 0' });
-          }
-        });
+        // Skip validation if Admin role is selected
+        if (!formData.roles.includes('Admin')) {
+          formData.share_procedures.forEach((procedure, index) => {
+            if (!procedure.procedure_name || procedure.procedure_name.trim().length === 0) {
+              errors.push({ field: `procedure_name_${index}`, message: 'Procedure name is required' });
+            }
+            if (procedure.share_value <= 0) {
+              errors.push({ field: `procedure_value_${index}`, message: 'Share value must be greater than 0' });
+            }
+          });
+        }
         break;
 
       case 'biography':
@@ -580,13 +710,14 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
         toast.error(firstError.message || 'Please fix validation errors');
         
         // Navigate to tab with error if needed
+        const isAdmin = formData.roles.includes('Admin');
         if (firstError.field === 'name' || firstError.field === 'email' || firstError.field === 'phone' || firstError.field === 'password' || firstError.field === 'roles') {
           setCurrentTab('biography-data');
-        } else if (firstError.field.startsWith('qualification')) {
+        } else if (!isAdmin && firstError.field.startsWith('qualification')) {
           setCurrentTab('qualification');
-        } else if (firstError.field.startsWith('service')) {
+        } else if (!isAdmin && firstError.field.startsWith('service')) {
           setCurrentTab('service');
-        } else if (firstError.field.startsWith('timing')) {
+        } else if (!isAdmin && firstError.field.startsWith('timing')) {
           setCurrentTab('timings');
         } else if (firstError.field.startsWith('faq')) {
           setCurrentTab('faqs');
@@ -607,12 +738,37 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
         services: formData.services.filter(s => s.trim().length > 0)
       };
 
+      let savedUserId = userId;
       if (userId) {
         await api.updateUser(userId, cleanedData);
+        savedUserId = userId;
         toast.success('User updated successfully');
       } else {
-        await api.createUser(cleanedData);
+        const newUser = await api.createUser(cleanedData);
+        savedUserId = newUser.id;
         toast.success('User created successfully');
+      }
+      
+      // Save permissions after user is created/updated
+      if (savedUserId && Object.keys(rolePermissions).length > 0) {
+        try {
+          // Convert rolePermissions to the format expected by API (Record<string, boolean>)
+          const permissionsToSave: Record<string, boolean> = {};
+          
+          // Get all selected permissions from all roles
+          Object.values(rolePermissions).forEach(permKeys => {
+            permKeys.forEach(permKey => {
+              permissionsToSave[permKey] = true;
+            });
+          });
+          
+          if (Object.keys(permissionsToSave).length > 0) {
+            await api.updateUserPermissions(savedUserId, permissionsToSave);
+          }
+        } catch (permError) {
+          console.error('Failed to save permissions:', permError);
+          toast.error('User saved but failed to update permissions');
+        }
       }
       
       onSuccess?.();
@@ -624,15 +780,21 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
     }
   };
 
-  const tabsList = [
-    { id: 'biography-data', label: 'Biography Data' },
-    { id: 'biography', label: 'Biography' },
-    { id: 'qualification', label: 'Qualification' },
-    { id: 'service', label: 'Service' },
-    { id: 'timings', label: 'Timings' },
-    { id: 'faqs', label: 'FAQs' },
-    { id: 'share-procedures', label: "Doctor's Share Procedures" }
-  ];
+  // Filter tabs based on selected roles - show only Biography Data for Admin
+  const isAdmin = formData.roles.includes('Admin');
+  const tabsList = isAdmin 
+    ? [
+        { id: 'biography-data', label: 'Biography Data' }
+      ]
+    : [
+        { id: 'biography-data', label: 'Biography Data' },
+        { id: 'biography', label: 'Biography' },
+        { id: 'qualification', label: 'Qualification' },
+        { id: 'service', label: 'Service' },
+        { id: 'timings', label: 'Timings' },
+        { id: 'faqs', label: 'FAQs' },
+        { id: 'share-procedures', label: "Doctor's Share Procedures" }
+      ];
 
   const currentTabIndex = tabsList.findIndex(t => t.id === currentTab);
   const canGoNext = currentTabIndex < tabsList.length - 1;
@@ -824,7 +986,7 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
 
               <div className="space-y-4">
                 <Label className="text-base font-semibold">Roles*</Label>
-                <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg">
                   {AVAILABLE_ROLES.map(role => (
                     <div key={role.value} className="flex items-start space-x-3 p-2 hover:bg-white rounded transition-colors">
                       <Checkbox
@@ -898,61 +1060,193 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
           <Separator className="my-6" />
 
           {/* Role-Based Permissions - Only show sections for selected roles */}
-          {[
-            { key: 'doctor', label: 'Doctor Role User Rights', category: 'doctor', roleValue: 'Doctor' },
-            { key: 'admin', label: 'Admin Role User Rights', category: 'admin', roleValue: 'Administrator' },
-            { key: 'labManager', label: 'Laboratory Manager User Rights', category: 'lab_manager', roleValue: 'Lab Manager' },
-            { key: 'labTechnician', label: 'Laboratory Technician User Rights', category: 'lab_technician', roleValue: 'Lab Technician' },
-            { key: 'radiologyTechnician', label: 'Radiology Technician User Rights', category: 'radiology_technician', roleValue: 'Radiology Technician' },
-            { key: 'radiologyManager', label: 'Radiology Manager User Rights', category: 'radiology_manager', roleValue: 'Radiology Manager' }
-          ]
-          .filter(category => formData.roles.includes(category.roleValue))
-          .map(category => {
-            const permissions = permissionDefinitions.filter(p => p.category === category.category);
-            
-            return (
-              <Card key={category.key} className="border-0 shadow-sm">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg">{category.label}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {permissions.length === 0 ? (
-                    <div className="text-sm text-gray-500 py-4">
-                      {permissionDefinitions.length === 0 ? 'Loading permissions...' : 'No permissions available for this role.'}
+          {formData.roles.includes('Admin') ? (
+            // Show only permissions assigned to Admin role from role_permissions
+            (() => {
+              // Get permissions assigned to Admin role from role_permissions table
+              const adminRolePermissions = rolePermissionMappings['Admin'] || [];
+              const adminPermsToShow = permissionDefinitions.filter(p => 
+                adminRolePermissions.includes(p.permission_key)
+              );
+              
+              return (
+                <Card className="border-0 shadow-sm mb-6">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">Admin Role User Rights</CardTitle>
+                        <CardDescription>
+                          Permissions assigned to Admin role ({adminPermsToShow.length} available)
+                        </CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const allAdminPermissionKeys = adminPermsToShow.map(p => p.permission_key);
+                            setRolePermissions({
+                              ...rolePermissions,
+                              admin: allAdminPermissionKeys
+                            });
+                          }}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRolePermissions({
+                              ...rolePermissions,
+                              admin: []
+                            });
+                          }}
+                        >
+                          Unselect All
+                        </Button>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {permissions.map(perm => (
-                        <div key={perm.permission_key} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={perm.permission_key}
-                            checked={rolePermissions[category.key as keyof typeof rolePermissions]?.includes(perm.permission_key) || false}
-                            onCheckedChange={(checked) => {
-                              const currentPerms = rolePermissions[category.key as keyof typeof rolePermissions] || [];
-                              if (checked) {
-                                setRolePermissions({
-                                  ...rolePermissions,
-                                  [category.key]: [...currentPerms, perm.permission_key]
-                                });
-                              } else {
-                                setRolePermissions({
-                                  ...rolePermissions,
-                                  [category.key]: currentPerms.filter(p => p !== perm.permission_key)
-                                });
-                              }
-                            }}
-                          />
-                          <Label htmlFor={perm.permission_key} className="font-normal cursor-pointer text-sm">
-                            {perm.permission_name}
-                          </Label>
-                        </div>
-                      ))}
+                  </CardHeader>
+                  <CardContent>
+                    {permissionDefinitions.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-4">Loading permissions...</div>
+                    ) : adminPermsToShow.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-4">
+                        No permissions assigned to Admin role. Please assign permissions in Role Permissions Management.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {adminPermsToShow.map(perm => (
+                          <div key={perm.permission_key} className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded">
+                            <Checkbox
+                              id={perm.permission_key}
+                              checked={rolePermissions['admin']?.includes(perm.permission_key) || false}
+                              onCheckedChange={(checked) => {
+                                const currentPerms = rolePermissions['admin'] || [];
+                                if (checked) {
+                                  setRolePermissions({
+                                    ...rolePermissions,
+                                    admin: [...currentPerms, perm.permission_key]
+                                  });
+                                } else {
+                                  setRolePermissions({
+                                    ...rolePermissions,
+                                    admin: currentPerms.filter(p => p !== perm.permission_key)
+                                  });
+                                }
+                              }}
+                              className="mt-1"
+                            />
+                            <Label htmlFor={perm.permission_key} className="font-normal cursor-pointer text-sm flex-1">
+                              {perm.permission_name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()
+          ) : (
+            // Show permissions organized by role for non-Admin roles
+            [
+              { key: 'staff', label: 'Staff Role User Rights', category: 'staff', roleValue: 'Staff' },
+              { key: 'bloodBankManager', label: 'Blood Bank Manager User Rights', category: 'blood_bank_manager', roleValue: 'Blood Bank Manager' },
+              { key: 'nurse', label: 'Nurse Role User Rights', category: 'nurse', roleValue: 'Nurse' },
+              { key: 'inventoryManager', label: 'Inventory Manager User Rights', category: 'inventory_manager', roleValue: 'Inventory Manager' },
+              { key: 'labManager', label: 'Laboratory Manager User Rights', category: 'lab_manager', roleValue: 'Lab Manager' },
+              { key: 'accountant', label: 'Accountant Role User Rights', category: 'accountant', roleValue: 'Accountant' },
+              { key: 'labTechnician', label: 'Laboratory Technician User Rights', category: 'lab_technician', roleValue: 'Lab Technician' },
+              { key: 'radiologyTechnician', label: 'Radiology Technician User Rights', category: 'radiology_technician', roleValue: 'Radiology Technician' },
+              { key: 'radiologyManager', label: 'Radiology Manager User Rights', category: 'radiology_manager', roleValue: 'Radiology Manager' },
+              { key: 'pharmacist', label: 'Pharmacist User Rights', category: 'pharmacist', roleValue: 'Pharmacist' },
+              { key: 'labReceptionist', label: 'Lab Receptionist User Rights', category: 'lab_receptionist', roleValue: 'Lab Receptionist' },
+              { key: 'doctor', label: 'Doctor Role User Rights', category: 'doctor', roleValue: 'Doctor' }
+            ]
+            .filter(category => formData.roles.includes(category.roleValue))
+            .map(category => {
+              const permissions = permissionDefinitions.filter(p => p.category === category.category);
+              
+              return (
+                <Card key={category.key} className="border-0 shadow-sm mb-6">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{category.label}</CardTitle>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const allPermissionKeys = permissions.map(p => p.permission_key);
+                            setRolePermissions({
+                              ...rolePermissions,
+                              [category.key]: allPermissionKeys
+                            });
+                          }}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRolePermissions({
+                              ...rolePermissions,
+                              [category.key]: []
+                            });
+                          }}
+                        >
+                          Unselect All
+                        </Button>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardHeader>
+                  <CardContent>
+                    {permissions.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-4">
+                        {permissionDefinitions.length === 0 ? 'Loading permissions...' : 'No permissions available for this role.'}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {permissions.map(perm => (
+                          <div key={perm.permission_key} className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded">
+                            <Checkbox
+                              id={perm.permission_key}
+                              checked={rolePermissions[category.key]?.includes(perm.permission_key) || false}
+                              onCheckedChange={(checked) => {
+                                const currentPerms = rolePermissions[category.key] || [];
+                                if (checked) {
+                                  setRolePermissions({
+                                    ...rolePermissions,
+                                    [category.key]: [...currentPerms, perm.permission_key]
+                                  });
+                                } else {
+                                  setRolePermissions({
+                                    ...rolePermissions,
+                                    [category.key]: currentPerms.filter(p => p !== perm.permission_key)
+                                  });
+                                }
+                              }}
+                              className="mt-1"
+                            />
+                            <Label htmlFor={perm.permission_key} className="font-normal cursor-pointer text-sm flex-1">
+                              {perm.permission_name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
 
           <Separator className="my-6" />
 

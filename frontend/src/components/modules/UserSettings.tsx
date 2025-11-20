@@ -47,12 +47,19 @@ const FOLLOW_UP_SHARE_TYPES = [
 ];
 
 const ROLE_CATEGORIES = [
-  { key: 'doctor', label: 'Doctor Role User Rights' },
-  { key: 'admin', label: 'Admin Role User Rights' },
-  { key: 'labManager', label: 'Laboratory Manager User Rights' },
-  { key: 'labTechnician', label: 'Laboratory Technician User Rights' },
-  { key: 'radiologyTechnician', label: 'Radiology Technician User Rights' },
-  { key: 'radiologyManager', label: 'Radiology Manager User Rights' }
+  { key: 'staff', label: 'Staff Role User Rights', category: 'staff' },
+  { key: 'bloodBankManager', label: 'Blood Bank Manager User Rights', category: 'blood_bank_manager' },
+  { key: 'nurse', label: 'Nurse Role User Rights', category: 'nurse' },
+  { key: 'inventoryManager', label: 'Inventory Manager User Rights', category: 'inventory_manager' },
+  { key: 'labManager', label: 'Laboratory Manager User Rights', category: 'lab_manager' },
+  { key: 'accountant', label: 'Accountant Role User Rights', category: 'accountant' },
+  { key: 'labTechnician', label: 'Laboratory Technician User Rights', category: 'lab_technician' },
+  { key: 'radiologyTechnician', label: 'Radiology Technician User Rights', category: 'radiology_technician' },
+  { key: 'radiologyManager', label: 'Radiology Manager User Rights', category: 'radiology_manager' },
+  { key: 'pharmacist', label: 'Pharmacist User Rights', category: 'pharmacist' },
+  { key: 'labReceptionist', label: 'Lab Receptionist User Rights', category: 'lab_receptionist' },
+  { key: 'doctor', label: 'Doctor Role User Rights', category: 'doctor' },
+  { key: 'admin', label: 'Admin Role User Rights', category: 'admin' }
 ];
 
 export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
@@ -75,14 +82,7 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
     instant_booking: false,
     visit_charges: false,
     invoice_edit_count: 0,
-    rolePermissions: {
-      doctor: [],
-      admin: [],
-      labManager: [],
-      labTechnician: [],
-      radiologyTechnician: [],
-      radiologyManager: []
-    }
+    rolePermissions: {}
   });
 
   useEffect(() => {
@@ -124,17 +124,15 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
         grouped[category].push(perm.permission_key);
       });
       
-      // Update role permissions
+      // Update role permissions dynamically based on available categories
+      const rolePerms: Record<string, string[]> = {};
+      ROLE_CATEGORIES.forEach(roleCat => {
+        rolePerms[roleCat.key] = grouped[roleCat.category] || [];
+      });
+      
       setSettings(prev => ({
         ...prev,
-        rolePermissions: {
-          doctor: grouped['doctor'] || [],
-          admin: grouped['admin'] || [],
-          labManager: grouped['lab_manager'] || [],
-          labTechnician: grouped['lab_technician'] || [],
-          radiologyTechnician: grouped['radiology_technician'] || [],
-          radiologyManager: grouped['radiology_manager'] || []
-        }
+        rolePermissions: rolePerms
       }));
     } catch (error) {
       console.error('Failed to load permission definitions:', error);
@@ -219,19 +217,6 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
     }
   };
 
-  const getPermissionsForCategory = (category: string) => {
-    return permissionDefinitions.filter(p => {
-      const catMap: Record<string, string> = {
-        'doctor': 'doctor',
-        'admin': 'admin',
-        'labManager': 'lab_manager',
-        'labTechnician': 'lab_technician',
-        'radiologyTechnician': 'radiology_technician',
-        'radiologyManager': 'radiology_manager'
-      };
-      return p.category === catMap[category];
-    });
-  };
 
   if (loading) {
     return <div className="flex items-center justify-center p-8">Loading settings...</div>;
@@ -404,29 +389,76 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
 
           {/* Role Permissions */}
           {ROLE_CATEGORIES.map(category => {
-            const permissions = getPermissionsForCategory(category.key);
+            const permissions = permissionDefinitions.filter(p => p.category === category.category);
+            const rolePerms = settings.rolePermissions[category.key] || [];
+            
+            if (permissions.length === 0) {
+              return null; // Don't show empty sections
+            }
+            
             return (
-              <div key={category.key} className="space-y-4">
-                <h3 className="text-lg font-semibold">{category.label}</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {permissions.map(perm => (
-                    <div key={perm.permission_key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={perm.permission_key}
-                        checked={settings.rolePermissions[category.key as keyof typeof settings.rolePermissions].includes(perm.permission_key)}
-                        onCheckedChange={() => handleTogglePermission(
-                          category.key as keyof typeof settings.rolePermissions,
-                          perm.permission_key
-                        )}
-                      />
-                      <Label htmlFor={perm.permission_key} className="cursor-pointer text-sm">
-                        {perm.permission_name}
-                      </Label>
+              <Card key={category.key} className="border-0 shadow-sm mb-6">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">{category.label}</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const allPermissionKeys = permissions.map(p => p.permission_key);
+                          setSettings(prev => ({
+                            ...prev,
+                            rolePermissions: {
+                              ...prev.rolePermissions,
+                              [category.key]: allPermissionKeys
+                            }
+                          }));
+                        }}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSettings(prev => ({
+                            ...prev,
+                            rolePermissions: {
+                              ...prev.rolePermissions,
+                              [category.key]: []
+                            }
+                          }));
+                        }}
+                      >
+                        Unselect All
+                      </Button>
                     </div>
-                  ))}
-                </div>
-                <Separator />
-              </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {permissions.map(perm => (
+                      <div key={perm.permission_key} className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded">
+                        <Checkbox
+                          id={perm.permission_key}
+                          checked={rolePerms.includes(perm.permission_key)}
+                          onCheckedChange={() => handleTogglePermission(
+                            category.key as keyof typeof settings.rolePermissions,
+                            perm.permission_key
+                          )}
+                          className="mt-1"
+                        />
+                        <Label htmlFor={perm.permission_key} className="cursor-pointer text-sm flex-1">
+                          {perm.permission_name}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
 

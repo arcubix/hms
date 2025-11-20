@@ -77,6 +77,8 @@ $route['api/medicines'] = 'medicines/index';
 $route['api/medicines/(:num)'] = 'medicines/get/$1';
 $route['api/lab-tests'] = 'lab_tests/index';
 $route['api/lab-tests/(:num)'] = 'lab_tests/get/$1';
+$route['api/radiology-tests'] = 'radiology_tests/index';
+$route['api/radiology-tests/(:num)'] = 'radiology_tests/get/$1';
 $route['api/emergency/visits'] = 'emergency/index';
 $route['api/emergency/visits/(:num)'] = 'emergency/get/$1';
 $route['api/emergency/visits/(:num)/triage'] = 'emergency/update_triage/$1';
@@ -199,7 +201,9 @@ $route['api/users'] = 'users/index';
 $route['api/users/(:num)'] = 'users/get/$1';
 $route['api/users/(:num)/permissions'] = 'users/permissions/$1';
 $route['api/users/permissions/definitions'] = 'users/permission_definitions';
+$route['api/users/permissions/role-mappings'] = 'users/role_mappings';
 $route['api/users/roles'] = 'users/roles';
+$route['api/users/roles/(:any)/permissions'] = 'users/role_permissions/$1';
 
 // Reports
 $route['api/pharmacy/reports/sales-summary'] = 'pharmacy_reports/sales_summary';

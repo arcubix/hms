@@ -1,16 +1,17 @@
--- User Permissions System Database Schema
+-- User Permissions System Database Schema (Normalized)
 -- This file creates tables for role-based permission management
+-- Permissions are stored uniquely and referenced by ID
 
 -- ============================================
 -- PERMISSION DEFINITIONS TABLE
 -- ============================================
--- Master list of all available permissions in the system
+-- Master list of all available permissions in the system (unique, no role prefixes)
 CREATE TABLE IF NOT EXISTS `permission_definitions` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `permission_key` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Unique permission identifier',
+  `permission_key` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Unique permission identifier (e.g., edit_lab_reports)',
   `permission_name` VARCHAR(255) NOT NULL COMMENT 'Human-readable permission name',
   `description` TEXT DEFAULT NULL COMMENT 'Permission description',
-  `category` VARCHAR(50) DEFAULT NULL COMMENT 'Permission category (doctor, admin, lab, etc.)',
+  `category` VARCHAR(50) DEFAULT NULL COMMENT 'Permission category for grouping (patient, invoice, lab, etc.)',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_permission_key` (`permission_key`),
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS `permission_definitions` (
 -- ============================================
 -- ROLE PERMISSIONS TABLE
 -- ============================================
--- Default permissions for each role (using permission_id for normalization)
+-- Default permissions for each role (using permission_id instead of permission_key)
 CREATE TABLE IF NOT EXISTS `role_permissions` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `role` VARCHAR(50) NOT NULL COMMENT 'Role name',
@@ -36,7 +37,7 @@ CREATE TABLE IF NOT EXISTS `role_permissions` (
 -- ============================================
 -- USER CUSTOM PERMISSIONS TABLE
 -- ============================================
--- Custom permission overrides for specific users (using permission_id for normalization)
+-- Custom permission overrides for specific users (using permission_id)
 CREATE TABLE IF NOT EXISTS `user_custom_permissions` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
   `user_id` INT(11) NOT NULL,

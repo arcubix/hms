@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { User } from '../../App';
 import { api, Appointment } from '../../services/api';
-import { PrescriptionPage } from '../pages/PrescriptionPage';
+import { AddHealthRecord } from '../modules/AddHealthRecord';
 
 interface DoctorDashboardProps {
   user: User;
@@ -1115,19 +1115,13 @@ export function DoctorDashboard({ user, onLogout }: DoctorDashboardProps) {
     }
   };
 
-  // Show prescription page if selected
+  // Show AddHealthRecord page if selected
   if (showPrescription && selectedAppointment) {
     return (
-      <PrescriptionPage
-        appointmentId={selectedAppointment.id.toString()}
-        patientId={selectedAppointment.patient_id}
+      <AddHealthRecord
+        patientId={selectedAppointment.patient_id?.toString()}
         patientName={selectedAppointment.patient_name || `Patient #${selectedAppointment.patient_id}`}
-        patientPhone={selectedAppointment.patient_phone}
         onBack={() => {
-          setShowPrescription(false);
-          setSelectedAppointment(null);
-        }}
-        onSuccess={() => {
           setShowPrescription(false);
           setSelectedAppointment(null);
           // Reload schedule appointments to update prescription status

@@ -51,6 +51,7 @@ import { EmergencyManagement } from '../modules/EmergencyManagement';
 import { LaboratoryManagement } from '../modules/LaboratoryManagement';
 import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
+import { RolePermissionsManagement } from '../modules/RolePermissionsManagement';
 
 interface AdminDashboardProps {
   user: User;
@@ -74,7 +75,8 @@ const navigationItems: NavigationItem[] = [
   { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
   { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
   { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
-  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
+  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
+  { icon: <UserCheck className="w-5 h-5" />, label: 'Role Permissions', id: 'role-permissions' }
 ];
 
 // Mock data for charts
@@ -99,6 +101,7 @@ const revenueData = [
 export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientName, setSelectedPatientName] = useState<string | null>(null);
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
@@ -124,9 +127,12 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const handleBackToList = () => {
     setPatientView('list');
     setSelectedPatientId(null);
+    setSelectedPatientName(null);
   };
 
-  const handleAddHealthRecord = () => {
+  const handleAddHealthRecord = (patientId: string, patientName: string) => {
+    setSelectedPatientId(patientId);
+    setSelectedPatientName(patientName);
     setPatientView('add-health');
   };
 
@@ -201,9 +207,9 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         } else if (patientView === 'invoice' && selectedPatientId) {
           return <InvoiceDetail invoiceId="INV-2024-001234" onBack={handleBackToList} />;
         } else if (patientView === 'add-health' && selectedPatientId) {
-          return <AddHealthRecord patientId={selectedPatientId} patientName="Test Khan" onBack={handleBackToList} />;
+          return <AddHealthRecord patientId={selectedPatientId} patientName={selectedPatientName || `Patient #${selectedPatientId}`} onBack={handleBackToList} isFromAdmin={true} />;
         } else {
-          return <PatientList onViewProfile={handleViewProfile} onAddPatient={handleAddPatient} onEditPatient={handleEditPatient} />;
+          return <PatientList onViewProfile={handleViewProfile} onAddPatient={handleAddPatient} onEditPatient={handleEditPatient} onAddHealthRecord={handleAddHealthRecord} isFromAdmin={true} />;
         }
       case 'doctors':
         if (doctorView === 'add') {
@@ -265,6 +271,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <EmergencyManagement />;
       case 'analytics':
         return <EvaluationDashboard />;
+      case 'role-permissions':
+        return <RolePermissionsManagement />;
       default:
         return <EnhancedAdminDashboard />;
     }

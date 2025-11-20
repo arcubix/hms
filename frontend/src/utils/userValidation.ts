@@ -40,62 +40,73 @@ export function validateUserForm(formData: UserFormData): ValidationError[] {
     errors.push({ field: 'roles', message: 'At least one role must be selected' });
   }
 
-  // Qualifications validation
-  const validQualifications = formData.qualifications.filter(q => q.trim().length > 0);
-  if (validQualifications.length === 0) {
-    errors.push({ field: 'qualifications', message: 'At least one qualification is required' });
+  // Qualifications validation - skip if Admin role is selected
+  const isAdmin = formData.roles && formData.roles.includes('Admin');
+  if (!isAdmin) {
+    const validQualifications = formData.qualifications.filter(q => q.trim().length > 0);
+    if (validQualifications.length === 0) {
+      errors.push({ field: 'qualifications', message: 'At least one qualification is required' });
+    }
   }
 
-  // Services validation
-  const validServices = formData.services.filter(s => s.trim().length > 0);
-  if (validServices.length === 0) {
-    errors.push({ field: 'services', message: 'At least one service is required' });
+  // Services validation - skip if Admin role is selected
+  if (!isAdmin) {
+    const validServices = formData.services.filter(s => s.trim().length > 0);
+    if (validServices.length === 0) {
+      errors.push({ field: 'services', message: 'At least one service is required' });
+    }
   }
 
-  // Timings validation
-  const availableDays = formData.timings.filter(t => t.is_available);
-  if (availableDays.length === 0) {
-    errors.push({ field: 'timings', message: 'At least one day must be available' });
-  }
+  // Timings validation - skip if Admin role is selected
+  if (!isAdmin) {
+    const availableDays = formData.timings.filter(t => t.is_available);
+    if (availableDays.length === 0) {
+      errors.push({ field: 'timings', message: 'At least one day must be available' });
+    }
 
-  // Validate time format
-  formData.timings.forEach((timing, index) => {
-    if (timing.is_available) {
-      if (!timing.start_time || !timing.end_time) {
-        errors.push({ 
-          field: `timing_${index}`, 
-          message: `Start time and end time are required for ${timing.day_of_week}` 
-        });
+    // Validate time format
+    formData.timings.forEach((timing, index) => {
+      if (timing.is_available) {
+        if (!timing.start_time || !timing.end_time) {
+          errors.push({ 
+            field: `timing_${index}`, 
+            message: `Start time and end time are required for ${timing.day_of_week}` 
+          });
+        }
+        
+        if (timing.duration && (timing.duration < 5 || timing.duration > 120)) {
+          errors.push({ 
+            field: `timing_duration_${index}`, 
+            message: `Duration must be between 5 and 120 minutes for ${timing.day_of_week}` 
+          });
+        }
       }
-      
-      if (timing.duration && (timing.duration < 5 || timing.duration > 120)) {
-        errors.push({ 
-          field: `timing_duration_${index}`, 
-          message: `Duration must be between 5 and 120 minutes for ${timing.day_of_week}` 
-        });
+    });
+  }
+
+  // FAQ validation - skip if Admin role is selected
+  if (!isAdmin) {
+    formData.faqs.forEach((faq, index) => {
+      if (!faq.question || faq.question.trim().length === 0) {
+        errors.push({ field: `faq_question_${index}`, message: 'FAQ question is required' });
       }
-    }
-  });
+      if (!faq.answer || faq.answer.trim().length === 0) {
+        errors.push({ field: `faq_answer_${index}`, message: 'FAQ answer is required' });
+      }
+    });
+  }
 
-  // FAQ validation
-  formData.faqs.forEach((faq, index) => {
-    if (!faq.question || faq.question.trim().length === 0) {
-      errors.push({ field: `faq_question_${index}`, message: 'FAQ question is required' });
-    }
-    if (!faq.answer || faq.answer.trim().length === 0) {
-      errors.push({ field: `faq_answer_${index}`, message: 'FAQ answer is required' });
-    }
-  });
-
-  // Share procedures validation
-  formData.share_procedures.forEach((procedure, index) => {
-    if (!procedure.procedure_name || procedure.procedure_name.trim().length === 0) {
-      errors.push({ field: `procedure_name_${index}`, message: 'Procedure name is required' });
-    }
-    if (procedure.share_value <= 0) {
-      errors.push({ field: `procedure_value_${index}`, message: 'Share value must be greater than 0' });
-    }
-  });
+  // Share procedures validation - skip if Admin role is selected
+  if (!isAdmin) {
+    formData.share_procedures.forEach((procedure, index) => {
+      if (!procedure.procedure_name || procedure.procedure_name.trim().length === 0) {
+        errors.push({ field: `procedure_name_${index}`, message: 'Procedure name is required' });
+      }
+      if (procedure.share_value <= 0) {
+        errors.push({ field: `procedure_value_${index}`, message: 'Share value must be greater than 0' });
+      }
+    });
+  }
 
   return errors;
 }

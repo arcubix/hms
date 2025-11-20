@@ -63,7 +63,20 @@ class Prescription_model extends CI_Model {
             'advice' => $data['advice'] ?? null,
             'follow_up_date' => !empty($data['follow_up_date']) ? $data['follow_up_date'] : null,
             'status' => $data['status'] ?? 'Active',
-            'created_by' => isset($data['created_by']) ? (int)$data['created_by'] : null
+            'created_by' => isset($data['created_by']) ? (int)$data['created_by'] : null,
+            // Add vitals data
+            'vitals_pulse' => isset($data['vitals_pulse']) && $data['vitals_pulse'] !== '' ? (int)$data['vitals_pulse'] : null,
+            'vitals_temperature' => isset($data['vitals_temperature']) && $data['vitals_temperature'] !== '' ? (float)$data['vitals_temperature'] : null,
+            'vitals_blood_pressure' => $data['vitals_blood_pressure'] ?? null,
+            'vitals_respiratory_rate' => isset($data['vitals_respiratory_rate']) && $data['vitals_respiratory_rate'] !== '' ? (int)$data['vitals_respiratory_rate'] : null,
+            'vitals_blood_sugar' => $data['vitals_blood_sugar'] ?? null,
+            'vitals_weight' => $data['vitals_weight'] ?? null,
+            'vitals_height' => $data['vitals_height'] ?? null,
+            'vitals_bmi' => $data['vitals_bmi'] ?? null,
+            'vitals_oxygen_saturation' => isset($data['vitals_oxygen_saturation']) && $data['vitals_oxygen_saturation'] !== '' ? (int)$data['vitals_oxygen_saturation'] : null,
+            'vitals_body_surface_area' => $data['vitals_body_surface_area'] ?? null,
+            // Add investigation data
+            'investigation' => $data['investigation'] ?? null
         );
 
         if (!$this->db->insert('prescriptions', $prescription_data)) {
@@ -105,6 +118,24 @@ class Prescription_model extends CI_Model {
                     'status' => 'Pending'
                 );
                 $this->db->insert('prescription_lab_tests', $test_data);
+            }
+        }
+
+        // Add radiology tests
+        if (!empty($data['radiology_tests']) && is_array($data['radiology_tests'])) {
+            foreach ($data['radiology_tests'] as $test) {
+                $test_data = array(
+                    'prescription_id' => $prescription_id,
+                    'radiology_test_id' => isset($test['radiology_test_id']) && $test['radiology_test_id'] ? (int)$test['radiology_test_id'] : null,
+                    'test_name' => $test['test_name'],
+                    'test_type' => $test['test_type'] ?? null,
+                    'body_part' => $test['body_part'] ?? null,
+                    'indication' => $test['indication'] ?? null,
+                    'instructions' => $test['instructions'] ?? null,
+                    'priority' => $test['priority'] ?? 'Normal',
+                    'status' => 'Pending'
+                );
+                $this->db->insert('prescription_radiology_tests', $test_data);
             }
         }
 
@@ -164,6 +195,12 @@ class Prescription_model extends CI_Model {
         $tests_query = $this->db->get('prescription_lab_tests');
         $prescription['lab_tests'] = $tests_query->result_array();
 
+        // Get radiology tests
+        $this->db->where('prescription_id', $id);
+        $this->db->order_by('id', 'ASC');
+        $radiology_query = $this->db->get('prescription_radiology_tests');
+        $prescription['radiology_tests'] = $radiology_query->result_array();
+
         return $prescription;
     }
 
@@ -201,8 +238,11 @@ class Prescription_model extends CI_Model {
      * Update prescription
      */
     public function update($id, $data) {
+        $this->db->trans_start();
+
         $update_data = array();
 
+        // Basic prescription fields
         if (isset($data['diagnosis'])) $update_data['diagnosis'] = $data['diagnosis'];
         if (isset($data['chief_complaint'])) $update_data['chief_complaint'] = $data['chief_complaint'];
         if (isset($data['clinical_notes'])) $update_data['clinical_notes'] = $data['clinical_notes'];
@@ -210,16 +250,107 @@ class Prescription_model extends CI_Model {
         if (isset($data['follow_up_date'])) $update_data['follow_up_date'] = $data['follow_up_date'];
         if (isset($data['status'])) $update_data['status'] = $data['status'];
 
+        // Vitals fields
+        if (isset($data['vitals_pulse']) && $data['vitals_pulse'] !== '') $update_data['vitals_pulse'] = (int)$data['vitals_pulse'];
+        if (isset($data['vitals_temperature']) && $data['vitals_temperature'] !== '') $update_data['vitals_temperature'] = (float)$data['vitals_temperature'];
+        if (isset($data['vitals_blood_pressure'])) $update_data['vitals_blood_pressure'] = $data['vitals_blood_pressure'];
+        if (isset($data['vitals_respiratory_rate']) && $data['vitals_respiratory_rate'] !== '') $update_data['vitals_respiratory_rate'] = (int)$data['vitals_respiratory_rate'];
+        if (isset($data['vitals_blood_sugar'])) $update_data['vitals_blood_sugar'] = $data['vitals_blood_sugar'];
+        if (isset($data['vitals_weight'])) $update_data['vitals_weight'] = $data['vitals_weight'];
+        if (isset($data['vitals_height'])) $update_data['vitals_height'] = $data['vitals_height'];
+        if (isset($data['vitals_bmi'])) $update_data['vitals_bmi'] = $data['vitals_bmi'];
+        if (isset($data['vitals_oxygen_saturation']) && $data['vitals_oxygen_saturation'] !== '') $update_data['vitals_oxygen_saturation'] = (int)$data['vitals_oxygen_saturation'];
+        if (isset($data['vitals_body_surface_area'])) $update_data['vitals_body_surface_area'] = $data['vitals_body_surface_area'];
+
+        // Investigation field
+        if (isset($data['investigation'])) $update_data['investigation'] = $data['investigation'];
+
         if (empty($update_data)) {
+            $this->db->trans_rollback();
             return array('success' => false, 'message' => 'No data to update');
         }
 
         $this->db->where('id', $id);
-        if ($this->db->update('prescriptions', $update_data)) {
-            return array('success' => true);
+        if (!$this->db->update('prescriptions', $update_data)) {
+            $this->db->trans_rollback();
+            return array('success' => false, 'message' => 'Failed to update prescription');
         }
 
-        return array('success' => false, 'message' => 'Failed to update prescription');
+        // Update medicines if provided
+        if (isset($data['medicines']) && is_array($data['medicines'])) {
+            // Delete existing medicines
+            $this->db->where('prescription_id', $id);
+            $this->db->delete('prescription_medicines');
+
+            // Insert new medicines
+            foreach ($data['medicines'] as $medicine) {
+                $medicine_data = array(
+                    'prescription_id' => $id,
+                    'medicine_id' => isset($medicine['medicine_id']) && $medicine['medicine_id'] ? (int)$medicine['medicine_id'] : null,
+                    'medicine_name' => $medicine['medicine_name'],
+                    'dosage' => $medicine['dosage'] ?? null,
+                    'frequency' => $medicine['frequency'] ?? null,
+                    'duration' => $medicine['duration'] ?? null,
+                    'quantity' => isset($medicine['quantity']) ? (int)$medicine['quantity'] : null,
+                    'instructions' => $medicine['instructions'] ?? null,
+                    'timing' => $medicine['timing'] ?? null,
+                    'status' => 'Pending'
+                );
+                $this->db->insert('prescription_medicines', $medicine_data);
+            }
+        }
+
+        // Update lab tests if provided
+        if (isset($data['lab_tests']) && is_array($data['lab_tests'])) {
+            // Delete existing lab tests
+            $this->db->where('prescription_id', $id);
+            $this->db->delete('prescription_lab_tests');
+
+            // Insert new lab tests
+            foreach ($data['lab_tests'] as $test) {
+                $test_data = array(
+                    'prescription_id' => $id,
+                    'lab_test_id' => isset($test['lab_test_id']) && $test['lab_test_id'] ? (int)$test['lab_test_id'] : null,
+                    'test_name' => $test['test_name'],
+                    'test_type' => $test['test_type'] ?? null,
+                    'instructions' => $test['instructions'] ?? null,
+                    'priority' => $test['priority'] ?? 'Normal',
+                    'status' => 'Pending'
+                );
+                $this->db->insert('prescription_lab_tests', $test_data);
+            }
+        }
+
+        // Update radiology tests if provided
+        if (isset($data['radiology_tests']) && is_array($data['radiology_tests'])) {
+            // Delete existing radiology tests
+            $this->db->where('prescription_id', $id);
+            $this->db->delete('prescription_radiology_tests');
+
+            // Insert new radiology tests
+            foreach ($data['radiology_tests'] as $test) {
+                $test_data = array(
+                    'prescription_id' => $id,
+                    'radiology_test_id' => isset($test['radiology_test_id']) && $test['radiology_test_id'] ? (int)$test['radiology_test_id'] : null,
+                    'test_name' => $test['test_name'],
+                    'test_type' => $test['test_type'] ?? null,
+                    'body_part' => $test['body_part'] ?? null,
+                    'indication' => $test['indication'] ?? null,
+                    'instructions' => $test['instructions'] ?? null,
+                    'priority' => $test['priority'] ?? 'Normal',
+                    'status' => 'Pending'
+                );
+                $this->db->insert('prescription_radiology_tests', $test_data);
+            }
+        }
+
+        $this->db->trans_complete();
+
+        if ($this->db->trans_status() === FALSE) {
+            return array('success' => false, 'message' => 'Failed to update prescription');
+        }
+
+        return array('success' => true);
     }
 }
 

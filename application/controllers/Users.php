@@ -211,6 +211,62 @@ class Users extends Api {
     }
 
     /**
+     * Get role-permission mappings
+     * GET /api/users/permissions/role-mappings
+     */
+    public function role_mappings() {
+        try {
+            $mappings = $this->User_model->get_all_role_permissions();
+            $this->success($mappings);
+        } catch (Exception $e) {
+            log_message('error', 'Users role_mappings error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get or update permissions for a specific role
+     * GET /api/users/roles/:role/permissions
+     * PUT /api/users/roles/:role/permissions
+     */
+    public function role_permissions($role = null) {
+        try {
+            if (!$role) {
+                $this->error('Role name is required', 400);
+                return;
+            }
+
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                $permissions = $this->User_model->get_role_permissions($role);
+                $this->success($permissions);
+            } elseif ($method === 'PUT' || $method === 'PATCH') {
+                $data = $this->get_request_data();
+                
+                if (!isset($data['permissions']) || !is_array($data['permissions'])) {
+                    $this->error('Permissions array is required', 400);
+                    return;
+                }
+
+                $result = $this->User_model->update_role_permissions($role, $data['permissions']);
+                
+                if ($result) {
+                    $permissions = $this->User_model->get_role_permissions($role);
+                    $this->success($permissions, 'Role permissions updated successfully');
+                } else {
+                    $this->error('Failed to update role permissions', 500);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Users role_permissions error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Create user
      * POST /api/users
      */
