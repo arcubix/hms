@@ -7,7 +7,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { api, RolePermission } from '../../services/api';
-import { Search, Save, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Save, RefreshCw } from 'lucide-react';
 
 interface RolePermissionsManagementProps {
   onBack?: () => void;
@@ -20,9 +20,8 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [permissionDefinitions, setPermissionDefinitions] = useState<RolePermission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
+  const [rolePermissionMappings, setRolePermissionMappings] = useState<Record<string, string[]>>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   // Load available roles
   useEffect(() => {
@@ -43,13 +42,17 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     loadRoles();
   }, []);
 
-  // Load permission definitions
+  // Load permission definitions and role mappings
   useEffect(() => {
     const loadPermissionDefinitions = async () => {
       try {
         setLoading(true);
-        const definitions = await api.getPermissionDefinitions();
+        const [definitions, mappings] = await Promise.all([
+          api.getPermissionDefinitions(),
+          api.getRolePermissionMappings()
+        ]);
         setPermissionDefinitions(definitions);
+        setRolePermissionMappings(mappings);
       } catch (error) {
         console.error('Failed to load permission definitions:', error);
         toast.error('Failed to load permission definitions');
@@ -82,30 +85,21 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     loadRolePermissions();
   }, [selectedRole]);
 
-  // Get unique categories from permission definitions
-  const categories = ['all', ...Array.from(new Set(permissionDefinitions.map(p => p.category).filter(Boolean)))];
-
-  // Filter permissions based on search and category
+  // Filter permissions based on search and remove duplicates
   const filteredPermissions = permissionDefinitions.filter(perm => {
-    const matchesSearch = !searchTerm || 
-      perm.permission_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      perm.permission_key.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (perm.description && perm.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesCategory = selectedCategory === 'all' || perm.category === selectedCategory;
-    
-    return matchesSearch && matchesCategory;
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      perm.permission_name.toLowerCase().includes(searchLower) ||
+      perm.permission_key.toLowerCase().includes(searchLower) ||
+      (perm.description && perm.description.toLowerCase().includes(searchLower))
+    );
   });
 
-  // Group permissions by category
-  const groupedPermissions = filteredPermissions.reduce((acc, perm) => {
-    const category = perm.category || 'other';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(perm);
-    return acc;
-  }, {} as Record<string, RolePermission[]>);
+  // Remove duplicates based on permission_key (in case there are any)
+  const uniquePermissions = filteredPermissions.filter((perm, index, self) =>
+    index === self.findIndex(p => p.permission_key === perm.permission_key)
+  );
 
   const handleTogglePermission = (permissionKey: string) => {
     if (!selectedRole) return;
@@ -121,31 +115,6 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     }));
   };
 
-  const handleSelectAllInCategory = (category: string) => {
-    if (!selectedRole) return;
-    
-    const categoryPerms = groupedPermissions[category] || [];
-    const currentPerms = rolePermissions[selectedRole] || [];
-    const categoryKeys = categoryPerms.map(p => p.permission_key);
-    
-    // Check if all are selected
-    const allSelected = categoryKeys.every(key => currentPerms.includes(key));
-    
-    if (allSelected) {
-      // Unselect all in category
-      setRolePermissions(prev => ({
-        ...prev,
-        [selectedRole]: currentPerms.filter(p => !categoryKeys.includes(p))
-      }));
-    } else {
-      // Select all in category
-      const newPerms = [...new Set([...currentPerms, ...categoryKeys])];
-      setRolePermissions(prev => ({
-        ...prev,
-        [selectedRole]: newPerms
-      }));
-    }
-  };
 
   const handleSelectAll = () => {
     if (!selectedRole) return;
@@ -200,43 +169,6 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     return (rolePermissions[selectedRole] || []).includes(permissionKey);
   };
 
-  const isCategoryFullySelected = (category: string) => {
-    if (!selectedRole) return false;
-    const categoryPerms = groupedPermissions[category] || [];
-    if (categoryPerms.length === 0) return false;
-    const currentPerms = rolePermissions[selectedRole] || [];
-    return categoryPerms.every(perm => currentPerms.includes(perm.permission_key));
-  };
-
-  const toggleCategory = (category: string) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [category]: !prev[category]
-    }));
-  };
-
-  const expandAllCategories = () => {
-    const allExpanded: Record<string, boolean> = {};
-    Object.keys(groupedPermissions).forEach(cat => {
-      allExpanded[cat] = true;
-    });
-    setExpandedCategories(allExpanded);
-  };
-
-  const collapseAllCategories = () => {
-    setExpandedCategories({});
-  };
-
-  // Auto-expand categories when role is selected and permissions are loaded
-  useEffect(() => {
-    if (selectedRole && permissionDefinitions.length > 0 && Object.keys(groupedPermissions).length > 0) {
-      const allExpanded: Record<string, boolean> = {};
-      Object.keys(groupedPermissions).forEach(cat => {
-        allExpanded[cat] = true; // Start with all expanded, user can collapse
-      });
-      setExpandedCategories(allExpanded);
-    }
-  }, [selectedRole, permissionDefinitions.length]);
 
   return (
     <div className="space-y-6 p-6">
@@ -309,20 +241,6 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={expandAllCategories}
-                  >
-                    Expand All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={collapseAllCategories}
-                  >
-                    Collapse All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
                     onClick={handleSelectAll}
                   >
                     {getSelectedCount() === getTotalCount() ? 'Unselect All' : 'Select All'}
@@ -346,7 +264,7 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
                   </Button>
                 </div>
               </div>
-              {/* Search and Filter */}
+              {/* Search */}
               <div className="flex gap-4 mt-4">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -357,17 +275,6 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
                     className="pl-10"
                   />
                 </div>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
-                >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat === 'all' ? 'All Categories' : cat.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </select>
               </div>
             </CardHeader>
           </Card>
@@ -378,98 +285,42 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
                   <p className="mt-2 text-gray-600">Loading permissions...</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {Object.entries(groupedPermissions).map(([category, perms]) => {
-                    const isExpanded = expandedCategories[category] !== false; // Default to expanded
-                    const selectedInCategory = perms.filter(p => isPermissionSelected(p.permission_key)).length;
-                    
-                    return (
-                      <Card key={category} className="overflow-hidden">
-                        <div 
-                          className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer border-b"
-                          onClick={() => toggleCategory(category)}
-                        >
-                          <div className="flex items-center gap-3 flex-1">
-                            {isExpanded ? (
-                              <ChevronUp className="w-5 h-5 text-gray-500" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-gray-500" />
-                            )}
-                            <div>
-                              <h3 className="font-semibold text-base capitalize">
-                                {category === 'other' ? 'Other Permissions' : category.replace(/_/g, ' ')}
-                              </h3>
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                {selectedInCategory} of {perms.length} selected
-                              </p>
-                            </div>
-                            <Badge variant="outline" className="ml-2">
-                              {perms.length}
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectAllInCategory(category);
-                            }}
-                            className="ml-2"
-                          >
-                            {isCategoryFullySelected(category) ? (
-                              <>
-                                <XCircle className="w-4 h-4 mr-1" />
-                                Unselect All
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="w-4 h-4 mr-1" />
-                                Select All
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        {isExpanded && (
-                          <CardContent className="p-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {perms.map(perm => (
-                                <div
-                                  key={perm.permission_key}
-                                  className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200"
-                                >
-                                  <Checkbox
-                                    id={perm.permission_key}
-                                    checked={isPermissionSelected(perm.permission_key)}
-                                    onCheckedChange={() => handleTogglePermission(perm.permission_key)}
-                                    className="mt-1"
-                                  />
-                                  <Label
-                                    htmlFor={perm.permission_key}
-                                    className="font-normal cursor-pointer text-sm flex-1"
-                                  >
-                                    <div className="font-medium">{perm.permission_name}</div>
-                                    {perm.description && (
-                                      <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                                        {perm.description}
-                                      </div>
-                                    )}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        )}
-                      </Card>
-                    );
-                  })}
-                  {filteredPermissions.length === 0 && (
-                    <Card>
-                      <CardContent className="py-8 text-center text-gray-500">
+                <Card>
+                  <CardContent className="pt-6">
+                    {uniquePermissions.length === 0 ? (
+                      <div className="py-8 text-center text-gray-500">
                         No permissions found matching your search criteria.
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {uniquePermissions.map(perm => (
+                          <div
+                            key={perm.permission_key}
+                            className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded"
+                          >
+                            <Checkbox
+                              id={perm.permission_key}
+                              checked={isPermissionSelected(perm.permission_key)}
+                              onCheckedChange={() => handleTogglePermission(perm.permission_key)}
+                              className="mt-1"
+                            />
+                            <Label
+                              htmlFor={perm.permission_key}
+                              className="font-normal cursor-pointer text-sm flex-1"
+                            >
+                              <div className="font-medium">{perm.permission_name}</div>
+                              {perm.description && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {perm.description}
+                                </div>
+                              )}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
         </>
       )}

@@ -236,6 +236,9 @@ class Users extends Api {
                 return;
             }
 
+            // Decode URL-encoded role name (handles spaces like "Radiology Receptionist")
+            $role = urldecode($role);
+
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
@@ -249,6 +252,9 @@ class Users extends Api {
                     return;
                 }
 
+                // Decode URL-encoded role name (handles spaces like "Radiology Receptionist")
+                $role = urldecode($role);
+                
                 $result = $this->User_model->update_role_permissions($role, $data['permissions']);
                 
                 if ($result) {

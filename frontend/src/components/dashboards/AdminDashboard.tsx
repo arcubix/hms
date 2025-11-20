@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
 import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
 import { 
   Users, 
   UserCheck, 
@@ -18,8 +19,24 @@ import {
   Stethoscope,
   Ambulance,
   Hospital,
-  Scan
+  Scan,
+  Video,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  CreditCard,
+  ShoppingCart,
+  Package,
+  Receipt,
+  TrendingUp,
+  AlertCircle,
+  TestTube,
+  Microscope,
+  Heart,
+  User as UserIcon
 } from 'lucide-react';
+import { api } from '../../services/api';
+import { filterMenuItems } from '../../utils/permissions';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
 import { DoctorList } from '../modules/DoctorList';
@@ -52,15 +69,29 @@ import { LaboratoryManagement } from '../modules/LaboratoryManagement';
 import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
 import { RolePermissionsManagement } from '../modules/RolePermissionsManagement';
+import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
+import { POSReports } from '../pharmacy/POSReports';
+import { ShiftManagement } from '../pharmacy/ShiftManagement';
+import { POSSettings } from '../pharmacy/POSSettings';
+import { GSTRatesManagement } from '../pharmacy/GSTRatesManagement';
+import { PurchaseOrders } from '../pharmacy/PurchaseOrders';
+import { Transactions } from '../pharmacy/Transactions';
+import { StockManagement } from '../pharmacy/StockManagement';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Percent } from 'lucide-react';
 
 interface AdminDashboardProps {
   user: User;
   onLogout: () => void;
 }
 
-const navigationItems: NavigationItem[] = [
+// All menu items from all dashboards consolidated with grouping
+const allNavigationItems: NavigationItem[] = [
+  // Common
   { icon: <BarChart3 className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
   { icon: <Activity className="w-5 h-5" />, label: 'Analytics', id: 'analytics' },
+  
+  // Admin/Management
   { icon: <Ambulance className="w-5 h-5" />, label: 'Emergency', id: 'emergency', badge: '3' },
   { icon: <Users className="w-5 h-5" />, label: 'Patients', id: 'patients', badge: '12' },
   // { icon: <Stethoscope className="w-5 h-5" />, label: 'Doctors', id: 'doctors' },
@@ -70,13 +101,76 @@ const navigationItems: NavigationItem[] = [
   { icon: <Hospital className="w-5 h-5" />, label: 'IPD Management', id: 'ipd', badge: '80' },
   { icon: <Bed className="w-5 h-5" />, label: 'Bed Management', id: 'beds' },
   { icon: <FileText className="w-5 h-5" />, label: 'Health Records', id: 'healthrecords' },
-  { icon: <Pill className="w-5 h-5" />, label: 'Pharmacy', id: 'pharmacy' },
-  { icon: <FlaskConical className="w-5 h-5" />, label: 'Laboratory', id: 'lab' },
+  
+  // Pharmacy Group
+  {
+    icon: <Pill className="w-5 h-5" />,
+    label: 'Pharmacy',
+    id: 'pharmacy-group',
+    children: [
+      { icon: <Pill className="w-4 h-4" />, label: 'Pharmacy Dashboard', id: 'pharmacy' },
+      { icon: <CreditCard className="w-4 h-4" />, label: 'POS System', id: 'pos' },
+      { icon: <Calendar className="w-4 h-4" />, label: 'Shift Management', id: 'shifts' },
+      { icon: <ShoppingCart className="w-4 h-4" />, label: 'Prescriptions', id: 'prescriptions', badge: '8' },
+      { icon: <Package className="w-4 h-4" />, label: 'Inventory', id: 'inventory' },
+      { icon: <Receipt className="w-4 h-4" />, label: 'Transactions', id: 'transactions' },
+      { icon: <BarChart3 className="w-4 h-4" />, label: 'POS Reports', id: 'pos-reports' },
+      { icon: <CheckCircle className="w-4 h-4" />, label: 'Orders', id: 'orders' },
+      { icon: <Settings className="w-4 h-4" />, label: 'Settings', id: 'pharmacy-settings' },
+    ]
+  },
+  
+  // Laboratory Group
+  {
+    icon: <FlaskConical className="w-5 h-5" />,
+    label: 'Laboratory',
+    id: 'lab-group',
+    children: [
+      { icon: <FlaskConical className="w-4 h-4" />, label: 'Lab Dashboard', id: 'lab' },
+      { icon: <TestTube className="w-4 h-4" />, label: 'Sample Collection', id: 'collection', badge: '6' },
+      { icon: <Microscope className="w-4 h-4" />, label: 'Test Processing', id: 'processing' },
+      { icon: <FileText className="w-4 h-4" />, label: 'Results Upload', id: 'results' },
+      { icon: <Clock className="w-4 h-4" />, label: 'Pending Tests', id: 'pending', badge: '12' },
+      { icon: <CheckCircle className="w-4 h-4" />, label: 'Completed Tests', id: 'completed' },
+    ]
+  },
+  
+  // Radiology
   { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
-  { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
-  { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
-  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
-  { icon: <UserCheck className="w-5 h-5" />, label: 'Role Permissions', id: 'role-permissions' }
+  
+  // Finance/Billing Group
+  {
+    icon: <DollarSign className="w-5 h-5" />,
+    label: 'Finance',
+    id: 'finance-group',
+    children: [
+      { icon: <DollarSign className="w-4 h-4" />, label: 'Billing', id: 'billing' },
+      { icon: <Receipt className="w-4 h-4" />, label: 'Patient Billing', id: 'patient-billing', badge: '15' },
+      { icon: <CreditCard className="w-4 h-4" />, label: 'Insurance Claims', id: 'insurance' },
+      { icon: <FileText className="w-4 h-4" />, label: 'Reports', id: 'reports' },
+      { icon: <TrendingUp className="w-4 h-4" />, label: 'Revenue Analytics', id: 'revenue-analytics' },
+      { icon: <AlertCircle className="w-4 h-4" />, label: 'Outstanding Bills', id: 'outstanding', badge: '8' },
+    ]
+  },
+  
+  // Doctor specific
+  { icon: <Calendar className="w-5 h-5" />, label: 'My Schedule', id: 'schedule', badge: '8' },
+  { icon: <Video className="w-5 h-5" />, label: 'Telemedicine', id: 'telemedicine' },
+  { icon: <FileText className="w-5 h-5" />, label: 'Patient Records', id: 'records' },
+  
+  // Nurse specific
+  { icon: <Bed className="w-5 h-5" />, label: 'Ward Management', id: 'ward', badge: '3' },
+  { icon: <Users className="w-5 h-5" />, label: 'Patient Monitoring', id: 'monitoring' },
+  { icon: <Pill className="w-5 h-5" />, label: 'Medication', id: 'medication' },
+  { icon: <Clock className="w-5 h-5" />, label: 'Shift Schedule', id: 'nurse-schedule' },
+  { icon: <AlertTriangle className="w-5 h-5" />, label: 'Alerts', id: 'alerts', badge: '5' },
+  
+  // Patient specific
+  { icon: <Heart className="w-5 h-5" />, label: 'My Profile', id: 'profile' },
+  
+  // Settings
+  { icon: <UserCheck className="w-5 h-5" />, label: 'Role Permissions', id: 'role-permissions' },
+  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
 ];
 
 // Mock data for charts
@@ -100,6 +194,8 @@ const revenueData = [
 
 export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
+  const [userPermissions, setUserPermissions] = useState<Record<string, boolean>>({});
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatientName, setSelectedPatientName] = useState<string | null>(null);
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
@@ -108,6 +204,36 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [appointmentView, setAppointmentView] = useState<'list' | 'schedule'>('list');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [userView, setUserView] = useState<'list' | 'add' | 'edit' | 'settings'>('list');
+
+  // Fetch user permissions on mount
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      try {
+        setPermissionsLoading(true);
+        // API returns string[] of permission keys
+        const permissionsArray = await api.getUserPermissions(user.id);
+        // Convert array of permission keys to object format
+        const permissionsObj: Record<string, boolean> = {};
+        if (Array.isArray(permissionsArray)) {
+          permissionsArray.forEach((perm: string) => {
+            permissionsObj[perm] = true;
+          });
+        }
+        setUserPermissions(permissionsObj);
+      } catch (error) {
+        console.error('Error fetching user permissions:', error);
+        // If permissions fetch fails, use role-based access only
+        setUserPermissions({});
+      } finally {
+        setPermissionsLoading(false);
+      }
+    };
+
+    fetchPermissions();
+  }, [user.id]);
+
+  // Filter menu items based on permissions and roles
+  const navigationItems = filterMenuItems(allNavigationItems, user, userPermissions);
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -273,6 +399,91 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <EvaluationDashboard />;
       case 'role-permissions':
         return <RolePermissionsManagement />;
+      // Doctor specific sections
+      case 'schedule':
+        // For doctors: My Schedule, for nurses: Shift Schedule
+        if (user.role === 'doctor') {
+          // Import and use doctor schedule component if available
+          return <div className="p-6"><h2 className="text-2xl font-bold mb-4">My Schedule</h2><p className="text-gray-600">Doctor schedule view coming soon...</p></div>;
+        } else {
+          return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Shift Schedule</h2><p className="text-gray-600">Nurse shift schedule view coming soon...</p></div>;
+        }
+      case 'telemedicine':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Telemedicine</h2><p className="text-gray-600">Telemedicine view coming soon...</p></div>;
+      case 'records':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Patient Records</h2><p className="text-gray-600">Patient records view coming soon...</p></div>;
+      // Nurse specific sections
+      case 'ward':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Ward Management</h2><p className="text-gray-600">Ward management view coming soon...</p></div>;
+      case 'monitoring':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Patient Monitoring</h2><p className="text-gray-600">Patient monitoring view coming soon...</p></div>;
+      case 'medication':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Medication</h2><p className="text-gray-600">Medication view coming soon...</p></div>;
+      case 'nurse-schedule':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Shift Schedule</h2><p className="text-gray-600">Shift schedule view coming soon...</p></div>;
+      case 'alerts':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Alerts</h2><p className="text-gray-600">Alerts view coming soon...</p></div>;
+      // Pharmacy specific sections
+      case 'pos':
+        return <AdvancedPOS />;
+      case 'shifts':
+        return <ShiftManagement />;
+      case 'prescriptions':
+        return <PharmacyManagement />; // Prescriptions view in PharmacyManagement
+      case 'inventory':
+        return <StockManagement />;
+      case 'transactions':
+        return <Transactions />;
+      case 'orders':
+        return <PurchaseOrders />;
+      case 'pos-reports':
+        return <POSReports />;
+      case 'pharmacy-settings':
+        return (
+          <div className="p-6 space-y-6">
+            <Tabs defaultValue="pos-settings" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="pos-settings" className="flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  POS Settings
+                </TabsTrigger>
+                <TabsTrigger value="gst-rates" className="flex items-center gap-2">
+                  <Percent className="w-4 h-4" />
+                  GST Rates
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="pos-settings">
+                <POSSettings />
+              </TabsContent>
+              <TabsContent value="gst-rates">
+                <GSTRatesManagement />
+              </TabsContent>
+            </Tabs>
+          </div>
+        );
+      // Lab specific sections
+      case 'collection':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Sample Collection</h2><p className="text-gray-600">Sample collection view coming soon...</p></div>;
+      case 'processing':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Test Processing</h2><p className="text-gray-600">Test processing view coming soon...</p></div>;
+      case 'results':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Results Upload</h2><p className="text-gray-600">Results upload view coming soon...</p></div>;
+      case 'pending':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Pending Tests</h2><p className="text-gray-600">Pending tests view coming soon...</p></div>;
+      case 'completed':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Completed Tests</h2><p className="text-gray-600">Completed tests view coming soon...</p></div>;
+      // Finance specific sections
+      case 'patient-billing':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Patient Billing</h2><p className="text-gray-600">Patient billing view coming soon...</p></div>;
+      case 'insurance':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Insurance Claims</h2><p className="text-gray-600">Insurance claims view coming soon...</p></div>;
+      case 'revenue-analytics':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Revenue Analytics</h2><p className="text-gray-600">Revenue analytics view coming soon...</p></div>;
+      case 'outstanding':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">Outstanding Bills</h2><p className="text-gray-600">Outstanding bills view coming soon...</p></div>;
+      // Patient specific sections
+      case 'profile':
+        return <div className="p-6"><h2 className="text-2xl font-bold mb-4">My Profile</h2><p className="text-gray-600">Patient profile view coming soon...</p></div>;
       default:
         return <EnhancedAdminDashboard />;
     }

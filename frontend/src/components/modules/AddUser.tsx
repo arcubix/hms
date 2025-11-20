@@ -272,13 +272,6 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
         // Group permissions by role based on role-permission mappings
         const rolePerms: Record<string, string[]> = {};
         
-        // If user has Admin role, add ALL user permissions to admin array
-        // (since Admin shows all permissions in one section)
-        if (hasAdminRole) {
-          rolePerms['admin'] = [...userPermissions];
-          console.log('Added all permissions to admin array:', rolePerms['admin']);
-        }
-        
         // For each permission the user has, find which roles it belongs to
         userPermissions.forEach(permKey => {
           // Check each role to see if this permission belongs to it
@@ -294,6 +287,22 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
             }
           });
         });
+        
+        // If user has Admin role, also add Admin-specific permissions from role_permissions table
+        if (hasAdminRole) {
+          const adminRolePerms = roleMappings['Admin'] || [];
+          adminRolePerms.forEach(permKey => {
+            if (userPermissions.includes(permKey)) {
+              if (!rolePerms['admin']) {
+                rolePerms['admin'] = [];
+              }
+              if (!rolePerms['admin'].includes(permKey)) {
+                rolePerms['admin'].push(permKey);
+              }
+            }
+          });
+          console.log('Added Admin role permissions:', rolePerms['admin']);
+        }
         
         console.log('Final role permissions mapping:', rolePerms);
         setRolePermissions(rolePerms);
@@ -1059,18 +1068,19 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
 
           <Separator className="my-6" />
 
-          {/* Role-Based Permissions - Only show sections for selected roles */}
-          {formData.roles.includes('Admin') ? (
-            // Show only permissions assigned to Admin role from role_permissions
-            (() => {
-              // Get permissions assigned to Admin role from role_permissions table
+          {/* Role-Based Permissions - Show sections for all selected roles */}
+          {(() => {
+            const roleSections: JSX.Element[] = [];
+            
+            // Show Admin Role User Rights if Admin is selected
+            if (formData.roles.includes('Admin')) {
               const adminRolePermissions = rolePermissionMappings['Admin'] || [];
               const adminPermsToShow = permissionDefinitions.filter(p => 
                 adminRolePermissions.includes(p.permission_key)
               );
               
-              return (
-                <Card className="border-0 shadow-sm mb-6">
+              roleSections.push(
+                <Card key="admin" className="border-0 shadow-sm mb-6">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -1150,28 +1160,38 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
                   </CardContent>
                 </Card>
               );
-            })()
-          ) : (
-            // Show permissions organized by role for non-Admin roles
-            [
-              { key: 'staff', label: 'Staff Role User Rights', category: 'staff', roleValue: 'Staff' },
-              { key: 'bloodBankManager', label: 'Blood Bank Manager User Rights', category: 'blood_bank_manager', roleValue: 'Blood Bank Manager' },
-              { key: 'nurse', label: 'Nurse Role User Rights', category: 'nurse', roleValue: 'Nurse' },
-              { key: 'inventoryManager', label: 'Inventory Manager User Rights', category: 'inventory_manager', roleValue: 'Inventory Manager' },
-              { key: 'labManager', label: 'Laboratory Manager User Rights', category: 'lab_manager', roleValue: 'Lab Manager' },
-              { key: 'accountant', label: 'Accountant Role User Rights', category: 'accountant', roleValue: 'Accountant' },
-              { key: 'labTechnician', label: 'Laboratory Technician User Rights', category: 'lab_technician', roleValue: 'Lab Technician' },
-              { key: 'radiologyTechnician', label: 'Radiology Technician User Rights', category: 'radiology_technician', roleValue: 'Radiology Technician' },
-              { key: 'radiologyManager', label: 'Radiology Manager User Rights', category: 'radiology_manager', roleValue: 'Radiology Manager' },
-              { key: 'pharmacist', label: 'Pharmacist User Rights', category: 'pharmacist', roleValue: 'Pharmacist' },
-              { key: 'labReceptionist', label: 'Lab Receptionist User Rights', category: 'lab_receptionist', roleValue: 'Lab Receptionist' },
-              { key: 'doctor', label: 'Doctor Role User Rights', category: 'doctor', roleValue: 'Doctor' }
+            }
+            
+            // Show permissions for other selected roles (including Doctor, etc.)
+            const otherRoleCategories = [
+              { key: 'staff', label: 'Staff Role User Rights', roleValue: 'Staff' },
+              { key: 'bloodBankManager', label: 'Blood Bank Manager User Rights', roleValue: 'Blood Bank Manager' },
+              { key: 'nurse', label: 'Nurse Role User Rights', roleValue: 'Nurse' },
+              { key: 'inventoryManager', label: 'Inventory Manager User Rights', roleValue: 'Inventory Manager' },
+              { key: 'labManager', label: 'Laboratory Manager User Rights', roleValue: 'Lab Manager' },
+              { key: 'accountant', label: 'Accountant Role User Rights', roleValue: 'Accountant' },
+              { key: 'labTechnician', label: 'Laboratory Technician User Rights', roleValue: 'Lab Technician' },
+              { key: 'radiologyTechnician', label: 'Radiology Technician User Rights', roleValue: 'Radiology Technician' },
+              { key: 'radiologyManager', label: 'Radiology Manager User Rights', roleValue: 'Radiology Manager' },
+              { key: 'pharmacist', label: 'Pharmacist User Rights', roleValue: 'Pharmacist' },
+              { key: 'labReceptionist', label: 'Lab Receptionist User Rights', roleValue: 'Lab Receptionist' },
+              { key: 'doctor', label: 'Doctor Role User Rights', roleValue: 'Doctor' },
+              { key: 'emergencyManager', label: 'Emergency Manager User Rights', roleValue: 'Emergency Manager' },
+              { key: 'emergencyNurse', label: 'Emergency Nurse User Rights', roleValue: 'Emergency Nurse' },
+              { key: 'emergencyReceptionist', label: 'Emergency Receptionist User Rights', roleValue: 'Emergency Receptionist' },
+              { key: 'qualityControlManager', label: 'Quality Control Manager User Rights', roleValue: 'Quality Control Manager' },
+              { key: 'radiologyReceptionist', label: 'Radiology Receptionist User Rights', roleValue: 'Radiology Receptionist' },
+              { key: 'receptionist', label: 'Receptionist User Rights', roleValue: 'Receptionist' }
             ]
             .filter(category => formData.roles.includes(category.roleValue))
-            .map(category => {
-              const permissions = permissionDefinitions.filter(p => p.category === category.category);
+            .forEach(category => {
+              // Get permissions assigned to this role from role_permissions table
+              const rolePermissionKeys = rolePermissionMappings[category.roleValue] || [];
+              const permissions = permissionDefinitions.filter(p => 
+                rolePermissionKeys.includes(p.permission_key)
+              );
               
-              return (
+              roleSections.push(
                 <Card key={category.key} className="border-0 shadow-sm mb-6">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
@@ -1245,8 +1265,11 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
                   </CardContent>
                 </Card>
               );
-            })
-          )}
+            });
+            
+            // Return all role sections
+            return <>{roleSections}</>;
+          })()}
 
           <Separator className="my-6" />
 

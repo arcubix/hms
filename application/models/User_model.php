@@ -787,6 +787,9 @@ class User_model extends CI_Model {
      * Returns array of permission keys
      */
     public function get_role_permissions($role) {
+        // Trim whitespace and ensure exact match
+        $role = trim($role);
+        
         $this->db->select('pd.permission_key');
         $this->db->from('role_permissions rp');
         $this->db->join('permission_definitions pd', 'rp.permission_id = pd.id', 'inner');
@@ -809,10 +812,12 @@ class User_model extends CI_Model {
         
         $mappings = array();
         foreach ($result as $row) {
-            if (!isset($mappings[$row['role']])) {
-                $mappings[$row['role']] = array();
+            // Trim role name to ensure consistency
+            $role = trim($row['role']);
+            if (!isset($mappings[$role])) {
+                $mappings[$role] = array();
             }
-            $mappings[$row['role']][] = $row['permission_key'];
+            $mappings[$role][] = $row['permission_key'];
         }
         
         return $mappings;
