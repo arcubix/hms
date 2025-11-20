@@ -87,3 +87,4 @@ If you encounter CORS errors, check:
 - Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
 - Clear Vite cache: `rm -rf node_modules/.vite`
 
+
