@@ -33,14 +33,15 @@ import {
   TestTube,
   Microscope,
   Heart,
-  User as UserIcon
+  User as UserIcon,
+  Building2,
+  DoorOpen
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { filterMenuItems } from '../../utils/permissions';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
 import { DoctorList } from '../modules/DoctorList';
-import { AppointmentList } from '../modules/AppointmentList';
 import { PatientProfile } from '../modules/PatientProfile';
 import { HealthRecord } from '../modules/HealthRecord';
 import { PatientFiles } from '../modules/PatientFiles';
@@ -52,7 +53,6 @@ import { ViewPatientPage } from '../pages/ViewPatientPage';
 import { AddDoctorPage } from '../pages/AddDoctorPage';
 import { EditDoctorPage } from '../pages/EditDoctorPage';
 import { ViewDoctorPage } from '../pages/ViewDoctorPage';
-import { ScheduleAppointmentPage } from '../pages/ScheduleAppointmentPage';
 import { UserList } from '../modules/UserList';
 import { AddUserPage } from '../pages/AddUserPage';
 import { UserSettings } from '../modules/UserSettings';
@@ -70,6 +70,7 @@ import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
 import { RolePermissionsManagement } from '../modules/RolePermissionsManagement';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
+import { SettingsPage } from '../pages/SettingsPage';
 import { POSReports } from '../pharmacy/POSReports';
 import { ShiftManagement } from '../pharmacy/ShiftManagement';
 import { POSSettings } from '../pharmacy/POSSettings';
@@ -201,7 +202,6 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
-  const [appointmentView, setAppointmentView] = useState<'list' | 'schedule'>('list');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [userView, setUserView] = useState<'list' | 'add' | 'edit' | 'settings'>('list');
 
@@ -282,13 +282,6 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setSelectedDoctorId(null);
   };
 
-  const handleAddAppointment = () => {
-    setAppointmentView('schedule');
-  };
-
-  const handleBackToAppointmentList = () => {
-    setAppointmentView('list');
-  };
 
   const handleViewUser = (userId: number) => {
     setSelectedUserId(userId);
@@ -314,6 +307,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setUserView('list');
     setSelectedUserId(null);
   };
+
 
   const renderContent = () => {
     switch (activeSection) {
@@ -374,11 +368,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           );
         }
       case 'appointments':
-        if (appointmentView === 'schedule') {
-          return <ScheduleAppointmentPage onBack={handleBackToAppointmentList} onSuccess={handleBackToAppointmentList} />;
-        } else {
-          return <AppointmentList onAddAppointment={handleAddAppointment} />;
-        }
+        return <OPDSchedule />;
       case 'opd':
         return <OPDSchedule />;
       case 'ipd':
@@ -399,6 +389,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <EvaluationDashboard />;
       case 'role-permissions':
         return <RolePermissionsManagement />;
+      case 'settings':
+        return <SettingsPage />;
       // Doctor specific sections
       case 'schedule':
         // For doctors: My Schedule, for nurses: Shift Schedule

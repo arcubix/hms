@@ -205,6 +205,30 @@ $route['api/users/permissions/role-mappings'] = 'users/role_mappings';
 $route['api/users/roles'] = 'users/roles';
 $route['api/users/roles/(:any)/permissions'] = 'users/role_permissions/$1';
 
+// Setup Module Routes - Floors
+$route['api/floors'] = 'floors/index';
+$route['api/floors/buildings'] = 'floors/buildings';
+$route['api/floors/(:num)'] = 'floors/get/$1';
+
+// Setup Module Routes - Rooms
+$route['api/rooms'] = 'rooms/index';
+$route['api/rooms/types'] = 'rooms/types';
+$route['api/rooms/(:num)'] = 'rooms/get/$1';
+
+// Setup Module Routes - Receptions
+$route['api/receptions'] = 'receptions/index';
+$route['api/receptions/(:num)'] = 'receptions/get/$1';
+
+// Setup Module Routes - Departments
+$route['api/departments'] = 'departments/index';
+$route['api/departments/types'] = 'departments/types';
+$route['api/departments/(:num)'] = 'departments/get/$1';
+
+// Setup Module Routes - Referral Hospitals
+$route['api/referral-hospitals/types'] = 'referralhospitals/types'; // Specific route first
+$route['api/referral-hospitals'] = 'referralhospitals/index';
+$route['api/referral-hospitals/(:num)'] = 'referralhospitals/get/$1';
+
 // Reports
 $route['api/pharmacy/reports/sales-summary'] = 'pharmacy_reports/sales_summary';
 $route['api/pharmacy/reports/daily-sales'] = 'pharmacy_reports/daily_sales';

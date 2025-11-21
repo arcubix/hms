@@ -2245,6 +2245,348 @@ class ApiService {
     });
     return data.data || [];
   }
+
+  // ============================================
+  // SETUP MODULE API METHODS - FLOORS
+  // ============================================
+
+  async getFloors(filters?: { search?: string; status?: string; building_name?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.building_name) params.append('building_name', filters.building_name);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/floors?${queryString}` : '/api/floors';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Floor[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getFloor(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Floor;
+    }>(`/api/floors/${id}`);
+    return data.data;
+  }
+
+  async createFloor(floorData: CreateFloorData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Floor;
+      message: string;
+    }>('/api/floors', {
+      method: 'POST',
+      body: JSON.stringify(floorData),
+    });
+    return data.data;
+  }
+
+  async updateFloor(id: number, floorData: Partial<CreateFloorData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Floor;
+      message: string;
+    }>(`/api/floors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(floorData),
+    });
+    return data.data;
+  }
+
+  async deleteFloor(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/floors/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getBuildings() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/floors/buildings');
+    return data.data || [];
+  }
+
+  // ============================================
+  // SETUP MODULE API METHODS - ROOMS
+  // ============================================
+
+  async getRooms(filters?: { search?: string; status?: string; floor_id?: number; department_id?: number; room_type?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.floor_id) params.append('floor_id', filters.floor_id.toString());
+    if (filters?.department_id) params.append('department_id', filters.department_id.toString());
+    if (filters?.room_type) params.append('room_type', filters.room_type);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/rooms?${queryString}` : '/api/rooms';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Room[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Room;
+    }>(`/api/rooms/${id}`);
+    return data.data;
+  }
+
+  async createRoom(roomData: CreateRoomData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Room;
+      message: string;
+    }>('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async updateRoom(id: number, roomData: Partial<CreateRoomData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Room;
+      message: string;
+    }>(`/api/rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async deleteRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/rooms/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getRoomTypes() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/rooms/types');
+    return data.data || [];
+  }
+
+  // ============================================
+  // SETUP MODULE API METHODS - RECEPTIONS
+  // ============================================
+
+  async getReceptions(filters?: { search?: string; status?: string; floor_id?: number; department_id?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.floor_id) params.append('floor_id', filters.floor_id.toString());
+    if (filters?.department_id) params.append('department_id', filters.department_id.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/receptions?${queryString}` : '/api/receptions';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Reception[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getReception(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Reception;
+    }>(`/api/receptions/${id}`);
+    return data.data;
+  }
+
+  async createReception(receptionData: CreateReceptionData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Reception;
+      message: string;
+    }>('/api/receptions', {
+      method: 'POST',
+      body: JSON.stringify(receptionData),
+    });
+    return data.data;
+  }
+
+  async updateReception(id: number, receptionData: Partial<CreateReceptionData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Reception;
+      message: string;
+    }>(`/api/receptions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(receptionData),
+    });
+    return data.data;
+  }
+
+  async deleteReception(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/receptions/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // ============================================
+  // SETUP MODULE API METHODS - DEPARTMENTS
+  // ============================================
+
+  async getDepartments(filters?: { search?: string; status?: string; department_type?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.department_type) params.append('department_type', filters.department_type);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/departments?${queryString}` : '/api/departments';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: Department[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getDepartment(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Department;
+    }>(`/api/departments/${id}`);
+    return data.data;
+  }
+
+  async createDepartment(departmentData: CreateDepartmentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: Department;
+      message: string;
+    }>('/api/departments', {
+      method: 'POST',
+      body: JSON.stringify(departmentData),
+    });
+    return data.data;
+  }
+
+  async updateDepartment(id: number, departmentData: Partial<CreateDepartmentData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: Department;
+      message: string;
+    }>(`/api/departments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(departmentData),
+    });
+    return data.data;
+  }
+
+  async deleteDepartment(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/departments/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getDepartmentTypes() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/departments/types');
+    return data.data || [];
+  }
+
+  // Referral Hospitals API
+  async getReferralHospitals(filters?: { search?: string; status?: string; specialty_type?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.specialty_type) params.append('specialty_type', filters.specialty_type);
+    
+    const queryString = params.toString();
+    const endpoint = `/api/referral-hospitals${queryString ? `?${queryString}` : ''}`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: ReferralHospital[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getReferralHospital(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: ReferralHospital;
+    }>(`/api/referral-hospitals/${id}`);
+    return data.data;
+  }
+
+  async createReferralHospital(hospitalData: CreateReferralHospitalData) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: ReferralHospital;
+    }>('/api/referral-hospitals', {
+      method: 'POST',
+      body: JSON.stringify(hospitalData),
+    });
+    return data.data;
+  }
+
+  async updateReferralHospital(id: number, hospitalData: Partial<CreateReferralHospitalData>) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: ReferralHospital;
+    }>(`/api/referral-hospitals/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(hospitalData),
+    });
+    return data.data;
+  }
+
+  async deleteReferralHospital(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/referral-hospitals/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getReferralHospitalTypes() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/referral-hospitals/types');
+    return data.data || [];
+  }
 }
 
 export interface Patient {
@@ -3443,6 +3785,140 @@ export interface RolePermission {
   permission_name: string;
   description?: string;
   category?: string;
+}
+
+// Setup module types
+export interface Floor {
+  id: number;
+  floor_number: number;
+  floor_name?: string;
+  building_name?: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Under Maintenance';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateFloorData {
+  floor_number: number;
+  floor_name?: string;
+  building_name?: string;
+  description?: string;
+  status?: 'Active' | 'Inactive' | 'Under Maintenance';
+}
+
+export interface Room {
+  id: number;
+  room_number: string;
+  room_name?: string;
+  floor_id: number;
+  floor_number?: number;
+  floor_name?: string;
+  building_name?: string;
+  department_id?: number;
+  department_name?: string;
+  room_type: 'Consultation' | 'Examination' | 'Procedure' | 'Waiting' | 'Storage' | 'Other';
+  capacity: number;
+  equipment?: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Under Maintenance' | 'Reserved';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRoomData {
+  room_number: string;
+  room_name?: string;
+  floor_id: number;
+  department_id?: number;
+  room_type?: 'Consultation' | 'Examination' | 'Procedure' | 'Waiting' | 'Storage' | 'Other';
+  capacity?: number;
+  equipment?: string;
+  description?: string;
+  status?: 'Active' | 'Inactive' | 'Under Maintenance' | 'Reserved';
+}
+
+export interface Reception {
+  id: number;
+  reception_code: string;
+  reception_name: string;
+  floor_id: number;
+  floor_number?: number;
+  floor_name?: string;
+  building_name?: string;
+  department_id?: number;
+  department_name?: string;
+  location?: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Under Maintenance';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateReceptionData {
+  reception_code?: string;
+  reception_name: string;
+  floor_id: number;
+  department_id?: number;
+  location?: string;
+  description?: string;
+  status?: 'Active' | 'Inactive' | 'Under Maintenance';
+}
+
+export interface Department {
+  id: number;
+  department_code: string;
+  department_name: string;
+  short_name?: string;
+  description?: string;
+  department_type: 'OPD' | 'Emergency' | 'IPD' | 'Diagnostic' | 'Other';
+  status: 'Active' | 'Inactive';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDepartmentData {
+  department_code?: string;
+  department_name: string;
+  short_name?: string;
+  description?: string;
+  department_type?: 'OPD' | 'Emergency' | 'IPD' | 'Diagnostic' | 'Other';
+  status?: 'Active' | 'Inactive';
+}
+
+export interface ReferralHospital {
+  id: number;
+  hospital_name: string;
+  specialty_type: 'Multi-Specialty' | 'Single-Specialty' | 'General' | 'Specialized';
+  address?: string;
+  email?: string;
+  phone?: string;
+  associated_doctor?: string;
+  specialties?: string[];
+  status: 'Active' | 'Inactive';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateReferralHospitalData {
+  hospital_name: string;
+  specialty_type?: 'Multi-Specialty' | 'Single-Specialty' | 'General' | 'Specialized';
+  address?: string;
+  email?: string;
+  phone?: string;
+  associated_doctor?: string;
+  specialties?: string[];
+  status?: 'Active' | 'Inactive';
 }
 
 export interface RolePermissions {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -35,8 +35,10 @@ import {
   X,
   Printer,
   Globe,
-  Mail
+  Mail,
+  Loader2
 } from 'lucide-react';
+import { api, Doctor as ApiDoctor, Appointment as ApiAppointment, Patient } from '../../services/api';
 
 interface Appointment {
   id: string;
@@ -89,101 +91,171 @@ export function OPDSchedule() {
   const [registrationDate, setRegistrationDate] = useState('11-11-2025');
   const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(true);
   
-  // Mock patient search results
-  const mockPatients = [
-    { name: 'yasir', id: '3331112121' },
-    { name: 'Yasir Ahmed', id: '3331112122' },
-    { name: 'Yasir Khan', id: '3331112123' }
-  ];
+  // Real data states
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [searchingPatients, setSearchingPatients] = useState(false);
   
-  const searchResults = patientSearch 
-    ? mockPatients.filter(p => p.name.toLowerCase().includes(patientSearch.toLowerCase()))
-    : [];
-
-  // Mock doctors data
-  const doctors: Doctor[] = [
-    { id: '1', name: 'Talha', specialization: 'General Medicine', appointmentCount: 1, color: 'blue' },
-    { id: '2', name: 'Abubakar', specialization: 'Cardiology', appointmentCount: 0, color: 'green' },
-    { id: '3', name: 'Dr. Sarah Khan', specialization: 'Pediatrics', appointmentCount: 3, color: 'purple' },
-    { id: '4', name: 'Dr. Ahmed Ali', specialization: 'Orthopedics', appointmentCount: 2, color: 'orange' }
-  ];
-
-  // Mock appointments data
-  const appointments: Appointment[] = [
-    {
-      id: '1',
-      patientName: 'Rajab',
-      patientId: 'HW-001234',
-      tokenNumber: '001',
-      time: '09:00 AM',
-      timeSlot: 1,
-      doctorId: '1',
-      status: 'scheduled',
-      phoneNumber: '+92 3001234567',
-      reason: 'Regular checkup'
-    },
-    {
-      id: '2',
-      patientName: 'Ali Hassan',
-      patientId: 'HW-001235',
-      tokenNumber: '002',
-      time: '10:00 AM',
-      timeSlot: 3,
-      doctorId: '3',
-      status: 'checked',
-      phoneNumber: '+92 3001234568',
-      reason: 'Follow-up consultation'
-    },
-    {
-      id: '3',
-      patientName: 'Fatima Noor',
-      patientId: 'HW-001236',
-      tokenNumber: '003',
-      time: '11:00 AM',
-      timeSlot: 4,
-      doctorId: '3',
-      status: 'waiting',
-      phoneNumber: '+92 3001234569',
-      reason: 'Vaccination'
-    },
-    {
-      id: '4',
-      patientName: 'Usman Khan',
-      patientId: 'HW-001237',
-      tokenNumber: '004',
-      time: '02:00 PM',
-      timeSlot: 5,
-      doctorId: '4',
-      status: 'scheduled',
-      phoneNumber: '+92 3001234570',
-      reason: 'Joint pain consultation'
-    },
-    {
-      id: '5',
-      patientName: 'Zainab Ali',
-      patientId: 'HW-001238',
-      tokenNumber: '005',
-      time: '03:00 PM',
-      timeSlot: 6,
-      doctorId: '4',
-      status: 'waiting',
-      phoneNumber: '+92 3001234571',
-      reason: 'Post-surgery checkup'
-    }
-  ];
+  // Patient search results
+  const searchResults = patientSearchResults.map(p => ({
+    name: p.name,
+    id: p.patient_id || p.id.toString()
+  }));
 
   // Time slots (hourly from 9 AM to 5 PM)
   const timeSlots = [
-    { slot: 1, time: '09:00 AM', label: '9 AM' },
-    { slot: 2, time: '10:00 AM', label: '10 AM' },
-    { slot: 3, time: '11:00 AM', label: '11 AM' },
-    { slot: 4, time: '12:00 PM', label: '12 PM' },
-    { slot: 5, time: '01:00 PM', label: '1 PM' },
-    { slot: 6, time: '02:00 PM', label: '2 PM' },
-    { slot: 7, time: '03:00 PM', label: '3 PM' },
-    { slot: 8, time: '04:00 PM', label: '4 PM' },
-    { slot: 9, time: '05:00 PM', label: '5 PM' }
+    { slot: 1, time: '09:00 AM', label: '9 AM', hour: 9 },
+    { slot: 2, time: '10:00 AM', label: '10 AM', hour: 10 },
+    { slot: 3, time: '11:00 AM', label: '11 AM', hour: 11 },
+    { slot: 4, time: '12:00 PM', label: '12 PM', hour: 12 },
+    { slot: 5, time: '01:00 PM', label: '1 PM', hour: 13 },
+    { slot: 6, time: '02:00 PM', label: '2 PM', hour: 14 },
+    { slot: 7, time: '03:00 PM', label: '3 PM', hour: 15 },
+    { slot: 8, time: '04:00 PM', label: '4 PM', hour: 16 },
+    { slot: 9, time: '05:00 PM', label: '5 PM', hour: 17 }
   ];
+
+  // Map API appointment status to OPDSchedule status
+  const mapAppointmentStatus = (status: string): 'scheduled' | 'checked' | 'cancelled' | 'waiting' => {
+    switch (status) {
+      case 'Completed':
+        return 'checked';
+      case 'Cancelled':
+        return 'cancelled';
+      case 'In Progress':
+      case 'Confirmed':
+        return 'waiting';
+      case 'Scheduled':
+      default:
+        return 'scheduled';
+    }
+  };
+
+  // Get time slot from appointment time
+  const getTimeSlotFromTime = (appointmentTime: string): number => {
+    const date = new Date(appointmentTime);
+    const hour = date.getHours();
+    const slot = timeSlots.find(ts => ts.hour === hour);
+    return slot ? slot.slot : 1;
+  };
+
+  // Format time from datetime string
+  const formatTime = (datetime: string): string => {
+    const date = new Date(datetime);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    const minutesStr = minutes.toString().padStart(2, '0');
+    return `${hour12}:${minutesStr} ${ampm}`;
+  };
+
+  // Load doctors from API
+  useEffect(() => {
+    const loadDoctors = async () => {
+      try {
+        setLoadingDoctors(true);
+        // Get all doctors without status filter (status values are: 'Available', 'Busy', 'Off Duty')
+        const apiDoctors = await api.getDoctors();
+        
+        // Map API doctors to OPDSchedule format
+        const colors = ['blue', 'green', 'purple', 'orange', 'red', 'yellow', 'pink', 'indigo'];
+        const mappedDoctors: Doctor[] = apiDoctors.map((doc, index) => ({
+          id: doc.id.toString(),
+          name: doc.name || 'Unknown',
+          specialization: doc.specialty || 'General',
+          appointmentCount: 0, // Will be updated when appointments load
+          color: colors[index % colors.length]
+        }));
+        
+        setDoctors(mappedDoctors);
+      } catch (error) {
+        console.error('Error loading doctors:', error);
+        setDoctors([]);
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+
+    loadDoctors();
+  }, []);
+
+  // Load appointments for selected date
+  useEffect(() => {
+    const loadAppointments = async () => {
+      try {
+        setLoadingAppointments(true);
+        const dateStr = selectedDate.toISOString().split('T')[0];
+        const apiAppointments = await api.getAppointments({
+          date: dateStr
+        });
+
+        // Map API appointments to OPDSchedule format
+        const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
+          const timeSlot = getTimeSlotFromTime(apt.appointment_date);
+          return {
+            id: apt.id.toString(),
+            patientName: apt.patient_name || 'Unknown',
+            patientId: apt.patient_id_string || apt.patient_id.toString(),
+            tokenNumber: apt.appointment_number || String(index + 1).padStart(3, '0'),
+            time: formatTime(apt.appointment_date),
+            timeSlot: timeSlot,
+            doctorId: apt.doctor_doctor_id?.toString() || '',
+            status: mapAppointmentStatus(apt.status),
+            phoneNumber: apt.patient_phone,
+            reason: apt.reason
+          };
+        });
+
+        setAppointments(mappedAppointments);
+
+        // Update appointment counts for doctors
+        setDoctors(prevDoctors => 
+          prevDoctors.map(doc => ({
+            ...doc,
+            appointmentCount: mappedAppointments.filter(apt => apt.doctorId === doc.id).length
+          }))
+        );
+      } catch (error) {
+        console.error('Error loading appointments:', error);
+        setAppointments([]);
+      } finally {
+        setLoadingAppointments(false);
+      }
+    };
+
+    loadAppointments();
+  }, [selectedDate]);
+
+  // Search patients when patientSearch changes
+  useEffect(() => {
+    const searchPatients = async () => {
+      if (patientSearch.length < 2) {
+        setPatientSearchResults([]);
+        return;
+      }
+
+      try {
+        setSearchingPatients(true);
+        const results = await api.getPatients({ search: patientSearch });
+        setPatientSearchResults(results);
+      } catch (error) {
+        console.error('Error searching patients:', error);
+        setPatientSearchResults([]);
+      } finally {
+        setSearchingPatients(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      searchPatients();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [patientSearch]);
 
   const filteredDoctors = selectedDoctor === 'all' 
     ? doctors 
@@ -372,7 +444,7 @@ export function OPDSchedule() {
                     Create Token
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto !z-[10000] [&>div]:!z-[10000]">
                   <DialogHeader className="border-b border-gray-200 pb-4">
                     <DialogTitle className="text-2xl text-gray-900">Create Token</DialogTitle>
                     <DialogDescription className="text-gray-500 text-sm mt-1">
@@ -405,26 +477,37 @@ export function OPDSchedule() {
                         </div>
                         
                         {/* Search Results Dropdown */}
-                        {patientSearch && searchResults.length > 0 && !selectedPatient && (
+                        {patientSearch && !selectedPatient && (
                           <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-56 overflow-y-auto">
-                            {searchResults.map((patient) => (
-                              <button
-                                key={patient.id}
-                                onClick={() => {
-                                  setSelectedPatient(patient);
-                                  setPatientSearch('');
-                                }}
-                                className="w-full text-left px-5 py-4 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0 flex items-center gap-3"
-                              >
-                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                  <User className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <div>
-                                  <div className="font-medium text-gray-900">{patient.name}</div>
-                                  <div className="text-sm text-gray-500">MR# {patient.id}</div>
-                                </div>
-                              </button>
-                            ))}
+                            {searchingPatients ? (
+                              <div className="px-5 py-4 flex items-center justify-center gap-2 text-gray-500">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span className="text-sm">Searching...</span>
+                              </div>
+                            ) : searchResults.length > 0 ? (
+                              searchResults.map((patient) => (
+                                <button
+                                  key={patient.id}
+                                  onClick={() => {
+                                    setSelectedPatient(patient);
+                                    setPatientSearch('');
+                                  }}
+                                  className="w-full text-left px-5 py-4 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0 flex items-center gap-3"
+                                >
+                                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <User className="w-5 h-5 text-blue-600" />
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-gray-900">{patient.name}</div>
+                                    <div className="text-sm text-gray-500">MR# {patient.id}</div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : patientSearch.length >= 2 ? (
+                              <div className="px-5 py-4 text-sm text-gray-500 text-center">
+                                No patients found
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -598,6 +681,14 @@ export function OPDSchedule() {
 
         {/* Schedule Grid */}
         <div className="flex-1 overflow-auto bg-white">
+          {loadingAppointments || loadingDoctors ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-2" />
+                <p className="text-sm text-gray-600">Loading schedule...</p>
+              </div>
+            </div>
+          ) : (
           <div className="min-w-max">
             {/* Doctor Headers */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
@@ -608,20 +699,26 @@ export function OPDSchedule() {
                 </div>
                 
                 {/* Doctor columns */}
-                {filteredDoctors.map(doctor => (
-                  <div 
-                    key={doctor.id} 
-                    className="flex-1 min-w-[300px] border-r border-gray-200 p-4 bg-gray-50"
-                  >
-                    <div className="text-center">
-                      <h3 className="font-medium text-gray-900">{doctor.name}</h3>
-                      <p className="text-xs text-gray-500 mt-1">{doctor.specialization}</p>
-                      <Badge className="mt-2 bg-blue-100 text-blue-800">
-                        {doctor.appointmentCount} APPOINTMENTS
-                      </Badge>
-                    </div>
+                {filteredDoctors.length === 0 ? (
+                  <div className="flex-1 p-8 text-center text-gray-500">
+                    No doctors available
                   </div>
-                ))}
+                ) : (
+                  filteredDoctors.map(doctor => (
+                    <div 
+                      key={doctor.id} 
+                      className="flex-1 min-w-[300px] border-r border-gray-200 p-4 bg-gray-50"
+                    >
+                      <div className="text-center">
+                        <h3 className="font-medium text-gray-900">{doctor.name}</h3>
+                        <p className="text-xs text-gray-500 mt-1">{doctor.specialization}</p>
+                        <Badge className="mt-2 bg-blue-100 text-blue-800">
+                          {doctor.appointmentCount} APPOINTMENTS
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -710,6 +807,7 @@ export function OPDSchedule() {
               ))}
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer Progress Bar */}
@@ -757,7 +855,7 @@ export function OPDSchedule() {
       {/* Token Queue Display Dialog */}
       {showTokenQueue && (
         <Dialog open={showTokenQueue} onOpenChange={setShowTokenQueue}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl !z-[10000] [&>div]:!z-[10000]">
             <DialogHeader>
               <DialogTitle>Token Queue Display</DialogTitle>
               <DialogDescription>
@@ -797,7 +895,7 @@ export function OPDSchedule() {
 
       {/* Add Patient Dialog */}
       <Dialog open={isAddPatientOpen} onOpenChange={setIsAddPatientOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto !z-[10000] [&>div]:!z-[10000]">
           <DialogHeader className="border-b border-gray-200 pb-4">
             <DialogTitle className="text-2xl text-gray-900 flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">

@@ -112,3 +112,4 @@ chmod 644 /backendhospital/.htaccess
 - Ensure Apache mod_rewrite is enabled
 
 
+
