@@ -8,6 +8,9 @@ class Appointments extends Api {
     public function __construct() {
         parent::__construct();
         $this->load->model('Appointment_model');
+        $this->load->model('System_settings_model');
+        $this->load->library('Room_assignment_service');
+        $this->load->library('Token_service');
     }
 
     /**
@@ -48,7 +51,50 @@ class Appointments extends Api {
                 $filters['date_to'] = $this->input->get('date_to');
             }
             
+            if ($this->input->get('floor_id')) {
+                $filters['floor_id'] = $this->input->get('floor_id');
+            }
+            
+            if ($this->input->get('reception_id')) {
+                $filters['reception_id'] = $this->input->get('reception_id');
+            }
+            
             $appointments = $this->Appointment_model->get_all($filters);
+            
+            // Include room information if requested
+            $include_room = $this->input->get('include_room') !== 'false';
+            if ($include_room) {
+                $this->load->model('Room_model');
+                $this->load->model('Reception_model');
+                $this->load->model('Floor_model');
+                
+                foreach ($appointments as &$apt) {
+                    if (!empty($apt['room_id'])) {
+                        $room = $this->Room_model->get_by_id($apt['room_id']);
+                        if ($room) {
+                            $apt['room_number'] = $room['room_number'];
+                            $apt['room_name'] = $room['room_name'];
+                        }
+                    }
+                    
+                    if (!empty($apt['reception_id'])) {
+                        $reception = $this->Reception_model->get_by_id($apt['reception_id']);
+                        if ($reception) {
+                            $apt['reception_name'] = $reception['reception_name'];
+                            $apt['reception_code'] = $reception['reception_code'];
+                        }
+                    }
+                    
+                    if (!empty($apt['floor_id'])) {
+                        $floor = $this->Floor_model->get_by_id($apt['floor_id']);
+                        if ($floor) {
+                            $apt['floor_number'] = $floor['floor_number'];
+                            $apt['floor_name'] = $floor['floor_name'];
+                        }
+                    }
+                }
+            }
+            
             $this->success($appointments);
             
         } elseif ($method === 'POST') {
@@ -74,10 +120,71 @@ class Appointments extends Api {
             return;
         }
         
+        // Get room management mode
+        $room_mode = $this->System_settings_model->get_room_mode();
+        
+        // In Dynamic mode, schedule_id is required
+        if ($room_mode === 'Dynamic' && empty($data['schedule_id'])) {
+            $this->error('schedule_id is required in Dynamic room mode', 400);
+            return;
+        }
+        
+        // Get room assignment
+        $room_assignment = $this->room_assignment_service->get_room_for_appointment(
+            $data['doctor_doctor_id'],
+            $data['appointment_date'],
+            isset($data['schedule_id']) ? $data['schedule_id'] : null
+        );
+        
+        if (!$room_assignment) {
+            $mode_text = $room_mode === 'Dynamic' ? 'No room assigned for this slot on this date' : 'No room assigned to this doctor';
+            $this->error($mode_text, 400);
+            return;
+        }
+        
+        // Validate room availability
+        $date = date('Y-m-d', strtotime($data['appointment_date']));
+        $time = date('H:i:s', strtotime($data['appointment_date']));
+        $duration = isset($data['appointment_duration']) ? (int)$data['appointment_duration'] : 30;
+        
+        $availability = $this->room_assignment_service->validate_room_availability(
+            $room_assignment['room_id'],
+            $date,
+            $time,
+            $duration
+        );
+        
+        if (!$availability['available']) {
+            $this->error($availability['message'], 400);
+            return;
+        }
+        
+        // Add room information to appointment data
+        $data['room_id'] = $room_assignment['room_id'];
+        $data['reception_id'] = $room_assignment['reception_id'];
+        $data['floor_id'] = $room_assignment['floor_id'];
+        
+        // Create appointment
         $result = $this->Appointment_model->create($data);
         
         if ($result['success']) {
+            // Generate token
+            $token_result = $this->token_service->generate_token(
+                $result['id'],
+                $data['doctor_doctor_id'],
+                $data['appointment_date'],
+                isset($data['schedule_id']) ? $data['schedule_id'] : null
+            );
+            
+            // Get appointment with all details
             $appointment = $this->Appointment_model->get_by_id($result['id']);
+            
+            // Add token information to response
+            if ($token_result) {
+                $appointment['token_number'] = $token_result['token_number'];
+                $appointment['token_id'] = $token_result['token_id'];
+            }
+            
             $this->success($appointment, 'Appointment created successfully');
         } else {
             $this->error($result['message'] ?? 'Failed to create appointment', 400);
@@ -197,7 +304,45 @@ class Appointments extends Api {
         }
         
         $slots = $this->Appointment_model->get_available_slots($doctor_id, $date, $duration);
-        $this->success($slots);
+        
+        // Debug: If no slots, return debug info to help diagnose
+        if (empty($slots)) {
+            $this->load->model('Doctor_model');
+            $day_of_week = date('l', strtotime($date));
+            $schedule = $this->Doctor_model->get_schedule($doctor_id);
+            $all_days = array_unique(array_column($schedule, 'day_of_week'));
+            $available_days = array();
+            foreach ($schedule as $s) {
+                if ($s['is_available'] == 1) {
+                    $available_days[] = $s['day_of_week'];
+                }
+            }
+            $available_days = array_unique($available_days);
+            $matching_slots = array_filter($schedule, function($s) use ($day_of_week) {
+                return strcasecmp($s['day_of_week'], $day_of_week) === 0;
+            });
+            
+            // Return slots with debug info (only in development)
+            if (ENVIRONMENT === 'development' || $this->input->get('debug') === '1') {
+                $this->success(array(
+                    'slots' => $slots,
+                    'debug' => array(
+                        'doctor_id' => $doctor_id,
+                        'date' => $date,
+                        'day_of_week' => $day_of_week,
+                        'total_schedule_slots' => count($schedule),
+                        'all_days_in_schedule' => array_values($all_days),
+                        'available_days' => array_values($available_days),
+                        'matching_slots_count' => count($matching_slots),
+                        'matching_slots' => array_values($matching_slots)
+                    )
+                ));
+            } else {
+                $this->success($slots);
+            }
+        } else {
+            $this->success($slots);
+        }
     }
 
     /**

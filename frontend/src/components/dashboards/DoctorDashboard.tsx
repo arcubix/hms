@@ -22,7 +22,8 @@ import {
   User as UserIcon,
   Printer,
   Phone,
-  Mail
+  Mail,
+  MapPin
 } from 'lucide-react';
 import { User } from '../../App';
 import { api, Appointment } from '../../services/api';
@@ -121,12 +122,49 @@ export function DoctorDashboard({ user, onLogout }: DoctorDashboardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user?.doctor?.id]);
 
+  const [roomInfo, setRoomInfo] = useState<any>(null);
+  const [roomMode, setRoomMode] = useState<'Fixed' | 'Dynamic'>('Fixed');
+  const [todayTokens, setTodayTokens] = useState<any[]>([]);
+
   const loadDashboardData = async () => {
     if (!user?.doctor?.id) return;
 
     try {
       setLoading(true);
       const doctorId = user.doctor.id;
+
+      // Get room mode
+      let currentRoomMode = 'Fixed';
+      try {
+        const modeData = await api.getRoomMode();
+        currentRoomMode = modeData.mode;
+        setRoomMode(modeData.mode);
+      } catch (error) {
+        console.error('Error loading room mode:', error);
+      }
+
+      // Get room information
+      try {
+        if (currentRoomMode === 'Fixed') {
+          const room = await api.getDoctorRoom(doctorId);
+          setRoomInfo(room);
+        } else {
+          const today = getTodayDate();
+          const slotRooms = await api.getDoctorSlotRoomsByDate(doctorId, today);
+          setRoomInfo(slotRooms);
+        }
+      } catch (error) {
+        console.error('Error loading room info:', error);
+      }
+
+      // Get today's tokens
+      try {
+        const today = getTodayDate();
+        const tokens = await api.getTokensByDoctor(doctorId, today);
+        setTodayTokens(tokens);
+      } catch (error) {
+        console.error('Error loading tokens:', error);
+      }
 
       // Get today's appointments
       const today = getTodayDate();
@@ -947,6 +985,118 @@ export function DoctorDashboard({ user, onLogout }: DoctorDashboardProps) {
                 color="green"
               />
             </div>
+
+            {/* Room Information */}
+            {(roomInfo || todayTokens.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {roomMode === 'Fixed' && roomInfo && (
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-blue-600" />
+                        Today's Room Assignment
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                          <div>
+                            <p className="text-sm text-gray-600">Room</p>
+                            <p className="text-lg font-semibold text-gray-900">
+                              {roomInfo.room_number} - {roomInfo.room_name || 'Room'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-600">Floor</p>
+                            <p className="text-lg font-semibold text-gray-900">
+                              Floor {roomInfo.floor_number}
+                            </p>
+                          </div>
+                        </div>
+                        {roomInfo.reception_name && (
+                          <div className="text-sm text-gray-600">
+                            Reception: <span className="font-medium">{roomInfo.reception_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {roomMode === 'Dynamic' && Array.isArray(roomInfo) && roomInfo.length > 0 && (
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-blue-600" />
+                        Today's Room Assignments
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {roomInfo.map((assignment: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-blue-50 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {assignment.slot_start_time} - {assignment.slot_end_time}
+                                </p>
+                                <p className="text-xs text-gray-600">{assignment.day_of_week}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {assignment.room_number}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  Floor {assignment.floor_number}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {todayTokens.length > 0 && (
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-green-600" />
+                        Today's Token Queue
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {todayTokens
+                          .filter(t => t.status === 'Waiting' || t.status === 'In Progress')
+                          .sort((a, b) => a.token_number.localeCompare(b.token_number))
+                          .map(token => (
+                            <div key={token.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {token.token_number}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  {token.patient_name}
+                                </p>
+                              </div>
+                              <Badge className={token.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}>
+                                {token.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        {todayTokens.filter(t => t.status === 'Waiting' || t.status === 'In Progress').length === 0 && (
+                          <div className="text-center py-4 text-gray-500 text-sm">
+                            No active tokens
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Today's Schedule */}

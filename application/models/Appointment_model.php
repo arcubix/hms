@@ -19,10 +19,17 @@ class Appointment_model extends CI_Model {
      * Get all appointments with filters
      */
     public function get_all($filters = []) {
-        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
+        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, 
+                          d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string,
+                          r.room_number, r.room_name,
+                          rec.reception_code, rec.reception_name,
+                          f.floor_number, f.floor_name');
         $this->db->from('appointments a');
         $this->db->join('patients p', 'a.patient_id = p.id', 'left');
         $this->db->join('doctors d', 'a.doctor_doctor_id = d.id', 'left');
+        $this->db->join('rooms r', 'a.room_id = r.id', 'left');
+        $this->db->join('receptions rec', 'a.reception_id = rec.id', 'left');
+        $this->db->join('floors f', 'a.floor_id = f.id', 'left');
         
         // Apply filters
         if (!empty($filters['search'])) {
@@ -58,6 +65,14 @@ class Appointment_model extends CI_Model {
             $this->db->where('DATE(a.appointment_date) <=', $filters['date_to']);
         }
         
+        if (!empty($filters['floor_id'])) {
+            $this->db->where('a.floor_id', $filters['floor_id']);
+        }
+        
+        if (!empty($filters['reception_id'])) {
+            $this->db->where('a.reception_id', $filters['reception_id']);
+        }
+        
         $this->db->order_by('a.appointment_date', 'ASC');
         $query = $this->db->get();
         return $query->result_array();
@@ -67,10 +82,17 @@ class Appointment_model extends CI_Model {
      * Get single appointment with details
      */
     public function get_by_id($id) {
-        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string');
+        $this->db->select('a.*, p.name as patient_name, p.patient_id as patient_id_string, p.phone as patient_phone, p.email as patient_email, 
+                          d.name as doctor_name, d.specialty, d.doctor_id as doctor_doctor_id_string,
+                          r.room_number, r.room_name,
+                          rec.reception_code, rec.reception_name,
+                          f.floor_number, f.floor_name');
         $this->db->from('appointments a');
         $this->db->join('patients p', 'a.patient_id = p.id', 'left');
         $this->db->join('doctors d', 'a.doctor_doctor_id = d.id', 'left');
+        $this->db->join('rooms r', 'a.room_id = r.id', 'left');
+        $this->db->join('receptions rec', 'a.reception_id = rec.id', 'left');
+        $this->db->join('floors f', 'a.floor_id = f.id', 'left');
         $this->db->where('a.id', $id);
         $query = $this->db->get();
         return $query->row_array();
@@ -118,6 +140,10 @@ class Appointment_model extends CI_Model {
             'notes' => $data['notes'] ?? null,
             'appointment_duration' => $duration,
             'appointment_number' => $appointment_number,
+            'room_id' => isset($data['room_id']) ? (int)$data['room_id'] : null,
+            'reception_id' => isset($data['reception_id']) ? (int)$data['reception_id'] : null,
+            'floor_id' => isset($data['floor_id']) ? (int)$data['floor_id'] : null,
+            'token_number' => isset($data['token_number']) ? $data['token_number'] : null,
             'created_by' => isset($data['created_by']) ? (int)$data['created_by'] : null
         );
         
@@ -221,7 +247,9 @@ class Appointment_model extends CI_Model {
                 $available_slots = 0;
                 
                 foreach ($day_slots as $slot_config) {
-                    $max_per_slot = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+                    // Allow multiple appointments per slot (minimum 3)
+                    $schedule_max = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+                    $max_per_slot = max($schedule_max, 3); // Ensure at least 3 appointments per slot
                     $schedule_duration = isset($slot_config['appointment_duration']) ? (int)$slot_config['appointment_duration'] : 30;
                     
                     $start_time = strtotime($slot_config['start_time']);
@@ -289,11 +317,26 @@ class Appointment_model extends CI_Model {
         
         // Get ALL doctor schedule slots for that day (multiple slots possible)
         $schedule = $this->get_doctor_model()->get_schedule($doctor_id);
+        
+        // Debug: Log schedule and day matching
+        log_message('debug', "get_available_slots: doctor_id=$doctor_id, date=$date, day_of_week=$day_of_week");
+        log_message('debug', "get_available_slots: schedule count=" . count($schedule));
+        
         $day_slots = array_filter($schedule, function($s) use ($day_of_week) {
-            return $s['day_of_week'] === $day_of_week && $s['is_available'] == 1;
+            // Case-insensitive comparison for day_of_week
+            $match = strcasecmp($s['day_of_week'], $day_of_week) === 0 && $s['is_available'] == 1;
+            if (!$match && strcasecmp($s['day_of_week'], $day_of_week) === 0) {
+                log_message('debug', "get_available_slots: Slot found but is_available=" . $s['is_available'] . " for " . $s['day_of_week']);
+            }
+            return $match;
         });
         
+        log_message('debug', "get_available_slots: day_slots count=" . count($day_slots));
+        
         if (empty($day_slots)) {
+            // Log why no slots found
+            $all_days = array_unique(array_column($schedule, 'day_of_week'));
+            log_message('debug', "get_available_slots: No slots found. Looking for: $day_of_week, Available days: " . implode(', ', $all_days));
             return array(); // Doctor not available on this day
         }
         
@@ -317,7 +360,9 @@ class Appointment_model extends CI_Model {
         $all_slots = array();
         
         foreach ($day_slots as $slot_config) {
-            $max_per_slot = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+            // Allow multiple appointments per slot (minimum 3)
+            $schedule_max = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+            $max_per_slot = max($schedule_max, 3); // Ensure at least 3 appointments per slot
             $schedule_duration = isset($slot_config['appointment_duration']) ? (int)$slot_config['appointment_duration'] : 30;
             $slot_duration = $duration > 0 ? $duration : $schedule_duration;
             
@@ -429,8 +474,10 @@ class Appointment_model extends CI_Model {
             return array('available' => false, 'message' => 'Time is outside doctor\'s schedule');
         }
         
-        // Check capacity
-        $max_per_slot = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+        // Check capacity - allow multiple appointments per slot (2-3)
+        // Use minimum of 3 appointments per slot to support multiple appointments in the same time slot
+        $schedule_max = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+        $max_per_slot = max($schedule_max, 3); // Ensure at least 3 appointments per slot
         
         $this->db->where('doctor_doctor_id', $doctor_id);
         $this->db->where('DATE(appointment_date)', $date);
@@ -475,7 +522,9 @@ class Appointment_model extends CI_Model {
             }
         }
         
-        $max = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+        // Allow multiple appointments per slot (minimum 3)
+        $schedule_max = isset($slot_config['max_appointments_per_slot']) ? (int)$slot_config['max_appointments_per_slot'] : 1;
+        $max = max($schedule_max, 3); // Ensure at least 3 appointments per slot
         
         $this->db->where('doctor_doctor_id', $doctor_id);
         $this->db->where('DATE(appointment_date)', $date);

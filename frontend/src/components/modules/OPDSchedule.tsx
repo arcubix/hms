@@ -51,6 +51,12 @@ interface Appointment {
   status: 'scheduled' | 'checked' | 'cancelled' | 'waiting';
   phoneNumber?: string;
   reason?: string;
+  room_number?: string;
+  room_name?: string;
+  floor_number?: number;
+  floor_name?: string;
+  reception_name?: string;
+  token_number?: string;
 }
 
 interface Doctor {
@@ -69,12 +75,15 @@ export function OPDSchedule() {
   
   // Add Token Dialog States
   const [patientSearch, setPatientSearch] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<{name: string; id: string} | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<{name: string; id: number; patient_id?: string} | null>(null);
   const [appointmentDate, setAppointmentDate] = useState(new Date());
   const [appointmentDoctor, setAppointmentDoctor] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState<string>(''); // Store selected time slot
   const [checkupType, setCheckupType] = useState('regular');
   const [comment, setComment] = useState('');
   const [isCommentOpen, setIsCommentOpen] = useState(true);
+  const [previewTokenNumber, setPreviewTokenNumber] = useState<string>('');
+  const [loadingTokenPreview, setLoadingTokenPreview] = useState(false);
   
   // Add Patient Dialog States
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -98,25 +107,49 @@ export function OPDSchedule() {
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [searchingPatients, setSearchingPatients] = useState(false);
+  const [doctorAvailableSlots, setDoctorAvailableSlots] = useState<Record<string, string[]>>({}); // doctorId -> array of time strings (HH:mm)
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [roomMode, setRoomMode] = useState<'Fixed' | 'Dynamic'>('Fixed');
+  const [creatingToken, setCreatingToken] = useState(false);
   
-  // Patient search results
-  const searchResults = patientSearchResults.map(p => ({
-    name: p.name,
-    id: p.patient_id || p.id.toString()
-  }));
+  // Patient search results - use numeric id for API, but display patient_id string
+  const searchResults = patientSearchResults.map(p => {
+    // Ensure id is always a number
+    const numericId = typeof p.id === 'number' ? p.id : (typeof p.id === 'string' ? parseInt(p.id, 10) : null);
+    if (!numericId || isNaN(numericId) || numericId <= 0) {
+      console.warn('Invalid patient ID in search results:', p);
+      return null;
+    }
+    return {
+      name: p.name,
+      id: numericId, // Use numeric id for API calls
+      patient_id: p.patient_id || p.id.toString() // Display string for UI
+    };
+  }).filter((p): p is {name: string; id: number; patient_id: string} => p !== null);
 
-  // Time slots (hourly from 9 AM to 5 PM)
-  const timeSlots = [
-    { slot: 1, time: '09:00 AM', label: '9 AM', hour: 9 },
-    { slot: 2, time: '10:00 AM', label: '10 AM', hour: 10 },
-    { slot: 3, time: '11:00 AM', label: '11 AM', hour: 11 },
-    { slot: 4, time: '12:00 PM', label: '12 PM', hour: 12 },
-    { slot: 5, time: '01:00 PM', label: '1 PM', hour: 13 },
-    { slot: 6, time: '02:00 PM', label: '2 PM', hour: 14 },
-    { slot: 7, time: '03:00 PM', label: '3 PM', hour: 15 },
-    { slot: 8, time: '04:00 PM', label: '4 PM', hour: 16 },
-    { slot: 9, time: '05:00 PM', label: '5 PM', hour: 17 }
-  ];
+  // Generate 24-hour time slots (00:00 to 23:00)
+  interface TimeSlot {
+    slot: number;
+    time: string;
+    label: string;
+    hour: number;
+  }
+
+  const generateTimeSlots = (): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      const time24 = `${hour.toString().padStart(2, '0')}:00`;
+      slots.push({
+        slot: hour + 1,
+        time: time24,
+        label: time24,
+        hour: hour
+      });
+    }
+    return slots;
+  };
+
+  const allTimeSlots = generateTimeSlots();
 
   // Map API appointment status to OPDSchedule status
   const mapAppointmentStatus = (status: string): 'scheduled' | 'checked' | 'cancelled' | 'waiting' => {
@@ -134,23 +167,21 @@ export function OPDSchedule() {
     }
   };
 
-  // Get time slot from appointment time
+  // Get time slot from appointment time (returns hour 0-23)
   const getTimeSlotFromTime = (appointmentTime: string): number => {
     const date = new Date(appointmentTime);
     const hour = date.getHours();
-    const slot = timeSlots.find(ts => ts.hour === hour);
-    return slot ? slot.slot : 1;
+    return hour + 1; // Slot number (1-24)
   };
 
-  // Format time from datetime string
+  // Format time from datetime string in 24-hour format
   const formatTime = (datetime: string): string => {
     const date = new Date(datetime);
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hour12 = hours % 12 || 12;
+    const hoursStr = hours.toString().padStart(2, '0');
     const minutesStr = minutes.toString().padStart(2, '0');
-    return `${hour12}:${minutesStr} ${ampm}`;
+    return `${hoursStr}:${minutesStr}`;
   };
 
   // Load doctors from API
@@ -183,6 +214,64 @@ export function OPDSchedule() {
     loadDoctors();
   }, []);
 
+  // Load available slots for all doctors on selected date
+  useEffect(() => {
+    const loadAvailableSlots = async () => {
+      if (doctors.length === 0) return;
+      
+      try {
+        setLoadingSlots(true);
+        const dateStr = selectedDate.toISOString().split('T')[0];
+        const slotsMap: Record<string, string[]> = {};
+        
+        // Load available slots for each doctor
+        await Promise.all(
+          doctors.map(async (doctor) => {
+            try {
+              const slots = await api.getAvailableSlots(doctor.id, dateStr);
+              
+              // Ensure slots is an array
+              if (!Array.isArray(slots)) {
+                console.warn(`Doctor ${doctor.id}: API returned non-array response:`, slots);
+                slotsMap[doctor.id] = [];
+                return;
+              }
+              
+              // Extract time strings (HH:mm format) from available slots
+              // Only include slots that have availability > 0
+              const timeStrings = slots
+                .filter(slot => slot && slot.available > 0 && slot.status !== 'full')
+                .map(slot => {
+                  const date = new Date(slot.datetime);
+                  const hours = date.getHours().toString().padStart(2, '0');
+                  const minutes = date.getMinutes().toString().padStart(2, '0');
+                  return `${hours}:${minutes}`;
+                });
+              slotsMap[doctor.id] = timeStrings;
+              
+              // Debug log to see what slots are being returned
+              if (doctor.id && slots.length > 0) {
+                console.log(`Doctor ${doctor.id} (${doctor.name}): Found ${timeStrings.length} available slots on ${dateStr}`, timeStrings.slice(0, 5));
+              }
+            } catch (error) {
+              console.error(`Error loading slots for doctor ${doctor.id}:`, error);
+              slotsMap[doctor.id] = [];
+            }
+          })
+        );
+        
+        setDoctorAvailableSlots(slotsMap);
+      } catch (error) {
+        console.error('Error loading available slots:', error);
+        setDoctorAvailableSlots({});
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    loadAvailableSlots();
+  }, [selectedDate, doctors]);
+
   // Load appointments for selected date
   useEffect(() => {
     const loadAppointments = async () => {
@@ -196,11 +285,39 @@ export function OPDSchedule() {
         // Map API appointments to OPDSchedule format
         const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
           const timeSlot = getTimeSlotFromTime(apt.appointment_date);
+          
+          // Debug: Log token_number from API
+          if (apt.id) {
+            console.log(`Appointment ${apt.id}: token_number from API =`, apt.token_number, 'type:', typeof apt.token_number);
+          }
+          
+          // Extract token_number directly from API - don't modify it, just use it as-is
+          // The API returns token_number: "F1-001", "F1-002" etc. - use it directly
+          const tokenNumberFromAPI = apt.token_number;
+          
+          // Debug: Log what we're getting from API
+          if (apt.id) {
+            console.log(`[APPOINTMENT MAPPING] Appointment ${apt.id}:`, {
+              'token_number from API': tokenNumberFromAPI,
+              'token_number type': typeof tokenNumberFromAPI,
+              'room_number': apt.room_number,
+              'floor_number': apt.floor_number
+            });
+          }
+          
           return {
             id: apt.id.toString(),
             patientName: apt.patient_name || 'Unknown',
             patientId: apt.patient_id_string || apt.patient_id.toString(),
-            tokenNumber: apt.appointment_number || String(index + 1).padStart(3, '0'),
+            // Use token_number directly from API - no validation, no fallback
+            tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
+            room_number: (apt as any).room_number,
+            room_name: (apt as any).room_name,
+            floor_number: (apt as any).floor_number,
+            floor_name: (apt as any).floor_name,
+            reception_name: (apt as any).reception_name,
+            // Store token_number EXACTLY as it comes from API - no modification
+            token_number: tokenNumberFromAPI || undefined,
             time: formatTime(apt.appointment_date),
             timeSlot: timeSlot,
             doctorId: apt.doctor_doctor_id?.toString() || '',
@@ -261,18 +378,270 @@ export function OPDSchedule() {
     ? doctors 
     : doctors.filter(d => d.id === selectedDoctor);
 
-  const getAppointmentForSlot = (doctorId: string, timeSlot: number) => {
-    return appointments.find(apt => apt.doctorId === doctorId && apt.timeSlot === timeSlot);
+  // Calculate preview token number when doctor and date are selected
+  useEffect(() => {
+    const calculateTokenPreview = async () => {
+      if (!appointmentDoctor || !selectedPatient) {
+        setPreviewTokenNumber('');
+        return;
+      }
+
+      try {
+        setLoadingTokenPreview(true);
+        
+        // Get doctor's room assignment to determine reception
+        let receptionId: number | null = null;
+        
+        if (roomMode === 'Fixed') {
+          try {
+            const doctorRoom = await api.getDoctorRoom(parseInt(appointmentDoctor));
+            if (doctorRoom && doctorRoom.reception_id) {
+              receptionId = doctorRoom.reception_id;
+            }
+          } catch (error) {
+            console.error('Error getting doctor room:', error);
+          }
+        }
+        
+        if (receptionId) {
+          // Get existing tokens to estimate next number
+          const dateStr = appointmentDate.toISOString().split('T')[0];
+          try {
+            const tokens = await api.getTokensByReception(receptionId, dateStr);
+            // Estimate next token number (actual logic is in backend)
+            const nextNumber = tokens.length + 1;
+            setPreviewTokenNumber(`~${nextNumber}`);
+          } catch (error) {
+            // If no tokens exist yet, show first token
+            setPreviewTokenNumber('~1');
+          }
+        } else {
+          setPreviewTokenNumber('Will be generated');
+        }
+      } catch (error) {
+        console.error('Error calculating token preview:', error);
+        setPreviewTokenNumber('Will be generated');
+      } finally {
+        setLoadingTokenPreview(false);
+      }
+    };
+
+    calculateTokenPreview();
+  }, [appointmentDoctor, appointmentDate, appointmentTime, selectedPatient, roomMode]);
+
+  // Handle token creation
+  const handleCreateToken = async (print: boolean = false) => {
+    if (!selectedPatient || !appointmentDoctor) {
+      alert('Please select a patient and doctor');
+      return;
+    }
+
+    // Debug: Log the selected patient to see its structure
+    console.log('Selected patient:', selectedPatient);
+    console.log('Patient ID type:', typeof selectedPatient.id, 'Value:', selectedPatient.id);
+
+    // Validate patient_id - handle number, string, undefined, and null
+    let patientId: number;
+    
+    if (selectedPatient.id === undefined || selectedPatient.id === null) {
+      console.error('Patient ID is undefined or null:', selectedPatient);
+      alert('Invalid patient ID. Please select a valid patient.');
+      return;
+    }
+    
+    if (typeof selectedPatient.id === 'number') {
+      if (selectedPatient.id <= 0 || isNaN(selectedPatient.id)) {
+        console.error('Patient ID is not a valid number:', selectedPatient.id);
+        alert('Invalid patient ID. Please select a valid patient.');
+        return;
+      }
+      patientId = selectedPatient.id;
+    } else if (typeof selectedPatient.id === 'string') {
+      const parsed = parseInt(selectedPatient.id, 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        console.error('Invalid patient ID string:', selectedPatient.id);
+        alert('Invalid patient ID. Please select a valid patient.');
+        return;
+      }
+      patientId = parsed;
+    } else {
+      console.error('Patient ID is not a valid type:', typeof selectedPatient.id, selectedPatient);
+      alert('Invalid patient ID. Please select a valid patient.');
+      return;
+    }
+
+    console.log('Final patient ID:', patientId);
+
+    try {
+      setCreatingToken(true);
+      const dateStr = appointmentDate.toISOString().split('T')[0];
+      const timeStr = appointmentTime || '09:00';
+      const appointmentDateTime = `${dateStr} ${timeStr}:00`;
+
+      // Map checkup type to appointment type
+      const appointmentTypeMap: Record<string, string> = {
+        'regular': 'Check-up',
+        'followup': 'Follow-up',
+        'emergency': 'Emergency',
+        'consultation': 'Consultation',
+        'routine': 'Check-up',
+        'specialist': 'Consultation'
+      };
+
+      const appointmentData: any = {
+        patient_id: patientId,
+        doctor_doctor_id: parseInt(appointmentDoctor),
+        appointment_date: appointmentDateTime,
+        appointment_type: appointmentTypeMap[checkupType] || 'Consultation',
+        reason: comment || undefined,
+        notes: comment || undefined
+      };
+
+      // In Dynamic mode, we would need schedule_id, but for now we'll let backend handle it
+      // The backend will auto-assign room based on doctor and time
+
+      const appointment = await api.createAppointment(appointmentData);
+      
+      // Refresh appointments
+      const apiAppointments = await api.getAppointments({ date: dateStr });
+      const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
+        const timeSlot = getTimeSlotFromTime(apt.appointment_date);
+        
+        // Debug: Log token_number from API after creation
+        if (apt.id) {
+          console.log(`Appointment ${apt.id} (after create): token_number =`, apt.token_number, 'full apt:', apt);
+        }
+        
+        // Extract token_number directly from API - don't modify it, just use it as-is
+        // The API returns token_number: "F1-001", "F1-002" etc. - use it directly
+        const tokenNumberFromAPI = apt.token_number;
+        
+        // Debug: Log what we're getting from API
+        if (apt.id) {
+          console.log(`[APPOINTMENT MAPPING - AFTER CREATE] Appointment ${apt.id}:`, {
+            'token_number from API': tokenNumberFromAPI,
+            'token_number type': typeof tokenNumberFromAPI,
+            'room_number': apt.room_number,
+            'floor_number': apt.floor_number
+          });
+        }
+        
+        return {
+          id: apt.id.toString(),
+          patientName: apt.patient_name || 'Unknown',
+          patientId: apt.patient_id_string || apt.patient_id.toString(),
+          // Use token_number directly from API - no validation, no fallback
+          tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
+          room_number: (apt as any).room_number,
+          room_name: (apt as any).room_name,
+          floor_number: (apt as any).floor_number,
+          floor_name: (apt as any).floor_name,
+          reception_name: (apt as any).reception_name,
+          // Store token_number EXACTLY as it comes from API - no modification
+          token_number: tokenNumberFromAPI || undefined,
+          time: formatTime(apt.appointment_date),
+          timeSlot: timeSlot,
+          doctorId: apt.doctor_doctor_id?.toString() || '',
+          status: mapAppointmentStatus(apt.status),
+          phoneNumber: apt.patient_phone,
+          reason: apt.reason
+        };
+      });
+      setAppointments(mappedAppointments);
+
+      // Update appointment counts for doctors
+      setDoctors(prevDoctors => 
+        prevDoctors.map(doc => ({
+          ...doc,
+          appointmentCount: mappedAppointments.filter(apt => apt.doctorId === doc.id).length
+        }))
+      );
+
+      // Close dialog and reset form
+      setIsCreateAppointmentOpen(false);
+      setSelectedPatient(null);
+      setPatientSearch('');
+      setAppointmentDoctor('');
+      setAppointmentTime('');
+      setPreviewTokenNumber('');
+      setCheckupType('regular');
+      setComment('');
+
+      if (print) {
+        // TODO: Implement print functionality
+        console.log('Print token:', appointment.token_number);
+      }
+
+      alert(`Token created successfully! Token: ${appointment.token_number || 'N/A'}`);
+    } catch (error: any) {
+      console.error('Error creating token:', error);
+      alert(error.message || 'Failed to create token');
+    } finally {
+      setCreatingToken(false);
+    }
+  };
+
+  // Get available time slots for filtered doctors
+  const getAvailableTimeSlots = (): TimeSlot[] => {
+    if (filteredDoctors.length === 0) return allTimeSlots;
+    
+    // Get all unique available hour slots across filtered doctors
+    const availableHours = new Set<number>();
+    filteredDoctors.forEach(doctor => {
+      const doctorSlots = doctorAvailableSlots[doctor.id] || [];
+      doctorSlots.forEach(time => {
+        // Extract hour from time string (e.g., "18:30" -> hour 18)
+        const hour = parseInt(time.split(':')[0]);
+        if (!isNaN(hour) && hour >= 0 && hour < 24) {
+          availableHours.add(hour);
+        }
+      });
+    });
+    
+    // If no slots available, show all slots (fallback)
+    if (availableHours.size === 0) return allTimeSlots;
+    
+    // Filter time slots to only show hours that have available slots
+    return allTimeSlots.filter(slot => availableHours.has(slot.hour));
+  };
+
+  const availableTimeSlots = getAvailableTimeSlots();
+
+  const getAppointmentsForSlot = (doctorId: string, timeSlot: number) => {
+    return appointments.filter(apt => apt.doctorId === doctorId && apt.timeSlot === timeSlot);
+  };
+
+  // Check if a slot is available for a specific doctor
+  const isSlotAvailableForDoctor = (doctorId: string, timeSlot: TimeSlot): boolean => {
+    const doctorSlots = doctorAvailableSlots[doctorId] || [];
+    if (doctorSlots.length === 0) return false;
+    
+    // Check if any available slot time falls within this hour
+    return doctorSlots.some(slotTime => {
+      const [slotHour, slotMinute] = slotTime.split(':').map(Number);
+      // Match if the slot time is in the same hour (e.g., 18:00, 18:30, 18:45 all match hour 18)
+      return slotHour === timeSlot.hour;
+    });
   };
 
   const getStatusColor = (status: string) => {
     const colors: any = {
-      scheduled: 'bg-blue-100 text-blue-800 border-blue-200',
-      checked: 'bg-green-100 text-green-800 border-green-200',
-      cancelled: 'bg-red-100 text-red-800 border-red-200',
-      waiting: 'bg-orange-100 text-orange-800 border-orange-200'
+      scheduled: 'border-blue-500',
+      checked: 'border-green-500',
+      cancelled: 'border-red-500',
+      waiting: 'border-orange-500'
     };
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[status] || 'border-gray-400';
+  };
+  
+  const getStatusBgColor = (status: string) => {
+    const colors: any = {
+      scheduled: 'bg-blue-500',
+      checked: 'bg-green-500',
+      cancelled: 'bg-red-500',
+      waiting: 'bg-orange-500'
+    };
+    return colors[status] || 'bg-gray-400';
   };
 
   const getStatusIcon = (status: string) => {
@@ -311,62 +680,64 @@ export function OPDSchedule() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 relative">
       {/* Left Sidebar - Calendar */}
-      <div className="w-80 bg-white border-r border-gray-200 p-6 space-y-6">
+      <div className="w-80 bg-white border-r border-gray-200 p-4 space-y-4 overflow-y-auto relative z-0 flex flex-col">
         {/* Calendar Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-medium text-gray-900">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-900">
             {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </h3>
           <div className="flex gap-1">
             <Button 
               variant="ghost" 
               size="sm" 
+              className="h-7 w-7 p-0"
               onClick={() => {
                 const newDate = new Date(selectedDate);
                 newDate.setMonth(newDate.getMonth() - 1);
                 setSelectedDate(newDate);
               }}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3 h-3" />
             </Button>
             <Button 
               variant="ghost" 
               size="sm"
+              className="h-7 w-7 p-0"
               onClick={() => {
                 const newDate = new Date(selectedDate);
                 newDate.setMonth(newDate.getMonth() + 1);
                 setSelectedDate(newDate);
               }}
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3 h-3" />
             </Button>
           </div>
         </div>
 
         {/* Calendar */}
-        <div className="border rounded-lg">
+        <div className="border rounded-lg overflow-hidden flex-shrink-0 bg-white">
           <Calendar
             mode="single"
             selected={selectedDate}
             onSelect={(date) => date && setSelectedDate(date)}
-            className="rounded-md"
+            className="rounded-md w-full"
           />
         </div>
 
         {/* Token Queue Display */}
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4">
+        <Card className="border border-gray-200 shadow-sm">
+          <CardContent className="p-3">
             <button
               onClick={() => setShowTokenQueue(!showTokenQueue)}
               className="w-full flex items-center justify-between text-sm text-gray-700 hover:text-blue-600 transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <Monitor className="w-5 h-5" />
-                <span className="font-medium">Token Queue Display</span>
+              <div className="flex items-center gap-2">
+                <Monitor className="w-4 h-4" />
+                <span className="font-medium text-xs">Token Queue Display</span>
               </div>
-              <Badge className="bg-blue-600 text-white">
+              <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5">
                 {appointments.filter(a => a.status === 'waiting').length}
               </Badge>
             </button>
@@ -374,34 +745,34 @@ export function OPDSchedule() {
         </Card>
 
         {/* Quick Stats */}
-        <div className="space-y-3">
-          <div className="bg-blue-50 rounded-lg p-3">
+        <div className="space-y-2">
+          <div className="bg-blue-50 rounded-lg p-2.5 border border-blue-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span className="text-sm text-blue-900">Total Appointments</span>
+                <Users className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-xs text-blue-900 font-medium">Total Appointments</span>
               </div>
-              <span className="text-lg font-medium text-blue-900">{appointments.length}</span>
+              <span className="text-base font-bold text-blue-900">{appointments.length}</span>
             </div>
           </div>
-          <div className="bg-green-50 rounded-lg p-3">
+          <div className="bg-green-50 rounded-lg p-2.5 border border-green-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm text-green-900">Checked</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                <span className="text-xs text-green-900 font-medium">Checked</span>
               </div>
-              <span className="text-lg font-medium text-green-900">
+              <span className="text-base font-bold text-green-900">
                 {appointments.filter(a => a.status === 'checked').length}
               </span>
             </div>
           </div>
-          <div className="bg-orange-50 rounded-lg p-3">
+          <div className="bg-orange-50 rounded-lg p-2.5 border border-orange-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-orange-600" />
-                <span className="text-sm text-orange-900">Waiting</span>
+                <Clock className="w-3.5 h-3.5 text-orange-600" />
+                <span className="text-xs text-orange-900 font-medium">Waiting</span>
               </div>
-              <span className="text-lg font-medium text-orange-900">
+              <span className="text-base font-bold text-orange-900">
                 {appointments.filter(a => a.status === 'waiting').length}
               </span>
             </div>
@@ -410,7 +781,7 @@ export function OPDSchedule() {
       </div>
 
       {/* Main Content - Schedule Grid */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-0">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between mb-4">
@@ -437,14 +808,26 @@ export function OPDSchedule() {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              <Dialog open={isCreateAppointmentOpen} onOpenChange={setIsCreateAppointmentOpen}>
+              <Dialog open={isCreateAppointmentOpen} onOpenChange={(open) => {
+                setIsCreateAppointmentOpen(open);
+                if (!open) {
+                  // Reset form when dialog closes
+                  setSelectedPatient(null);
+                  setPatientSearch('');
+                  setAppointmentDoctor('');
+                  setAppointmentTime('');
+                  setPreviewTokenNumber('');
+                  setCheckupType('regular');
+                  setComment('');
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
                     <Plus className="w-4 h-4 mr-2" />
                     Create Token
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto !z-[10000] [&>div]:!z-[10000]">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader className="border-b border-gray-200 pb-4">
                     <DialogTitle className="text-2xl text-gray-900">Create Token</DialogTitle>
                     <DialogDescription className="text-gray-500 text-sm mt-1">
@@ -499,7 +882,7 @@ export function OPDSchedule() {
                                   </div>
                                   <div>
                                     <div className="font-medium text-gray-900">{patient.name}</div>
-                                    <div className="text-sm text-gray-500">MR# {patient.id}</div>
+                                    <div className="text-sm text-gray-500">MR# {patient.patient_id || patient.id}</div>
                                   </div>
                                 </button>
                               ))
@@ -525,7 +908,7 @@ export function OPDSchedule() {
                               <span className="text-lg font-semibold text-gray-900">{selectedPatient.name}</span>
                               <Badge className="bg-blue-600 text-white">Selected</Badge>
                             </div>
-                            <span className="text-sm text-gray-600">MR# {selectedPatient.id}</span>
+                            <span className="text-sm text-gray-600">MR# {selectedPatient.patient_id || selectedPatient.id}</span>
                           </div>
                         </div>
                         <button
@@ -541,8 +924,8 @@ export function OPDSchedule() {
                     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
                       <h3 className="text-base font-semibold text-gray-900 mb-4">Appointment Details</h3>
                       
-                      {/* Date and Token Row */}
-                      <div className="grid grid-cols-2 gap-4">
+                      {/* Date, Time and Token Row */}
+                      <div className="grid grid-cols-3 gap-4">
                         {/* Date Field */}
                         <div>
                           <Label className="text-sm font-medium text-gray-700 mb-2 block">Appointment Date</Label>
@@ -557,11 +940,31 @@ export function OPDSchedule() {
                           </div>
                         </div>
 
+                        {/* Time Field */}
+                        <div>
+                          <Label className="text-sm font-medium text-gray-700 mb-2 block">Time</Label>
+                          <div className="flex items-center gap-3 border-2 border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-colors bg-gray-50">
+                            <Clock className="w-5 h-5 text-blue-600" />
+                            <input
+                              type="time"
+                              value={appointmentTime}
+                              onChange={(e) => setAppointmentTime(e.target.value)}
+                              className="flex-1 outline-none bg-transparent font-medium text-gray-900"
+                            />
+                          </div>
+                        </div>
+
                         {/* Token Number Display */}
                         <div>
                           <Label className="text-sm font-medium text-gray-700 mb-2 block">Token Number</Label>
-                          <div className="border-2 border-gray-200 rounded-xl px-6 py-4 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-                            <span className="text-2xl font-bold text-blue-700">Token #2</span>
+                          <div className="border-2 border-gray-200 rounded-xl px-6 py-4 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center min-h-[60px]">
+                            {loadingTokenPreview ? (
+                              <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                            ) : previewTokenNumber ? (
+                              <span className="text-2xl font-bold text-blue-700">{previewTokenNumber}</span>
+                            ) : (
+                              <span className="text-lg text-gray-400">Will be generated</span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -640,12 +1043,28 @@ export function OPDSchedule() {
                       >
                         Cancel
                       </Button>
-                      <Button className="bg-green-600 hover:bg-green-700 h-12 px-8 rounded-xl shadow-sm">
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                      <Button 
+                        className="bg-green-600 hover:bg-green-700 h-12 px-8 rounded-xl shadow-sm"
+                        onClick={() => handleCreateToken(false)}
+                        disabled={creatingToken || !selectedPatient || !appointmentDoctor}
+                      >
+                        {creatingToken ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                        )}
                         Create Token
                       </Button>
-                      <Button className="bg-blue-600 hover:bg-blue-700 h-12 px-8 rounded-xl shadow-sm">
-                        <Printer className="w-4 h-4 mr-2" />
+                      <Button 
+                        className="bg-blue-600 hover:bg-blue-700 h-12 px-8 rounded-xl shadow-sm"
+                        onClick={() => handleCreateToken(true)}
+                        disabled={creatingToken || !selectedPatient || !appointmentDoctor}
+                      >
+                        {creatingToken ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Printer className="w-4 h-4 mr-2" />
+                        )}
                         Create & Print
                       </Button>
                     </div>
@@ -691,7 +1110,7 @@ export function OPDSchedule() {
           ) : (
           <div className="min-w-max">
             {/* Doctor Headers */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+            <div className="sticky top-0 z-0 bg-white border-b border-gray-200">
               <div className="flex">
                 {/* Time column header */}
                 <div className="w-20 flex-shrink-0 border-r border-gray-200 p-3">
@@ -707,7 +1126,7 @@ export function OPDSchedule() {
                   filteredDoctors.map(doctor => (
                     <div 
                       key={doctor.id} 
-                      className="flex-1 min-w-[300px] border-r border-gray-200 p-4 bg-gray-50"
+                      className="flex-1 min-w-[450px] border-r border-gray-200 p-4 bg-gray-50"
                     >
                       <div className="text-center">
                         <h3 className="font-medium text-gray-900">{doctor.name}</h3>
@@ -724,87 +1143,174 @@ export function OPDSchedule() {
 
             {/* Time Slots Grid */}
             <div className="divide-y divide-gray-200">
-              {timeSlots.map(timeSlot => (
-                <div key={timeSlot.slot} className="flex hover:bg-gray-50 transition-colors">
-                  {/* Time column */}
-                  <div className="w-20 flex-shrink-0 border-r border-gray-200 p-3 bg-gray-50">
-                    <div className="text-center">
-                      <span className="text-xs font-medium text-gray-600">{timeSlot.slot}</span>
-                      <p className="text-xs text-gray-500 mt-1">{timeSlot.label}</p>
-                    </div>
-                  </div>
-
-                  {/* Appointment cells */}
-                  {filteredDoctors.map(doctor => {
-                    const appointment = getAppointmentForSlot(doctor.id, timeSlot.slot);
-                    
-                    return (
-                      <div 
-                        key={doctor.id} 
-                        className="flex-1 min-w-[300px] border-r border-gray-200 p-3 min-h-[80px]"
-                      >
-                        {appointment ? (
-                          <Card className={`border-l-4 ${getStatusColor(appointment.status)} cursor-pointer hover:shadow-md transition-shadow`}>
-                            <CardContent className="p-3">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-medium">
-                                    {appointment.tokenNumber}
-                                  </div>
-                                  <div>
-                                    <h4 className="text-sm font-medium text-gray-900">
-                                      {appointment.patientName}
-                                    </h4>
-                                    <p className="text-xs text-gray-500">{appointment.patientId}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {getStatusIcon(appointment.status)}
-                                  <span className="text-xs capitalize">{appointment.status}</span>
-                                </div>
-                              </div>
-                              
-                              {appointment.reason && (
-                                <p className="text-xs text-gray-600 mb-2 line-clamp-1">
-                                  {appointment.reason}
-                                </p>
-                              )}
-                              
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <Clock className="w-3 h-3" />
-                                {appointment.time}
-                              </div>
-
-                              {/* Quick Actions */}
-                              <div className="flex gap-1 mt-2 pt-2 border-t border-gray-200">
-                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
-                                  <Eye className="w-3 h-3 mr-1" />
-                                  View
-                                </Button>
-                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
-                                  <Edit className="w-3 h-3 mr-1" />
-                                  Edit
-                                </Button>
-                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-green-600">
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  Check
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ) : (
-                          <button 
-                            className="w-full h-full border-2 border-dashed border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors flex items-center justify-center group"
-                            onClick={() => setIsCreateAppointmentOpen(true)}
-                          >
-                            <Plus className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+              {loadingSlots ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600 mr-2" />
+                  <span className="text-sm text-gray-600">Loading available slots...</span>
                 </div>
-              ))}
+              ) : availableTimeSlots.length === 0 ? (
+                <div className="flex items-center justify-center p-8 text-gray-500">
+                  <span className="text-sm">No available slots for selected doctors on this date</span>
+                </div>
+              ) : (
+                availableTimeSlots.map(timeSlot => (
+                  <div key={timeSlot.slot} className="flex hover:bg-gray-50 transition-colors">
+                    {/* Time column */}
+                    <div className="w-20 flex-shrink-0 border-r border-gray-200 p-3 bg-gray-50">
+                      <div className="text-center">
+                        <span className="text-xs font-medium text-gray-600">{timeSlot.time}</span>
+                        <p className="text-xs text-gray-500 mt-1">{timeSlot.label}</p>
+                      </div>
+                    </div>
+
+                    {/* Appointment cells */}
+                    {filteredDoctors.map(doctor => {
+                      const isAvailable = isSlotAvailableForDoctor(doctor.id, timeSlot);
+                      const slotAppointments = getAppointmentsForSlot(doctor.id, timeSlot.slot);
+                      
+                      return (
+                        <div 
+                          key={doctor.id} 
+                          className={`flex-1 min-w-[450px] border-r border-gray-200 p-2 bg-gray-50/30 ${
+                            !isAvailable ? 'opacity-40' : ''
+                          }`}
+                          style={{ minHeight: slotAppointments.length > 0 ? `${Math.max(70, slotAppointments.length * 60 + 50)}px` : '70px' }}
+                        >
+                          <div className="flex flex-col gap-2 h-full">
+                            {/* Appointments List */}
+                            {slotAppointments.length > 0 && (
+                              <div className="space-y-1.5 flex-1">
+                                {slotAppointments.map((appointment) => (
+                                  <div
+                                    key={appointment.id}
+                                    className={`group relative bg-white border-l-4 ${getStatusColor(appointment.status)} rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden`}
+                                  >
+                                    <div className="p-2.5 bg-blue-50 rounded-lg">
+                                      <div className="flex items-start gap-2 mb-2">
+                                        {/* Token Number Circle */}
+                                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-[10px] flex-shrink-0">
+                                          {(() => {
+                                            const tokenNumber = (appointment as any).token_number || appointment.tokenNumber || '';
+                                            const tokenDisplay = tokenNumber.includes('-') ? tokenNumber.split('-').pop() : tokenNumber;
+                                            return tokenNumber || '---';
+                                          })()}
+                                        </div>
+                                        
+                                        {/* Patient Info */}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between mb-0.5">
+                                            <div className="min-w-0 flex-1">
+                                              <h4 className="font-semibold text-gray-900 text-xs mb-0.5 truncate">
+                                                {appointment.patientName}
+                                              </h4>
+                                              <p className="text-[10px] text-gray-600 truncate">
+                                                {appointment.patientId}
+                                              </p>
+                                            </div>
+                                            {/* Status with Clock Icon */}
+                                            <div className="flex items-center gap-0.5 text-[10px] text-gray-600 flex-shrink-0 ml-1">
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span className="capitalize whitespace-nowrap">{appointment.status}</span>
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Appointment Type/Reason */}
+                                          {appointment.reason && (
+                                            <p className="text-[10px] text-gray-500 mb-0.5 truncate">
+                                              {appointment.reason}
+                                            </p>
+                                          )}
+                                          
+                                          {/* Time */}
+                                          <div className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                                            <Clock className="w-2.5 h-2.5" />
+                                            <span>{appointment.time}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Action Buttons */}
+                                      <div className="flex items-center gap-1 pt-1.5 border-t border-blue-100">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-6 px-1.5 text-[10px] hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
+                                          title="View Details"
+                                        >
+                                          <Eye className="w-2.5 h-2.5 mr-0.5" />
+                                          View
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-6 px-1.5 text-[10px] hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
+                                          title="Edit"
+                                        >
+                                          <Edit className="w-2.5 h-2.5 mr-0.5" />
+                                          Edit
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-6 px-1.5 text-[10px] hover:bg-green-100 hover:text-green-600 text-green-600 rounded transition-colors"
+                                          title="Mark as Checked"
+                                        >
+                                          <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                                          Check
+                                        </Button>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Status Indicator Bar */}
+                                    <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${getStatusBgColor(appointment.status)}`} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Add Button - Always visible if available */}
+                            {isAvailable && (
+                              <button 
+                                className="flex-shrink-0 w-full border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 hover:border-blue-500 transition-all duration-200 flex items-center justify-center group py-2"
+                                onClick={() => {
+                                  // Auto-select doctor and time when clicking on a slot
+                                  setAppointmentDoctor(doctor.id);
+                                  setAppointmentDate(selectedDate);
+                                  // Set time based on the slot hour
+                                  const slotTime = `${timeSlot.hour.toString().padStart(2, '0')}:00`;
+                                  setAppointmentTime(slotTime);
+                                  setIsCreateAppointmentOpen(true);
+                                }}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                                    <Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 group-hover:text-blue-600 font-medium transition-colors">
+                                    Add Appointment
+                                  </span>
+                                </div>
+                              </button>
+                            )}
+                            
+                            {/* Not Available State */}
+                            {!isAvailable && slotAppointments.length === 0 && (
+                              <div className="flex items-center justify-center h-full min-h-[50px]">
+                                <div className="text-center">
+                                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-1">
+                                    <XCircle className="w-3.5 h-3.5 text-gray-400" />
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 font-medium">Not available</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
             </div>
           </div>
           )}
@@ -855,7 +1361,10 @@ export function OPDSchedule() {
       {/* Token Queue Display Dialog */}
       {showTokenQueue && (
         <Dialog open={showTokenQueue} onOpenChange={setShowTokenQueue}>
-          <DialogContent className="max-w-2xl !z-[10000] [&>div]:!z-[10000]">
+          <DialogContent 
+            className="!max-w-lg !w-[450px]"
+            style={{ width: '450px', maxWidth: '450px' }}
+          >
             <DialogHeader>
               <DialogTitle>Token Queue Display</DialogTitle>
               <DialogDescription>
@@ -864,30 +1373,61 @@ export function OPDSchedule() {
             </DialogHeader>
             <div className="space-y-3">
               {appointments
-                .filter(a => a.status === 'waiting' || a.status === 'scheduled')
-                .map((appointment) => (
-                  <Card key={appointment.id} className="border-l-4 border-l-blue-600">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                            {appointment.tokenNumber}
+                .filter(a => a.status === 'waiting' || a.status === 'scheduled' || a.status === 'checked')
+                .map((appointment) => {
+                  // Extract token number (e.g., "F1-001" -> "001")
+                  const tokenNumber = (appointment as any).token_number || appointment.tokenNumber || '';
+                  const tokenDisplay = tokenNumber.includes('-') ? tokenNumber.split('-').pop() : tokenNumber;
+                  
+                  // Format time (e.g., "18:00" -> "6:00 PM")
+                  const formatTime = (time: string) => {
+                    const [hours, minutes] = time.split(':');
+                    const hour = parseInt(hours);
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    return `${displayHour}:${minutes.padStart(2, '0')} ${ampm}`;
+                  };
+                  
+                  const doctorName = doctors.find(d => d.id === appointment.doctorId)?.name || 'Unknown Doctor';
+                  const isScheduled = appointment.status === 'scheduled' || appointment.status === 'checked';
+                  
+                  return (
+                    <Card key={appointment.id} className="border-l-4 border-l-blue-600">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* Token Number Circle */}
+                            <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                              {tokenDisplay || '---'}
+                            </div>
+                            
+                            {/* Patient Info */}
+                            <div>
+                              <h4 className="font-medium text-gray-900">
+                                {appointment.patientName}
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                {appointment.patientId}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Dr. {doctorName} • {formatTime(appointment.time)}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{appointment.patientName}</h4>
-                            <p className="text-sm text-gray-600">{appointment.patientId}</p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Dr. {doctors.find(d => d.id === appointment.doctorId)?.name} • {appointment.time}
-                            </p>
-                          </div>
+                          
+                          {/* Status Badge */}
+                          <Badge 
+                            className={isScheduled 
+                              ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                              : 'bg-orange-100 text-orange-800 border-orange-200'}
+                          >
+                            {isScheduled ? 'SCHEDULED' : 'WAITING'}
+                          </Badge>
                         </div>
-                        <Badge className={getStatusColor(appointment.status)}>
-                          {appointment.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
             </div>
           </DialogContent>
         </Dialog>
@@ -895,7 +1435,7 @@ export function OPDSchedule() {
 
       {/* Add Patient Dialog */}
       <Dialog open={isAddPatientOpen} onOpenChange={setIsAddPatientOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto !z-[10000] [&>div]:!z-[10000]">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader className="border-b border-gray-200 pb-4">
             <DialogTitle className="text-2xl text-gray-900 flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">

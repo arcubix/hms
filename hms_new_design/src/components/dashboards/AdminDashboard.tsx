@@ -18,7 +18,8 @@ import {
   Stethoscope,
   Ambulance,
   Hospital,
-  Scan
+  Scan,
+  MessageSquare
 } from 'lucide-react';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
@@ -39,6 +40,8 @@ import { EmergencyManagement } from '../modules/EmergencyManagement';
 import { LaboratoryManagement } from '../modules/LaboratoryManagement';
 import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
+import { PreferenceSettings } from '../modules/PreferenceSettings';
+import { ManageMessage } from '../modules/ManageMessage';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface AdminDashboardProps {
@@ -62,7 +65,8 @@ const navigationItems: NavigationItem[] = [
   { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
   { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
   { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
-  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
+  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
+  { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', id: 'messages' }
 ];
 
 // Mock data for charts
@@ -141,6 +145,10 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <EmergencyManagement />;
       case 'analytics':
         return <EvaluationDashboard />;
+      case 'settings':
+        return <PreferenceSettings />;
+      case 'messages':
+        return <ManageMessage />;
       default:
         return <EnhancedAdminDashboard />;
     }

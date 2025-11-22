@@ -24,6 +24,9 @@ import { DepartmentList } from '../modules/DepartmentList';
 import { DepartmentForm } from '../modules/DepartmentForm';
 import { ReferralHospitalList } from '../modules/ReferralHospitalList';
 import { ReferralHospitalForm } from '../modules/ReferralHospitalForm';
+import { SystemSettings } from '../modules/SystemSettings';
+import { DoctorRoomAssignment } from '../modules/DoctorRoomAssignment';
+import { DoctorSlotRoomAssignment } from '../modules/DoctorSlotRoomAssignment';
 
 interface SettingsPageProps {
   initialSection?: string;
@@ -35,6 +38,9 @@ type SettingsSection =
   | 'departments' 
   | 'floors'
   | 'rooms'
+  | 'system-settings'
+  | 'doctor-rooms'
+  | 'doctor-slot-rooms'
   | 'receptions'
   | 'insurance' 
   | 'organizations' 
@@ -49,6 +55,9 @@ interface PreferenceItem {
 }
 
 const preferenceItems: PreferenceItem[] = [
+  { id: 'system-settings', label: 'System Settings', icon: <Settings className="w-5 h-5" /> },
+  { id: 'doctor-rooms', label: 'Doctor Rooms (Fixed)', icon: <DoorOpen className="w-5 h-5" /> },
+  { id: 'doctor-slot-rooms', label: 'Doctor Slot Rooms (Dynamic)', icon: <Clock className="w-5 h-5" /> },
   { id: 'forms', label: 'Forms', icon: <FileText className="w-5 h-5" /> },
   { id: 'doctor-timings', label: "Doctor's Timings", icon: <Clock className="w-5 h-5" /> },
   { id: 'departments', label: 'Departments', icon: <Building2 className="w-5 h-5" /> },
@@ -281,6 +290,12 @@ export function SettingsPage({ initialSection = 'departments' }: SettingsPagePro
         } else {
           return <ReferralHospitalList onAddHospital={handleAddHospital} onEditHospital={handleEditHospital} />;
         }
+      case 'system-settings':
+        return <SystemSettings />;
+      case 'doctor-rooms':
+        return <DoctorRoomAssignment />;
+      case 'doctor-slot-rooms':
+        return <DoctorSlotRoomAssignment />;
       default:
         return (
           <div className="space-y-6">

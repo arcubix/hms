@@ -188,12 +188,41 @@ class Doctor_model extends CI_Model {
      * Returns all time slots, allowing multiple slots per day
      */
     public function get_schedule($doctor_id) {
-        $this->db->where('doctor_id', $doctor_id);
-        $this->db->order_by('FIELD(day_of_week, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")');
-        $this->db->order_by('slot_order', 'ASC');
+        // Get doctor to find user_id
+        $doctor = $this->get_by_id($doctor_id);
+        if (!$doctor || empty($doctor['user_id'])) {
+            return array();
+        }
+        
+        // Get schedule from user_timings table
+        $this->db->where('user_id', $doctor['user_id']);
+        $this->db->where('is_available', 1);
+        $this->db->order_by('FIELD(day_of_week, "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")');
         $this->db->order_by('start_time', 'ASC');
-        $query = $this->db->get('doctor_schedules');
-        return $query->result_array();
+        $query = $this->db->get('user_timings');
+        $timings = $query->result_array();
+        
+        // Convert user_timings format to doctor_schedule format for compatibility
+        $schedule = array();
+        foreach ($timings as $timing) {
+            $schedule[] = array(
+                'id' => $timing['id'],
+                'doctor_id' => $doctor_id,
+                'day_of_week' => $timing['day_of_week'],
+                'start_time' => $timing['start_time'],
+                'end_time' => $timing['end_time'],
+                'is_available' => $timing['is_available'],
+                'appointment_duration' => isset($timing['duration']) ? (int)$timing['duration'] : 30,
+                'max_appointments_per_slot' => 1, // Default, user_timings doesn't have this field
+                'slot_order' => 0, // Default, user_timings doesn't have this field
+                'slot_name' => null, // Default, user_timings doesn't have this field
+                'break_start' => null, // Default, user_timings doesn't have this field
+                'break_end' => null, // Default, user_timings doesn't have this field
+                'notes' => null // Default, user_timings doesn't have this field
+            );
+        }
+        
+        return $schedule;
     }
 
     /**

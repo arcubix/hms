@@ -21,7 +21,7 @@ export function DashboardLayout({ user, children, navigationItems, onLogout }: D
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Top Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
+      <header className="bg-white border-b border-gray-200 shadow-sm relative z-10">
         {/* Top Row - Logo, Search, and User Info */}
         <div className="px-6 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between">

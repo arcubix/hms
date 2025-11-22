@@ -229,6 +229,31 @@ $route['api/referral-hospitals/types'] = 'referralhospitals/types'; // Specific 
 $route['api/referral-hospitals'] = 'referralhospitals/index';
 $route['api/referral-hospitals/(:num)'] = 'referralhospitals/get/$1';
 
+// System Settings Routes (order matters - more specific routes first)
+$route['api/system-settings/room-mode'] = 'system_settings/room_mode';
+$route['api/system-settings/category/(:any)'] = 'system_settings/category/$1';
+$route['api/system-settings'] = 'system_settings/index';
+$route['api/system-settings/(:any)'] = 'system_settings/get/$1';
+
+// Doctor Rooms Routes (Fixed Mode)
+$route['api/doctor-rooms'] = 'doctor_rooms/index';
+$route['api/doctor-rooms/doctor/(:num)'] = 'doctor_rooms/doctor/$1';
+$route['api/doctor-rooms/(:num)'] = 'doctor_rooms/get/$1';
+
+// Doctor Slot Rooms Routes (Dynamic Mode)
+$route['api/doctor-slot-rooms'] = 'doctor_slot_rooms/index';
+$route['api/doctor-slot-rooms/bulk'] = 'doctor_slot_rooms/bulk';
+$route['api/doctor-slot-rooms/doctor/(:num)/date/(:any)'] = 'doctor_slot_rooms/doctor/$1/$2';
+$route['api/doctor-slot-rooms/(:num)'] = 'doctor_slot_rooms/get/$1';
+
+// Tokens Routes
+$route['api/tokens/reception/(:num)'] = 'tokens/reception/$1';
+$route['api/tokens/floor/(:num)'] = 'tokens/floor/$1';
+$route['api/tokens/doctor/(:num)'] = 'tokens/doctor/$1';
+$route['api/tokens/queue/(:num)'] = 'tokens/queue/$1';
+$route['api/tokens/(:num)/status'] = 'tokens/update_status/$1';
+$route['api/tokens/(:num)'] = 'tokens/get/$1';
+
 // Reports
 $route['api/pharmacy/reports/sales-summary'] = 'pharmacy_reports/sales_summary';
 $route['api/pharmacy/reports/daily-sales'] = 'pharmacy_reports/daily_sales';

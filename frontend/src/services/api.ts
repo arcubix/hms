@@ -374,11 +374,21 @@ class ApiService {
     params.append('date', date);
     if (duration) params.append('duration', duration.toString());
     
-    const data = await this.request<{
-      success: boolean;
-      data: AvailableSlot[];
-    }>(`/api/appointments/doctor/${doctorId}/slots?${params.toString()}`);
-    return data.data || [];
+    try {
+      const data = await this.request<{
+        success: boolean;
+        data: AvailableSlot[];
+      }>(`/api/appointments/doctor/${doctorId}/slots?${params.toString()}`);
+      
+      // Ensure we always return an array
+      if (data && data.data && Array.isArray(data.data)) {
+        return data.data;
+      }
+      return [];
+    } catch (error) {
+      console.error(`Error fetching slots for doctor ${doctorId}:`, error);
+      return [];
+    }
   }
 
   async getDoctorAvailableDates(doctorId: string, month: string) {
@@ -2429,6 +2439,173 @@ class ApiService {
     return data.data;
   }
 
+  // ============================================
+  // SYSTEM SETTINGS API
+  // ============================================
+
+  async getSystemSettings(category?: string) {
+    const url = category ? `/api/system-settings/category/${category}` : '/api/system-settings';
+    return this.request<{ [category: string]: { [key: string]: SystemSetting } }>(url);
+  }
+
+  async getSystemSetting(key: string) {
+    return this.request<SystemSetting>(`/api/system-settings/${key}`);
+  }
+
+  async updateSystemSetting(key: string, value: any) {
+    return this.request<SystemSetting>(`/api/system-settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async getRoomMode() {
+    return this.request<RoomMode>('/api/system-settings/room-mode');
+  }
+
+
+  // ============================================
+  // DOCTOR ROOMS API (Fixed Mode)
+  // ============================================
+
+  async getDoctorRooms(filters?: { doctor_id?: number; room_id?: number; reception_id?: number; is_active?: boolean }) {
+    const params = new URLSearchParams();
+    if (filters?.doctor_id) params.append('doctor_id', filters.doctor_id.toString());
+    if (filters?.room_id) params.append('room_id', filters.room_id.toString());
+    if (filters?.reception_id) params.append('reception_id', filters.reception_id.toString());
+    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active ? '1' : '0');
+    const query = params.toString();
+    return this.request<DoctorRoom[]>(`/api/doctor-rooms${query ? '?' + query : ''}`);
+  }
+
+  async getDoctorRoom(doctorId: number) {
+    return this.request<DoctorRoom>(`/api/doctor-rooms/doctor/${doctorId}`);
+  }
+
+  async createDoctorRoom(data: CreateDoctorRoomData) {
+    return this.request<DoctorRoom>('/api/doctor-rooms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateDoctorRoom(id: number, data: Partial<CreateDoctorRoomData>) {
+    return this.request<DoctorRoom>(`/api/doctor-rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteDoctorRoom(id: number) {
+    return this.request<void>(`/api/doctor-rooms/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================
+  // DOCTOR SLOT ROOMS API (Dynamic Mode)
+  // ============================================
+
+  async getDoctorSlotRooms(filters?: {
+    doctor_id?: number;
+    schedule_id?: number;
+    room_id?: number;
+    reception_id?: number;
+    assignment_date?: string;
+    date_from?: string;
+    date_to?: string;
+    is_active?: boolean;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.doctor_id) params.append('doctor_id', filters.doctor_id.toString());
+    if (filters?.schedule_id) params.append('schedule_id', filters.schedule_id.toString());
+    if (filters?.room_id) params.append('room_id', filters.room_id.toString());
+    if (filters?.reception_id) params.append('reception_id', filters.reception_id.toString());
+    if (filters?.assignment_date) params.append('assignment_date', filters.assignment_date);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active ? '1' : '0');
+    const query = params.toString();
+    return this.request<DoctorSlotRoom[]>(`/api/doctor-slot-rooms${query ? '?' + query : ''}`);
+  }
+
+  async getDoctorSlotRoomsByDate(doctorId: number, date: string) {
+    return this.request<DoctorSlotRoom[]>(`/api/doctor-slot-rooms/doctor/${doctorId}/date/${date}`);
+  }
+
+  async createDoctorSlotRoom(data: CreateDoctorSlotRoomData) {
+    return this.request<DoctorSlotRoom>('/api/doctor-slot-rooms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async bulkCreateDoctorSlotRooms(data: BulkCreateDoctorSlotRoomData) {
+    return this.request<{ inserted: number }>('/api/doctor-slot-rooms/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateDoctorSlotRoom(id: number, data: Partial<CreateDoctorSlotRoomData>) {
+    return this.request<DoctorSlotRoom>(`/api/doctor-slot-rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteDoctorSlotRoom(id: number) {
+    return this.request<void>(`/api/doctor-slot-rooms/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================
+  // TOKENS API
+  // ============================================
+
+  async getTokensByReception(receptionId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    return this.request<Token[]>(`/api/tokens/reception/${receptionId}${query ? '?' + query : ''}`);
+  }
+
+  async getTokensByFloor(floorId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    return this.request<Token[]>(`/api/tokens/floor/${floorId}${query ? '?' + query : ''}`);
+  }
+
+  async getTokensByDoctor(doctorId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    return this.request<Token[]>(`/api/tokens/doctor/${doctorId}${query ? '?' + query : ''}`);
+  }
+
+  async getTokenQueue(receptionId: number, date?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    const query = params.toString();
+    return this.request<Token[]>(`/api/tokens/queue/${receptionId}${query ? '?' + query : ''}`);
+  }
+
+  async updateTokenStatus(tokenId: number, status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled' | 'No Show') {
+    return this.request<Token>(`/api/tokens/${tokenId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async getToken(id: number) {
+    return this.request<Token>(`/api/tokens/${id}`);
+  }
+
   async updateReception(id: number, receptionData: Partial<CreateReceptionData>) {
     const data = await this.request<{
       success: boolean;
@@ -2449,6 +2626,275 @@ class ApiService {
       method: 'DELETE',
     });
     return data;
+  }
+
+  // ============================================
+  // SYSTEM SETTINGS API
+  // ============================================
+
+  async getSystemSettings(category?: string) {
+    const url = category ? `/api/system-settings/category/${category}` : '/api/system-settings';
+    const data = await this.request<{
+      success: boolean;
+      data: { [category: string]: { [key: string]: SystemSetting } } | { [key: string]: any };
+    }>(url);
+    return data.data || {};
+  }
+
+  async getSystemSetting(key: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: SystemSetting;
+    }>(`/api/system-settings/${key}`);
+    return data.data;
+  }
+
+  async updateSystemSetting(key: string, value: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: SystemSetting;
+      message: string;
+    }>(`/api/system-settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+    return data.data;
+  }
+
+  async getRoomMode() {
+    const data = await this.request<{
+      success: boolean;
+      data: RoomMode;
+    }>('/api/system-settings/room-mode');
+    return data.data;
+  }
+
+  async updateRoomMode(mode: 'Fixed' | 'Dynamic') {
+    const data = await this.request<{
+      success: boolean;
+      data: RoomMode & { warnings?: string[]; warning_message?: string };
+      message: string;
+    }>('/api/system-settings/room-mode', {
+      method: 'PUT',
+      body: JSON.stringify({ mode }),
+    });
+    return data.data;
+  }
+
+  // ============================================
+  // DOCTOR ROOMS API (Fixed Mode)
+  // ============================================
+
+  async getDoctorRooms(filters?: { doctor_id?: number; room_id?: number; reception_id?: number; is_active?: boolean }) {
+    const params = new URLSearchParams();
+    if (filters?.doctor_id) params.append('doctor_id', filters.doctor_id.toString());
+    if (filters?.room_id) params.append('room_id', filters.room_id.toString());
+    if (filters?.reception_id) params.append('reception_id', filters.reception_id.toString());
+    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active ? '1' : '0');
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorRoom[];
+    }>(`/api/doctor-rooms${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getDoctorRoom(doctorId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorRoom;
+    }>(`/api/doctor-rooms/doctor/${doctorId}`);
+    return data.data;
+  }
+
+  async createDoctorRoom(roomData: CreateDoctorRoomData) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorRoom;
+      message: string;
+    }>('/api/doctor-rooms', {
+      method: 'POST',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async updateDoctorRoom(id: number, roomData: Partial<CreateDoctorRoomData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorRoom;
+      message: string;
+    }>(`/api/doctor-rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async deleteDoctorRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/doctor-rooms/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // ============================================
+  // DOCTOR SLOT ROOMS API (Dynamic Mode)
+  // ============================================
+
+  async getDoctorSlotRooms(filters?: {
+    doctor_id?: number;
+    schedule_id?: number;
+    room_id?: number;
+    reception_id?: number;
+    assignment_date?: string;
+    date_from?: string;
+    date_to?: string;
+    is_active?: boolean;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.doctor_id) params.append('doctor_id', filters.doctor_id.toString());
+    if (filters?.schedule_id) params.append('schedule_id', filters.schedule_id.toString());
+    if (filters?.room_id) params.append('room_id', filters.room_id.toString());
+    if (filters?.reception_id) params.append('reception_id', filters.reception_id.toString());
+    if (filters?.assignment_date) params.append('assignment_date', filters.assignment_date);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active ? '1' : '0');
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSlotRoom[];
+    }>(`/api/doctor-slot-rooms${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getDoctorSlotRoomsByDate(doctorId: number, date: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSlotRoom[];
+    }>(`/api/doctor-slot-rooms/doctor/${doctorId}/date/${date}`);
+    return data.data || [];
+  }
+
+  async createDoctorSlotRoom(slotRoomData: CreateDoctorSlotRoomData) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSlotRoom;
+      message: string;
+    }>('/api/doctor-slot-rooms', {
+      method: 'POST',
+      body: JSON.stringify(slotRoomData),
+    });
+    return data.data;
+  }
+
+  async bulkCreateDoctorSlotRooms(bulkData: BulkCreateDoctorSlotRoomData) {
+    const data = await this.request<{
+      success: boolean;
+      data: { inserted: number };
+      message: string;
+    }>('/api/doctor-slot-rooms/bulk', {
+      method: 'POST',
+      body: JSON.stringify(bulkData),
+    });
+    return data.data;
+  }
+
+  async updateDoctorSlotRoom(id: number, slotRoomData: Partial<CreateDoctorSlotRoomData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: DoctorSlotRoom;
+      message: string;
+    }>(`/api/doctor-slot-rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(slotRoomData),
+    });
+    return data.data;
+  }
+
+  async deleteDoctorSlotRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/doctor-slot-rooms/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // ============================================
+  // TOKENS API
+  // ============================================
+
+  async getTokensByReception(receptionId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Token[];
+    }>(`/api/tokens/reception/${receptionId}${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getTokensByFloor(floorId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Token[];
+    }>(`/api/tokens/floor/${floorId}${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getTokensByDoctor(doctorId: number, date?: string, status?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Token[];
+    }>(`/api/tokens/doctor/${doctorId}${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getTokenQueue(receptionId: number, date?: string) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Token[];
+    }>(`/api/tokens/queue/${receptionId}${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async updateTokenStatus(tokenId: number, status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled' | 'No Show') {
+    const data = await this.request<{
+      success: boolean;
+      data: Token;
+      message: string;
+    }>(`/api/tokens/${tokenId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return data.data;
+  }
+
+  async getToken(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: Token;
+    }>(`/api/tokens/${id}`);
+    return data.data;
   }
 
   // ============================================
@@ -3973,6 +4419,125 @@ export interface User {
 
 export interface AvailableRole {
   [key: string]: string;
+}
+
+// ============================================
+// ROOM MANAGEMENT SYSTEM INTERFACES
+// ============================================
+
+export interface SystemSetting {
+  key: string;
+  value: any;
+  category: string;
+  description?: string;
+  updated_by?: number;
+  updated_at: string;
+}
+
+export interface RoomMode {
+  mode: 'Fixed' | 'Dynamic';
+}
+
+export interface DoctorRoom {
+  id: number;
+  doctor_id: number;
+  doctor_name?: string;
+  doctor_doctor_id?: string;
+  specialty?: string;
+  room_id: number;
+  room_number?: string;
+  room_name?: string;
+  room_type?: string;
+  reception_id: number;
+  reception_code?: string;
+  reception_name?: string;
+  floor_id?: number;
+  floor_number?: number;
+  floor_name?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDoctorRoomData {
+  doctor_id: number;
+  room_id: number;
+  reception_id: number;
+  is_active?: boolean;
+}
+
+export interface DoctorSlotRoom {
+  id: number;
+  doctor_id: number;
+  doctor_name?: string;
+  doctor_doctor_id?: string;
+  specialty?: string;
+  schedule_id: number;
+  day_of_week?: string;
+  slot_start_time?: string;
+  slot_end_time?: string;
+  room_id: number;
+  room_number?: string;
+  room_name?: string;
+  room_type?: string;
+  assignment_date: string;
+  reception_id: number;
+  reception_code?: string;
+  reception_name?: string;
+  floor_id?: number;
+  floor_number?: number;
+  floor_name?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDoctorSlotRoomData {
+  doctor_id: number;
+  schedule_id: number;
+  room_id: number;
+  assignment_date: string;
+  reception_id: number;
+  is_active?: boolean;
+}
+
+export interface BulkCreateDoctorSlotRoomData {
+  doctor_id: number;
+  schedule_id: number;
+  room_id: number;
+  reception_id: number;
+  date_from: string;
+  date_to: string;
+}
+
+export interface Token {
+  id: number;
+  token_number: string;
+  appointment_id: number;
+  reception_id: number;
+  floor_id: number;
+  room_id: number;
+  doctor_id: number;
+  patient_id: number;
+  token_date: string;
+  status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled' | 'No Show';
+  called_at?: string;
+  completed_at?: string;
+  appointment_date?: string;
+  appointment_type?: string;
+  appointment_status?: string;
+  patient_name?: string;
+  patient_id_string?: string;
+  doctor_name?: string;
+  specialty?: string;
+  room_number?: string;
+  room_name?: string;
+  floor_number?: number;
+  floor_name?: string;
+  reception_name?: string;
+  reception_code?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export const api = new ApiService();
