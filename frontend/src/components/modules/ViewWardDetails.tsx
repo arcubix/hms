@@ -106,12 +106,22 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
   const [beds, setBeds] = useState<BedInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [selectedBed, setSelectedBed] = useState<BedInfo | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showMedicalRecords, setShowMedicalRecords] = useState(false);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
 
   useEffect(() => {
     if (wardId) {
       loadWardData();
       loadWardBeds();
       loadWardStats();
+    }
+  }, [wardId]);
+
+  useEffect(() => {
+    if (wardId) {
+      loadStaff();
     }
   }, [wardId]);
 
@@ -172,6 +182,28 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
     }
   };
 
+  const loadStaff = async () => {
+    try {
+      // Load current duty staff for this ward
+      const currentDate = new Date().toISOString().split('T')[0];
+      const roster = await api.getEmergencyDutyRoster({ date: currentDate });
+      const transformedStaff: StaffMember[] = roster
+        .filter((entry: any) => entry.status === 'On Duty')
+        .map((entry: any) => ({
+          id: entry.user_id?.toString() || entry.id?.toString() || '',
+          name: entry.user_name || '',
+          role: entry.user_role || entry.specialization || 'Staff',
+          shift: `${entry.shift_type} (${entry.shift_start_time} - ${entry.shift_end_time})`,
+          contact: entry.user_phone || '',
+          status: entry.status === 'On Duty' ? 'On Duty' : 'Off Duty'
+        }));
+      setStaff(transformedStaff);
+    } catch (error: any) {
+      console.warn('Could not load staff:', error);
+      setStaff([]);
+    }
+  };
+
   if (loading && !wardData) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
@@ -217,39 +249,6 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
     established: wardData.established_date ? new Date(wardData.established_date).getFullYear().toString() : '',
     lastInspection: wardData.last_inspection_date || '',
     facilities: wardData.facilities ? (typeof wardData.facilities === 'string' ? JSON.parse(wardData.facilities) : wardData.facilities) : []
-  };
-
-  const [selectedBed, setSelectedBed] = useState<BedInfo | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showMedicalRecords, setShowMedicalRecords] = useState(false);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-
-  useEffect(() => {
-    if (wardId) {
-      loadStaff();
-    }
-  }, [wardId]);
-
-  const loadStaff = async () => {
-    try {
-      // Load current duty staff for this ward
-      const currentDate = new Date().toISOString().split('T')[0];
-      const roster = await api.getEmergencyDutyRoster({ date: currentDate });
-      const transformedStaff: StaffMember[] = roster
-        .filter((entry: any) => entry.status === 'On Duty')
-        .map((entry: any) => ({
-          id: entry.user_id?.toString() || entry.id?.toString() || '',
-          name: entry.user_name || '',
-          role: entry.user_role || entry.specialization || 'Staff',
-          shift: `${entry.shift_type} (${entry.shift_start_time} - ${entry.shift_end_time})`,
-          contact: entry.user_phone || '',
-          status: entry.status === 'On Duty' ? 'On Duty' : 'Off Duty'
-        }));
-      setStaff(transformedStaff);
-    } catch (error: any) {
-      console.warn('Could not load staff:', error);
-      setStaff([]);
-    }
   };
 
   // Helper functions

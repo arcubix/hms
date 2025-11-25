@@ -246,12 +246,9 @@ export function EmergencyPatientProfile({ patient, onClose }: EmergencyPatientPr
     setLoadingVitals(true);
     try {
       const data = await api.getEmergencyVitals(visitId);
-      console.log('Loaded vitals from API:', data);
-      console.log('Vitals array length:', data?.length || 0);
       // Ensure we set an empty array if no data, not undefined
       const vitalsArray = Array.isArray(data) ? data : [];
       setVitals(vitalsArray);
-      console.log('Vitals state updated with:', vitalsArray);
     } catch (error: any) {
       console.error('Error loading vitals:', error);
       // Set empty array on error to ensure no fallback to mock data
@@ -706,8 +703,6 @@ export function EmergencyPatientProfile({ patient, onClose }: EmergencyPatientPr
                     // Only use data from the vitals array (from API), no fallback to mock data
                     // Ensure vitals is an array
                     const vitalsArray = Array.isArray(vitals) ? vitals : [];
-                    console.log('Current vitals array:', vitalsArray);
-                    console.log('Vitals array length:', vitalsArray.length);
                     
                     const sortedVitals = [...vitalsArray].sort((a, b) => {
                       const dateA = new Date(a.recorded_at || a.created_at || 0).getTime();
@@ -715,7 +710,6 @@ export function EmergencyPatientProfile({ patient, onClose }: EmergencyPatientPr
                       return dateB - dateA; // Descending order (newest first)
                     });
                     const latestVital = sortedVitals.length > 0 ? sortedVitals[0] : null;
-                    console.log('Latest vital:', latestVital);
                     
                     return (
                       <>
@@ -940,13 +934,10 @@ export function EmergencyPatientProfile({ patient, onClose }: EmergencyPatientPr
           visitId={visitId}
           onClose={() => setShowUpdateVitals(false)}
           onSave={async () => {
-            console.log('UpdateVitalsDialog onSave called, reloading vitals...');
             setShowUpdateVitals(false);
             // Wait a bit for the database to be updated, then reload vitals
             setTimeout(async () => {
-              console.log('Reloading vitals after save...');
               await loadVitals();
-              console.log('Vitals reloaded after save');
             }, 500);
           }}
         />

@@ -3,13 +3,15 @@
  * Complete vitals monitoring and recording system
  */
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+import { Textarea } from '../ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -19,11 +21,13 @@ import {
   Activity,
   Thermometer,
   Droplet,
+  Droplets,
   Wind,
   Gauge,
   TrendingUp,
   TrendingDown,
   AlertCircle,
+  AlertTriangle,
   Plus,
   X,
   Save,
@@ -35,9 +39,12 @@ import {
   LineChart,
   BarChart3,
   CheckCircle,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
+import type { EmergencyVitalSign, CreateEmergencyVitalSignData } from '../../services/api';
 
 interface PatientVitalsManagementProps {
   patient: any;
@@ -67,61 +74,83 @@ interface VitalRecord {
 export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManagementProps) {
   const [showAddVital, setShowAddVital] = useState(false);
   const [activeTab, setActiveTab] = useState('current');
-  
-  // Mock vitals history
-  const [vitalsHistory, setVitalsHistory] = useState<VitalRecord[]>([
-    {
-      id: '1',
-      date: '2024-01-20',
-      time: '14:30',
-      bp: '120/80',
-      systolic: 120,
-      diastolic: 80,
-      pulse: 72,
-      temperature: 98.6,
-      spo2: 98,
-      respiratoryRate: 16,
-      weight: 70,
-      height: 170,
-      bmi: 24.2,
-      painLevel: 2,
-      consciousness: 'Alert',
-      recordedBy: 'Nurse Sarah Johnson',
-      notes: 'Patient stable, no complaints'
-    },
-    {
-      id: '2',
-      date: '2024-01-20',
-      time: '10:15',
-      bp: '118/78',
-      systolic: 118,
-      diastolic: 78,
-      pulse: 75,
-      temperature: 98.4,
-      spo2: 97,
-      respiratoryRate: 18,
-      consciousness: 'Alert',
-      recordedBy: 'Nurse Michael Chen',
-      notes: 'Routine check'
-    },
-    {
-      id: '3',
-      date: '2024-01-20',
-      time: '06:00',
-      bp: '122/82',
-      systolic: 122,
-      diastolic: 82,
-      pulse: 70,
-      temperature: 98.7,
-      spo2: 96,
-      respiratoryRate: 17,
-      consciousness: 'Alert',
-      recordedBy: 'Nurse Emily Davis',
-      notes: 'Morning vitals check'
-    }
-  ]);
+  const [vitalsHistory, setVitalsHistory] = useState<VitalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const currentVitals = vitalsHistory[0];
+  // Transform API data to component format
+  const transformVitalSign = (apiData: EmergencyVitalSign): VitalRecord => {
+    // Parse BP string (e.g., "120/80") to get systolic and diastolic
+    let systolic = 0;
+    let diastolic = 0;
+    if (apiData.bp) {
+      const bpParts = apiData.bp.split('/');
+      if (bpParts.length === 2) {
+        systolic = parseInt(bpParts[0]) || 0;
+        diastolic = parseInt(bpParts[1]) || 0;
+      }
+    }
+
+    const recordedDate = new Date(apiData.recorded_at || apiData.created_at);
+    const date = recordedDate.toISOString().split('T')[0];
+    const time = recordedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    return {
+      id: apiData.id.toString(),
+      date,
+      time,
+      bp: apiData.bp || '0/0',
+      systolic,
+      diastolic,
+      pulse: apiData.pulse || 0,
+      temperature: apiData.temp || 0,
+      spo2: apiData.spo2 || 0,
+      respiratoryRate: apiData.resp || 0,
+      painLevel: apiData.pain_score,
+      consciousness: apiData.consciousness_level || 'Alert',
+      recordedBy: apiData.recorded_by_name || 'Unknown',
+      notes: apiData.notes
+    };
+  };
+
+  // Load vitals from database
+  const loadVitals = async () => {
+    try {
+      setLoading(true);
+      // Get visit ID from patient - check multiple possible fields
+      const vid = patient.id || patient.visitId || patient.emergency_visit_id;
+      const visitId = vid ? (typeof vid === 'string' ? parseInt(vid, 10) : vid) : null;
+      
+      if (!visitId) {
+        toast.error('Visit ID not found. Cannot load vitals.');
+        setVitalsHistory([]);
+        return;
+      }
+
+      const apiVitals = await api.getEmergencyVitals(visitId);
+      const transformedVitals = apiVitals.map(transformVitalSign);
+      // Sort by date/time descending (latest first)
+      transformedVitals.sort((a, b) => {
+        const dateA = new Date(`${a.date} ${a.time}`);
+        const dateB = new Date(`${b.date} ${b.time}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setVitalsHistory(transformedVitals);
+    } catch (error: any) {
+      console.error('Error loading vitals:', error);
+      toast.error('Failed to load vitals: ' + (error.message || 'Unknown error'));
+      setVitalsHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load vitals on component mount
+  useEffect(() => {
+    loadVitals();
+  }, [patient]);
+
+  // Get latest vitals (first in sorted array)
+  const currentVitals = vitalsHistory.length > 0 ? vitalsHistory[0] : null;
 
   const getVitalStatus = (type: string, value: number) => {
     const ranges: any = {
@@ -197,56 +226,68 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('systolic', currentVitals.systolic))}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="w-4 h-4" />
-                <p className="text-xs font-medium">Blood Pressure</p>
-              </div>
-              <p className="text-xl font-bold">{currentVitals.bp}</p>
-              <p className="text-xs">mmHg</p>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+              <p className="text-gray-600">Loading vitals...</p>
             </div>
-            <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('pulse', currentVitals.pulse))}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Heart className="w-4 h-4" />
-                <p className="text-xs font-medium">Pulse</p>
+          ) : currentVitals ? (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('systolic', currentVitals.systolic))}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="w-4 h-4" />
+                  <p className="text-xs font-medium">Blood Pressure</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.bp}</p>
+                <p className="text-xs">mmHg</p>
               </div>
-              <p className="text-xl font-bold">{currentVitals.pulse}</p>
-              <p className="text-xs">bpm</p>
-            </div>
-            <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('temperature', currentVitals.temperature))}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Thermometer className="w-4 h-4" />
-                <p className="text-xs font-medium">Temperature</p>
+              <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('pulse', currentVitals.pulse))}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Heart className="w-4 h-4" />
+                  <p className="text-xs font-medium">Pulse</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.pulse}</p>
+                <p className="text-xs">bpm</p>
               </div>
-              <p className="text-xl font-bold">{currentVitals.temperature}</p>
-              <p className="text-xs">°F</p>
-            </div>
-            <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('spo2', currentVitals.spo2))}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Droplet className="w-4 h-4" />
-                <p className="text-xs font-medium">SpO2</p>
+              <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('temperature', currentVitals.temperature))}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Thermometer className="w-4 h-4" />
+                  <p className="text-xs font-medium">Temperature</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.temperature}</p>
+                <p className="text-xs">°F</p>
               </div>
-              <p className="text-xl font-bold">{currentVitals.spo2}</p>
-              <p className="text-xs">%</p>
-            </div>
-            <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('respiratoryRate', currentVitals.respiratoryRate))}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Wind className="w-4 h-4" />
-                <p className="text-xs font-medium">Resp. Rate</p>
+              <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('spo2', currentVitals.spo2))}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Droplet className="w-4 h-4" />
+                  <p className="text-xs font-medium">SpO2</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.spo2}</p>
+                <p className="text-xs">%</p>
               </div>
-              <p className="text-xl font-bold">{currentVitals.respiratoryRate}</p>
-              <p className="text-xs">breaths/min</p>
-            </div>
-            <div className="rounded-lg p-3 border-2 bg-purple-100 text-purple-800 border-purple-300">
-              <div className="flex items-center gap-2 mb-1">
-                <Gauge className="w-4 h-4" />
-                <p className="text-xs font-medium">Pain Level</p>
+              <div className={`rounded-lg p-3 border-2 ${getStatusColor(getVitalStatus('respiratoryRate', currentVitals.respiratoryRate))}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Wind className="w-4 h-4" />
+                  <p className="text-xs font-medium">Resp. Rate</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.respiratoryRate}</p>
+                <p className="text-xs">breaths/min</p>
               </div>
-              <p className="text-xl font-bold">{currentVitals.painLevel || 0}/10</p>
-              <p className="text-xs">Scale</p>
+              <div className="rounded-lg p-3 border-2 bg-purple-100 text-purple-800 border-purple-300">
+                <div className="flex items-center gap-2 mb-1">
+                  <Gauge className="w-4 h-4" />
+                  <p className="text-xs font-medium">Pain Level</p>
+                </div>
+                <p className="text-xl font-bold">{currentVitals.painLevel || 0}/10</p>
+                <p className="text-xs">Scale</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertCircle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+              <p className="text-gray-600">No vitals recorded yet. Click "Add Vital Signs" to record the first set of vitals.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -262,19 +303,25 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
 
           {/* Current Status Tab */}
           <TabsContent value="current" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Latest Vitals Detail */}
-              <Card>
-                <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-blue-600" />
-                    Latest Vital Signs
-                  </CardTitle>
-                  <CardDescription>
-                    Recorded on {currentVitals.date} at {currentVitals.time}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mr-3" />
+                <p className="text-gray-600 text-lg">Loading vitals data...</p>
+              </div>
+            ) : currentVitals ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Latest Vitals Detail */}
+                <Card>
+                  <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-blue-600" />
+                      Latest Vital Signs
+                    </CardTitle>
+                    <CardDescription>
+                      Recorded on {currentVitals.date} at {currentVitals.time}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-4">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
                       <div>
@@ -406,6 +453,22 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
                 </CardContent>
               </Card>
             </div>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Vitals Recorded</h3>
+                  <p className="text-gray-600 mb-4">No vital signs have been recorded for this patient yet.</p>
+                  <Button 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => setShowAddVital(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Record First Vital Signs
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* History Tab */}
@@ -416,67 +479,87 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
                 <CardDescription>Complete record of all vital signs measurements</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date & Time</TableHead>
-                      <TableHead>BP</TableHead>
-                      <TableHead>Pulse</TableHead>
-                      <TableHead>Temp</TableHead>
-                      <TableHead>SpO2</TableHead>
-                      <TableHead>RR</TableHead>
-                      <TableHead>Pain</TableHead>
-                      <TableHead>Recorded By</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {vitalsHistory.map((vital) => (
-                      <TableRow key={vital.id}>
-                        <TableCell>
-                          <div className="text-sm">
-                            <p className="font-medium">{vital.date}</p>
-                            <p className="text-gray-600">{vital.time}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(getVitalStatus('systolic', vital.systolic))}>
-                            {vital.bp}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(getVitalStatus('pulse', vital.pulse))}>
-                            {vital.pulse}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(getVitalStatus('temperature', vital.temperature))}>
-                            {vital.temperature}°F
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(getVitalStatus('spo2', vital.spo2))}>
-                            {vital.spo2}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(getVitalStatus('respiratoryRate', vital.respiratoryRate))}>
-                            {vital.respiratoryRate}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">{vital.painLevel || '-'}/10</span>
-                        </TableCell>
-                        <TableCell className="text-sm">{vital.recordedBy}</TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-3" />
+                    <p className="text-gray-600">Loading vitals history...</p>
+                  </div>
+                ) : vitalsHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No History Available</h3>
+                    <p className="text-gray-600 mb-4">No vital signs have been recorded for this patient yet.</p>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowAddVital(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Record First Vital Signs
+                    </Button>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date & Time</TableHead>
+                        <TableHead>BP</TableHead>
+                        <TableHead>Pulse</TableHead>
+                        <TableHead>Temp</TableHead>
+                        <TableHead>SpO2</TableHead>
+                        <TableHead>RR</TableHead>
+                        <TableHead>Pain</TableHead>
+                        <TableHead>Recorded By</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {vitalsHistory.map((vital) => (
+                        <TableRow key={vital.id}>
+                          <TableCell>
+                            <div className="text-sm">
+                              <p className="font-medium">{vital.date}</p>
+                              <p className="text-gray-600">{vital.time}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(getVitalStatus('systolic', vital.systolic))}>
+                              {vital.bp}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(getVitalStatus('pulse', vital.pulse))}>
+                              {vital.pulse}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(getVitalStatus('temperature', vital.temperature))}>
+                              {vital.temperature}°F
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(getVitalStatus('spo2', vital.spo2))}>
+                              {vital.spo2}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(getVitalStatus('respiratoryRate', vital.respiratoryRate))}>
+                              {vital.respiratoryRate}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{vital.painLevel !== undefined ? `${vital.painLevel}/10` : '-'}</span>
+                          </TableCell>
+                          <TableCell className="text-sm">{vital.recordedBy}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -492,27 +575,253 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
                 <CardDescription>Visual representation of vital signs over time</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  {/* Placeholder for charts - in production, use recharts */}
-                  <div className="p-8 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
-                    <p className="text-center text-gray-600">
-                      <BarChart3 className="w-12 h-12 mx-auto mb-2 text-blue-600" />
-                      Blood Pressure Trend Chart
-                    </p>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-3" />
+                    <p className="text-gray-600">Loading trends data...</p>
                   </div>
-                  <div className="p-8 bg-gradient-to-br from-red-50 to-pink-50 rounded-lg border-2 border-red-200">
-                    <p className="text-center text-gray-600">
-                      <LineChart className="w-12 h-12 mx-auto mb-2 text-red-600" />
-                      Heart Rate Trend Chart
-                    </p>
+                ) : vitalsHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Available</h3>
+                    <p className="text-gray-600 mb-4">Record at least 2 sets of vitals to view trends.</p>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowAddVital(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Record Vital Signs
+                    </Button>
                   </div>
-                  <div className="p-8 bg-gradient-to-br from-green-50 to-teal-50 rounded-lg border-2 border-green-200">
-                    <p className="text-center text-gray-600">
-                      <LineChart className="w-12 h-12 mx-auto mb-2 text-green-600" />
-                      SpO2 Trend Chart
-                    </p>
+                ) : vitalsHistory.length < 2 ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Insufficient Data</h3>
+                    <p className="text-gray-600 mb-4">Record at least 2 sets of vitals to view trends.</p>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowAddVital(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Record More Vital Signs
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Blood Pressure Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-blue-600">
+                          <BarChart3 className="w-5 h-5" />
+                          Blood Pressure Trend
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600 mb-2">Systolic BP</p>
+                              <div className="space-y-2">
+                                {vitalsHistory.slice(0, 10).map((vital, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 w-20">{vital.date} {vital.time}</span>
+                                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                                      <div 
+                                        className="bg-blue-600 h-4 rounded-full"
+                                        style={{ width: `${Math.min((vital.systolic / 200) * 100, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium w-12 text-right">{vital.systolic}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 mb-2">Diastolic BP</p>
+                              <div className="space-y-2">
+                                {vitalsHistory.slice(0, 10).map((vital, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 w-20">{vital.date} {vital.time}</span>
+                                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                                      <div 
+                                        className="bg-red-600 h-4 rounded-full"
+                                        style={{ width: `${Math.min((vital.diastolic / 120) * 100, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium w-12 text-right">{vital.diastolic}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          {vitalsHistory.length > 1 && (
+                            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                              <p className="text-sm">
+                                <strong>Trend:</strong> {
+                                  vitalsHistory[0].systolic > vitalsHistory[1].systolic ? (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <TrendingUp className="w-4 h-4" /> Increasing
+                                    </span>
+                                  ) : vitalsHistory[0].systolic < vitalsHistory[1].systolic ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <TrendingDown className="w-4 h-4" /> Decreasing
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-600">Stable</span>
+                                  )
+                                }
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Heart Rate Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-red-600">
+                          <LineChart className="w-5 h-5" />
+                          Heart Rate Trend
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            {vitalsHistory.slice(0, 10).map((vital, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-32">{vital.date} {vital.time}</span>
+                                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                                  <div 
+                                    className="bg-red-600 h-6 rounded-full flex items-center justify-end pr-2"
+                                    style={{ width: `${Math.min((vital.pulse / 150) * 100, 100)}%` }}
+                                  >
+                                    <span className="text-xs text-white font-medium">{vital.pulse} bpm</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {vitalsHistory.length > 1 && (
+                            <div className="mt-4 p-3 bg-red-50 rounded-lg">
+                              <p className="text-sm">
+                                <strong>Trend:</strong> {
+                                  vitalsHistory[0].pulse > vitalsHistory[1].pulse ? (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <TrendingUp className="w-4 h-4" /> Increasing ({vitalsHistory[0].pulse - vitalsHistory[1].pulse} bpm)
+                                    </span>
+                                  ) : vitalsHistory[0].pulse < vitalsHistory[1].pulse ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <TrendingDown className="w-4 h-4" /> Decreasing ({vitalsHistory[1].pulse - vitalsHistory[0].pulse} bpm)
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-600">Stable</span>
+                                  )
+                                }
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* SpO2 Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-green-600">
+                          <LineChart className="w-5 h-5" />
+                          SpO2 Trend
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            {vitalsHistory.slice(0, 10).map((vital, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-32">{vital.date} {vital.time}</span>
+                                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                                  <div 
+                                    className="bg-green-600 h-6 rounded-full flex items-center justify-end pr-2"
+                                    style={{ width: `${(vital.spo2 / 100) * 100}%` }}
+                                  >
+                                    <span className="text-xs text-white font-medium">{vital.spo2}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {vitalsHistory.length > 1 && (
+                            <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                              <p className="text-sm">
+                                <strong>Trend:</strong> {
+                                  vitalsHistory[0].spo2 > vitalsHistory[1].spo2 ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <TrendingUp className="w-4 h-4" /> Improving ({vitalsHistory[0].spo2 - vitalsHistory[1].spo2}%)
+                                    </span>
+                                  ) : vitalsHistory[0].spo2 < vitalsHistory[1].spo2 ? (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <TrendingDown className="w-4 h-4" /> Declining ({vitalsHistory[1].spo2 - vitalsHistory[0].spo2}%)
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-600">Stable</span>
+                                  )
+                                }
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Temperature Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-orange-600">
+                          <Thermometer className="w-5 h-5" />
+                          Temperature Trend
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            {vitalsHistory.slice(0, 10).map((vital, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-32">{vital.date} {vital.time}</span>
+                                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                                  <div 
+                                    className="bg-orange-600 h-6 rounded-full flex items-center justify-end pr-2"
+                                    style={{ width: `${Math.min(((vital.temperature - 95) / 10) * 100, 100)}%` }}
+                                  >
+                                    <span className="text-xs text-white font-medium">{vital.temperature}°F</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {vitalsHistory.length > 1 && (
+                            <div className="mt-4 p-3 bg-orange-50 rounded-lg">
+                              <p className="text-sm">
+                                <strong>Trend:</strong> {
+                                  vitalsHistory[0].temperature > vitalsHistory[1].temperature ? (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <TrendingUp className="w-4 h-4" /> Rising ({(vitalsHistory[0].temperature - vitalsHistory[1].temperature).toFixed(1)}°F)
+                                    </span>
+                                  ) : vitalsHistory[0].temperature < vitalsHistory[1].temperature ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <TrendingDown className="w-4 h-4" /> Decreasing ({(vitalsHistory[1].temperature - vitalsHistory[0].temperature).toFixed(1)}°F)
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-600">Stable</span>
+                                  )
+                                }
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -525,24 +834,179 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
                   <AlertCircle className="w-5 h-5 text-yellow-600" />
                   Alerts & Warnings
                 </CardTitle>
+                <CardDescription>Real-time alerts based on current vital signs</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-green-900">All vitals within normal range</p>
-                      <p className="text-sm text-green-700">Patient's vital signs are stable and healthy</p>
-                    </div>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-3" />
+                    <p className="text-gray-600">Loading alerts...</p>
                   </div>
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-blue-900">Regular monitoring recommended</p>
-                      <p className="text-sm text-blue-700">Continue vitals check every 4 hours</p>
-                    </div>
+                ) : !currentVitals ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Vitals Available</h3>
+                    <p className="text-gray-600 mb-4">Record vital signs to generate alerts.</p>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowAddVital(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Record Vital Signs
+                    </Button>
                   </div>
-                </div>
+                ) : (() => {
+                  // Generate alerts based on current vitals
+                  const alerts: Array<{ type: 'critical' | 'warning' | 'info' | 'success'; title: string; message: string; icon: any }> = [];
+                  
+                  // Check each vital sign
+                  const bpStatus = getVitalStatus('systolic', currentVitals.systolic);
+                  const diastolicStatus = getVitalStatus('diastolic', currentVitals.diastolic);
+                  const pulseStatus = getVitalStatus('pulse', currentVitals.pulse);
+                  const tempStatus = getVitalStatus('temperature', currentVitals.temperature);
+                  const spo2Status = getVitalStatus('spo2', currentVitals.spo2);
+                  const respStatus = getVitalStatus('respiratoryRate', currentVitals.respiratoryRate);
+                  
+                  // Critical alerts
+                  if (bpStatus === 'critical' || diastolicStatus === 'critical') {
+                    alerts.push({
+                      type: 'critical',
+                      title: 'Critical Blood Pressure',
+                      message: `Blood pressure is ${currentVitals.bp} mmHg. Immediate medical attention required.`,
+                      icon: AlertCircle
+                    });
+                  }
+                  
+                  if (spo2Status === 'critical') {
+                    alerts.push({
+                      type: 'critical',
+                      title: 'Critical Oxygen Saturation',
+                      message: `SpO2 is ${currentVitals.spo2}%. Patient requires immediate oxygen support.`,
+                      icon: AlertCircle
+                    });
+                  }
+                  
+                  if (respStatus === 'critical') {
+                    alerts.push({
+                      type: 'critical',
+                      title: 'Critical Respiratory Rate',
+                      message: `Respiratory rate is ${currentVitals.respiratoryRate} breaths/min. Monitor closely.`,
+                      icon: AlertCircle
+                    });
+                  }
+                  
+                  if (currentVitals.consciousness !== 'Alert') {
+                    alerts.push({
+                      type: 'critical',
+                      title: 'Altered Consciousness',
+                      message: `Patient consciousness level: ${currentVitals.consciousness}. Requires immediate assessment.`,
+                      icon: AlertCircle
+                    });
+                  }
+                  
+                  // Warning alerts
+                  if (bpStatus === 'warning' || diastolicStatus === 'warning') {
+                    alerts.push({
+                      type: 'warning',
+                      title: 'Elevated Blood Pressure',
+                      message: `Blood pressure is ${currentVitals.bp} mmHg. Monitor closely and consider intervention.`,
+                      icon: AlertTriangle
+                    });
+                  }
+                  
+                  if (pulseStatus === 'warning') {
+                    alerts.push({
+                      type: 'warning',
+                      title: 'Abnormal Heart Rate',
+                      message: `Heart rate is ${currentVitals.pulse} bpm. Continue monitoring.`,
+                      icon: AlertTriangle
+                    });
+                  }
+                  
+                  if (tempStatus === 'warning') {
+                    alerts.push({
+                      type: 'warning',
+                      title: 'Abnormal Temperature',
+                      message: `Temperature is ${currentVitals.temperature}°F. Monitor for fever or hypothermia.`,
+                      icon: AlertTriangle
+                    });
+                  }
+                  
+                  if (spo2Status === 'warning') {
+                    alerts.push({
+                      type: 'warning',
+                      title: 'Low Oxygen Saturation',
+                      message: `SpO2 is ${currentVitals.spo2}%. Consider oxygen supplementation.`,
+                      icon: AlertTriangle
+                    });
+                  }
+                  
+                  if (currentVitals.painLevel && currentVitals.painLevel >= 7) {
+                    alerts.push({
+                      type: 'warning',
+                      title: 'Severe Pain',
+                      message: `Pain level is ${currentVitals.painLevel}/10. Consider pain management intervention.`,
+                      icon: AlertTriangle
+                    });
+                  }
+                  
+                  // Info alerts
+                  if (vitalsHistory.length > 0) {
+                    const hoursSinceLastVital = (Date.now() - new Date(`${currentVitals.date} ${currentVitals.time}`).getTime()) / (1000 * 60 * 60);
+                    if (hoursSinceLastVital >= 4) {
+                      alerts.push({
+                        type: 'info',
+                        title: 'Regular Monitoring Recommended',
+                        message: `Last vitals recorded ${hoursSinceLastVital.toFixed(1)} hours ago. Consider recording new vitals.`,
+                        icon: Clock
+                      });
+                    }
+                  }
+                  
+                  // Success message if all vitals are normal
+                  if (alerts.filter(a => a.type === 'critical' || a.type === 'warning').length === 0) {
+                    alerts.push({
+                      type: 'success',
+                      title: 'All Vitals Within Normal Range',
+                      message: 'Patient\'s vital signs are stable and within acceptable parameters.',
+                      icon: CheckCircle
+                    });
+                  }
+                  
+                  return (
+                    <div className="space-y-3">
+                      {alerts.map((alert, idx) => {
+                        const AlertIcon = alert.icon;
+                        const bgColor = alert.type === 'critical' ? 'bg-red-50 border-red-200' :
+                                       alert.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                                       alert.type === 'info' ? 'bg-blue-50 border-blue-200' :
+                                       'bg-green-50 border-green-200';
+                        const textColor = alert.type === 'critical' ? 'text-red-900' :
+                                         alert.type === 'warning' ? 'text-yellow-900' :
+                                         alert.type === 'info' ? 'text-blue-900' :
+                                         'text-green-900';
+                        const iconColor = alert.type === 'critical' ? 'text-red-600' :
+                                         alert.type === 'warning' ? 'text-yellow-600' :
+                                         alert.type === 'info' ? 'text-blue-600' :
+                                         'text-green-600';
+                        const messageColor = alert.type === 'critical' ? 'text-red-700' :
+                                            alert.type === 'warning' ? 'text-yellow-700' :
+                                            alert.type === 'info' ? 'text-blue-700' :
+                                            'text-green-700';
+                        
+                        return (
+                          <div key={idx} className={`p-4 ${bgColor} border rounded-lg flex items-start gap-3`}>
+                            <AlertIcon className={`w-5 h-5 ${iconColor} mt-0.5`} />
+                            <div>
+                              <p className={`font-medium ${textColor}`}>{alert.title}</p>
+                              <p className={`text-sm ${messageColor}`}>{alert.message}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -554,10 +1018,8 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
         <AddVitalSignsDialog
           patient={patient}
           onClose={() => setShowAddVital(false)}
-          onSave={(newVital: VitalRecord) => {
-            setVitalsHistory([newVital, ...vitalsHistory]);
-            setShowAddVital(false);
-            toast.success('Vital signs recorded successfully!');
+          onSave={() => {
+            loadVitals(); // Reload vitals from database
           }}
         />
       )}
@@ -569,265 +1031,395 @@ export function PatientVitalsManagement({ patient, onClose }: PatientVitalsManag
 interface AddVitalSignsDialogProps {
   patient: any;
   onClose: () => void;
-  onSave: (vital: VitalRecord) => void;
+  onSave: () => void; // Changed to callback without parameter since we reload from DB
 }
 
 function AddVitalSignsDialog({ patient, onClose, onSave }: AddVitalSignsDialogProps) {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   const [formData, setFormData] = useState({
-    systolic: '',
-    diastolic: '',
-    pulse: '',
-    temperature: '',
-    spo2: '',
-    respiratoryRate: '',
-    weight: '',
-    height: '',
-    painLevel: '0',
-    consciousness: 'Alert',
+    bloodPressureSystolic: '120',
+    bloodPressureDiastolic: '80',
+    heartRate: '72',
+    temperature: '98.6',
+    spo2: '98',
+    respiratoryRate: '16',
+    weight: '70',
+    height: '175',
+    painScale: '0',
     notes: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.systolic || !formData.diastolic || !formData.pulse) {
-      toast.error('Please fill in all required vital signs');
+    // Get visit ID from patient
+    const vid = patient.id || patient.visitId || patient.emergency_visit_id;
+    const visitId = vid ? (typeof vid === 'string' ? parseInt(vid, 10) : vid) : null;
+    
+    if (!visitId) {
+      toast.error('Visit ID is required');
       return;
     }
 
-    const bmi = formData.weight && formData.height 
-      ? (parseFloat(formData.weight) / Math.pow(parseFloat(formData.height) / 100, 2)).toFixed(1)
-      : undefined;
+    setLoading(true);
+    try {
+      // Format BP as "systolic/diastolic"
+      const bp = `${formData.bloodPressureSystolic}/${formData.bloodPressureDiastolic}`;
+      
+      const vitalsData: CreateEmergencyVitalSignData = {
+        bp: bp,
+        pulse: formData.heartRate ? parseInt(formData.heartRate) : undefined,
+        temp: formData.temperature ? parseFloat(formData.temperature) : undefined,
+        spo2: formData.spo2 ? parseInt(formData.spo2) : undefined,
+        resp: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : undefined,
+        pain_score: formData.painScale ? parseInt(formData.painScale) : undefined,
+        notes: formData.notes || undefined
+      };
 
-    const newVital: VitalRecord = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toTimeString().slice(0, 5),
-      bp: `${formData.systolic}/${formData.diastolic}`,
-      systolic: parseInt(formData.systolic),
-      diastolic: parseInt(formData.diastolic),
-      pulse: parseInt(formData.pulse),
-      temperature: parseFloat(formData.temperature),
-      spo2: parseInt(formData.spo2),
-      respiratoryRate: parseInt(formData.respiratoryRate),
-      weight: formData.weight ? parseFloat(formData.weight) : undefined,
-      height: formData.height ? parseFloat(formData.height) : undefined,
-      bmi: bmi ? parseFloat(bmi) : undefined,
-      painLevel: parseInt(formData.painLevel),
-      consciousness: formData.consciousness,
-      recordedBy: 'Current User',
-      notes: formData.notes
-    };
-
-    onSave(newVital);
+      await api.recordEmergencyVitals(visitId, vitalsData);
+      toast.success('Vital signs recorded successfully!');
+      onSave?.();
+      onClose();
+    } catch (error: any) {
+      console.error('Error recording vitals:', error);
+      toast.error('Failed to record vitals: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <Card className="w-full max-w-3xl my-8">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Heart className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <CardTitle>Add Vital Signs</CardTitle>
-                <CardDescription>Record new vital signs for {patient.name}</CardDescription>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
+  if (!document.body) return null;
+
+  const dialogContent = (
+    <>
+      {/* Overlay */}
+      <div 
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          zIndex: 99998
+        }}
+      />
+      {/* Dialog */}
+      <div 
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+          pointerEvents: 'auto'
+        }}
+      >
+        <div 
+          className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          style={{
+            width: '100%',
+            maxWidth: '56rem',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            pointerEvents: 'auto'
+          }}
+        >
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+              <Activity className="w-6 h-6 text-blue-600" />
+              Add Vital Signs
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Patient: {patient.name} • UHID: {patient.uhid}
+            </p>
           </div>
-        </CardHeader>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
 
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Primary Vitals */}
-            <div>
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-red-600" />
-                Primary Vital Signs
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="systolic">Systolic BP * (mmHg)</Label>
-                  <Input
-                    id="systolic"
-                    type="number"
-                    placeholder="120"
-                    value={formData.systolic}
-                    onChange={(e) => setFormData({...formData, systolic: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="diastolic">Diastolic BP * (mmHg)</Label>
-                  <Input
-                    id="diastolic"
-                    type="number"
-                    placeholder="80"
-                    value={formData.diastolic}
-                    onChange={(e) => setFormData({...formData, diastolic: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pulse">Pulse Rate * (bpm)</Label>
-                  <Input
-                    id="pulse"
-                    type="number"
-                    placeholder="72"
-                    value={formData.pulse}
-                    onChange={(e) => setFormData({...formData, pulse: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
+        {/* Form */}
+        <form 
+          onSubmit={handleSubmit} 
+          className="flex-1 overflow-y-auto p-6"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="space-y-6">
+            {/* Primary Vital Signs */}
+            <Card>
+              <CardHeader className="bg-gradient-to-r from-red-50 to-pink-50">
+                <CardTitle className="text-base">Primary Vital Signs</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Blood Pressure */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-red-600" />
+                      Blood Pressure (mmHg)
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Systolic"
+                        value={formData.bloodPressureSystolic}
+                        onChange={(e) => setFormData({ ...formData, bloodPressureSystolic: e.target.value })}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className="w-1/2"
+                        required
+                      />
+                      <span className="flex items-center">/</span>
+                      <Input
+                        type="number"
+                        placeholder="Diastolic"
+                        value={formData.bloodPressureDiastolic}
+                        onChange={(e) => setFormData({ ...formData, bloodPressureDiastolic: e.target.value })}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className="w-1/2"
+                        required
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="temperature">Temperature * (°F)</Label>
-                  <Input
-                    id="temperature"
-                    type="number"
-                    step="0.1"
-                    placeholder="98.6"
-                    value={formData.temperature}
-                    onChange={(e) => setFormData({...formData, temperature: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="spo2">SpO2 * (%)</Label>
-                  <Input
-                    id="spo2"
-                    type="number"
-                    placeholder="98"
-                    value={formData.spo2}
-                    onChange={(e) => setFormData({...formData, spo2: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="respiratoryRate">Respiratory Rate * (per min)</Label>
-                  <Input
-                    id="respiratoryRate"
-                    type="number"
-                    placeholder="16"
-                    value={formData.respiratoryRate}
-                    onChange={(e) => setFormData({...formData, respiratoryRate: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
+                  {/* Heart Rate */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-blue-600" />
+                      Heart Rate (bpm)
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="72"
+                      value={formData.heartRate}
+                      onChange={(e) => setFormData({ ...formData, heartRate: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      required
+                    />
+                  </div>
 
-            <Separator />
+                  {/* Temperature */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Thermometer className="w-4 h-4 text-orange-600" />
+                      Temperature (°F)
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="98.6"
+                      value={formData.temperature}
+                      onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      required
+                    />
+                  </div>
 
-            {/* Additional Measurements */}
-            <div>
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Gauge className="w-5 h-5 text-purple-600" />
-                Additional Measurements (Optional)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="weight">Weight (kg)</Label>
-                  <Input
-                    id="weight"
-                    type="number"
-                    step="0.1"
-                    placeholder="70"
-                    value={formData.weight}
-                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="height">Height (cm)</Label>
-                  <Input
-                    id="height"
-                    type="number"
-                    placeholder="170"
-                    value={formData.height}
-                    onChange={(e) => setFormData({...formData, height: e.target.value})}
-                  />
-                </div>
-              </div>
-            </div>
+                  {/* SpO2 */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Droplets className="w-4 h-4 text-green-600" />
+                      SpO2 (%)
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="98"
+                      value={formData.spo2}
+                      onChange={(e) => setFormData({ ...formData, spo2: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      required
+                    />
+                  </div>
 
-            <Separator />
+                  {/* Respiratory Rate */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Wind className="w-4 h-4 text-purple-600" />
+                      Respiratory Rate (/min)
+                    </Label>
+                    <Input
+                      type="number"
+                      placeholder="16"
+                      value={formData.respiratoryRate}
+                      onChange={(e) => setFormData({ ...formData, respiratoryRate: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      required
+                    />
+                  </div>
 
-            {/* Pain & Consciousness */}
-            <div>
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                Pain & Consciousness Level
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="painLevel">Pain Level (0-10)</Label>
-                  <Input
-                    id="painLevel"
-                    type="range"
-                    min="0"
-                    max="10"
-                    value={formData.painLevel}
-                    onChange={(e) => setFormData({...formData, painLevel: e.target.value})}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-gray-600">
-                    <span>No Pain (0)</span>
-                    <span className="font-bold text-lg">{formData.painLevel}</span>
-                    <span>Worst Pain (10)</span>
+                  {/* Pain Scale */}
+                  <div className="space-y-2">
+                    <Label>Pain Scale (0-10)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="10"
+                      placeholder="0"
+                      value={formData.painScale}
+                      onChange={(e) => setFormData({ ...formData, painScale: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      required
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="consciousness">Consciousness Level *</Label>
-                  <select
-                    id="consciousness"
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md"
-                    value={formData.consciousness}
-                    onChange={(e) => setFormData({...formData, consciousness: e.target.value})}
-                    required
-                  >
-                    <option value="Alert">Alert</option>
-                    <option value="Verbal">Responds to Verbal</option>
-                    <option value="Pain">Responds to Pain</option>
-                    <option value="Unresponsive">Unresponsive</option>
-                  </select>
+              </CardContent>
+            </Card>
+
+            {/* Physical Measurements */}
+            <Card>
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                <CardTitle className="text-base">Physical Measurements</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Weight */}
+                  <div className="space-y-2">
+                    <Label>Weight (kg)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="70"
+                      value={formData.weight}
+                      onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+
+                  {/* Height */}
+                  <div className="space-y-2">
+                    <Label>Height (cm)</Label>
+                    <Input
+                      type="number"
+                      placeholder="175"
+                      value={formData.height}
+                      onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
-            <Separator />
+            {/* Additional Notes */}
+            <Card>
+              <CardHeader className="bg-gradient-to-r from-yellow-50 to-orange-50">
+                <CardTitle className="text-base">Additional Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <Textarea
+                  placeholder="Enter any additional observations or notes..."
+                  rows={4}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </form>
 
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Clinical Notes</Label>
-              <textarea
-                id="notes"
-                className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="Enter any observations or notes..."
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4">
-              <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700">
+        {/* Footer */}
+        <div 
+          className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            type="button"
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button 
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={loading}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSubmit(e as any);
+            }}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
                 <Save className="w-4 h-4 mr-2" />
-                Save Vital Signs
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+                Save Vitals
+              </>
+            )}
+          </Button>
+        </div>
+        </div>
+      </div>
+    </>
   );
+
+  return createPortal(dialogContent, document.body);
 }

@@ -946,7 +946,8 @@ export function EmergencyManagement() {
                       >
                         <ArrowLeftRight className="w-4 h-4" />
                       </button>
-                      <Button 
+                      {/* View Details button - hidden for now */}
+                      {/* <Button 
                         size="sm" 
                         variant="outline"
                         title="View Details"
@@ -956,7 +957,7 @@ export function EmergencyManagement() {
                         }}
                       >
                         <Eye className="w-4 h-4" />
-                      </Button>
+                      </Button> */}
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -979,14 +980,15 @@ export function EmergencyManagement() {
                       >
                         <FileText className="w-4 h-4" />
                       </Button>
-                      <Button 
+                      {/* Bed Management button - hidden for now */}
+                      {/* <Button 
                         size="sm" 
                         variant="outline"
                         title="Bed Management"
                         onClick={() => toast.info('Managing bed allocation...')}
                       >
                         <BedDouble className="w-4 h-4" />
-                      </Button>
+                      </Button> */}
                       
                       {/* Row 2 */}
                       <Button 
