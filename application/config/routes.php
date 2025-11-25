@@ -92,8 +92,75 @@ $route['api/emergency/visits/(:num)/charges'] = 'emergency/charges/$1';
 $route['api/emergency/visits/(:num)/charges/(:num)'] = 'emergency/charges/$1/$2';
 $route['api/emergency/visits/(:num)/history'] = 'emergency/history/$1';
 $route['api/emergency/visits/(:num)/admit-ipd'] = 'emergency/admit_ipd/$1';
+$route['api/emergency/visits/(:num)/ward-assignment'] = 'emergency/ward_assignment/$1';
+$route['api/emergency/visits/(:num)/files'] = 'emergency/files/$1';
+$route['api/emergency/visits/(:num)/files/(:num)'] = 'emergency/delete_file/$1/$2';
+$route['api/emergency/visits/(:num)/intake-output'] = 'emergency/intake_output/$1';
+$route['api/emergency/visits/(:num)/blood-bank'] = 'emergency/blood_bank/$1';
+$route['api/emergency/visits/(:num)/blood-bank/(:num)'] = 'emergency/update_blood_request/$1/$2';
+$route['api/emergency/visits/(:num)/health-physical'] = 'emergency/health_physical/$1';
+$route['api/emergency/visits/(:num)/timeline'] = 'emergency/timeline/$1';
 $route['api/emergency/stats'] = 'emergency/stats';
 $route['api/emergency/beds'] = 'emergency/beds';
+$route['api/emergency/admitted-patients'] = 'emergency/admitted_patients';
+$route['api/emergency/history'] = 'emergency/history_list';
+
+// Emergency Wards Management
+$route['api/emergency/wards'] = 'emergency/wards';
+$route['api/emergency/wards/(:num)'] = 'emergency/wards/$1';
+$route['api/emergency/wards/(:num)/stats'] = 'emergency/ward_stats/$1';
+$route['api/emergency/wards/(:num)/beds'] = 'emergency/ward_beds/$1';
+
+// Emergency Ward Beds Management
+$route['api/emergency/ward-beds'] = 'emergency/ward_beds_management';
+$route['api/emergency/ward-beds/(:num)'] = 'emergency/ward_beds_management/$1';
+$route['api/emergency/ward-beds/(:num)/assign'] = 'emergency/assign_bed/$1';
+$route['api/emergency/ward-beds/(:num)/release'] = 'emergency/release_bed/$1';
+$route['api/emergency/ward-beds/available'] = 'emergency/available_beds';
+
+// Emergency Duty Roster
+$route['api/emergency/duty-roster'] = 'emergency/duty_roster';
+$route['api/emergency/duty-roster/(:num)'] = 'emergency/duty_roster/$1';
+$route['api/emergency/duty-roster/date/(:any)'] = 'emergency/duty_roster_date/$1';
+$route['api/emergency/duty-roster/current'] = 'emergency/current_duty_staff';
+
+// Emergency Patient Transfers
+$route['api/emergency/transfers'] = 'emergency/transfers';
+$route['api/emergency/transfers/visit/(:num)'] = 'emergency/transfers/$1';
+
+// Emergency Ambulance Requests
+$route['api/emergency/ambulance-requests'] = 'emergency/ambulance_requests';
+$route['api/emergency/ambulance-requests/(:num)/status'] = 'emergency/ambulance_request_status/$1';
+$route['api/emergency/ambulance-requests/available'] = 'emergency/available_ambulances';
+
+// Emergency Wards
+$route['api/emergency/wards'] = 'emergency/wards';
+$route['api/emergency/wards/(:num)'] = 'emergency/wards/$1';
+$route['api/emergency/wards/(:num)/stats'] = 'emergency/ward_stats/$1';
+$route['api/emergency/wards/(:num)/beds'] = 'emergency/ward_beds/$1';
+
+// Emergency Ward Beds
+$route['api/emergency/ward-beds'] = 'emergency/ward_beds_management';
+$route['api/emergency/ward-beds/(:num)'] = 'emergency/ward_beds_management/$1';
+$route['api/emergency/ward-beds/(:num)/assign'] = 'emergency/assign_bed/$1';
+$route['api/emergency/ward-beds/(:num)/release'] = 'emergency/release_bed/$1';
+$route['api/emergency/ward-beds/available'] = 'emergency/available_beds';
+
+// Emergency Duty Roster
+$route['api/emergency/duty-roster'] = 'emergency/duty_roster';
+$route['api/emergency/duty-roster/(:num)'] = 'emergency/duty_roster/$1';
+$route['api/emergency/duty-roster/date/(:any)'] = 'emergency/duty_roster_date/$1';
+$route['api/emergency/duty-roster/current'] = 'emergency/current_duty_staff';
+
+// Emergency Patient Transfers
+$route['api/emergency/transfers'] = 'emergency/transfers';
+$route['api/emergency/transfers/visit/(:num)'] = 'emergency/transfers/$1';
+
+// Emergency Ambulance Requests
+$route['api/emergency/ambulance-requests'] = 'emergency/ambulance_requests';
+$route['api/emergency/ambulance-requests/(:num)'] = 'emergency/ambulance_requests/$1';
+$route['api/emergency/ambulance-requests/(:num)/status'] = 'emergency/ambulance_request_status/$1';
+$route['api/emergency/ambulance-requests/available'] = 'emergency/available_ambulances';
 
 // Pharmacy Routes
 // Stock Management

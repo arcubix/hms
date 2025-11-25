@@ -14,7 +14,7 @@
  * - Discharge summary
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -58,7 +58,7 @@ import {
   Syringe,
   TestTube,
   Brain,
-  Bones,
+  Bone,
   Microscope,
   Wind,
   Eye,
@@ -78,9 +78,13 @@ import {
   Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 import { LineChart as RechartsLineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { AddMedicationDialog } from './AddMedicationDialog';
+import { AddNoteDialog } from './AddNoteDialog';
+import { EditEmergencyPatient } from './EditEmergencyPatient';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -487,8 +491,114 @@ const pastVisits = [
   }
 ];
 
-export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose }: PatientMedicalRecordsProps) {
+export function PatientMedicalRecords({ patientId, bedNumber, wardName, patient, onClose }: PatientMedicalRecordsProps) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [patientData, setPatientData] = useState<any>(null);
+  const [visitData, setVisitData] = useState<any>(null);
+  const [vitals, setVitals] = useState<any[]>([]);
+  const [medications, setMedications] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [labOrders, setLabOrders] = useState<any[]>([]);
+  const [radiologyOrders, setRadiologyOrders] = useState<any[]>([]);
+  const [healthPhysical, setHealthPhysical] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [pastVisits, setPastVisits] = useState<any[]>([]);
+  const [files, setFiles] = useState<any[]>([]);
+  
+  // Dialog states
+  const [showEditPatient, setShowEditPatient] = useState(false);
+  const [showAddMedication, setShowAddMedication] = useState(false);
+  const [showAddNote, setShowAddNote] = useState(false);
+  
+  // Get visit ID from patient prop
+  const visitId = patient?.id ? (typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id) : null;
+  
+  // Load patient data
+  useEffect(() => {
+    if (patient && visitId) {
+      loadPatientData();
+    } else if (patient) {
+      // Use patient data directly if available
+      setPatientData(patient);
+      setLoading(false);
+    }
+  }, [patient, visitId]);
+  
+  const loadPatientData = async () => {
+    if (!visitId) return;
+    
+    setLoading(true);
+    try {
+      // Load visit details
+      const visit = await api.getEmergencyVisit(visitId);
+      setVisitData(visit);
+      
+      // Load patient details if patient_id is available
+      const pid = (visit as any).patient_id || (visit as any).patientId;
+      if (pid) {
+        try {
+          const pData = await api.getPatient(pid.toString());
+          setPatientData(pData);
+        } catch (error) {
+          console.error('Failed to load patient:', error);
+          // Use patient prop as fallback
+          setPatientData(patient);
+        }
+      } else {
+        setPatientData(patient);
+      }
+      
+      // Load all data in parallel
+      const [
+        vitalsData, 
+        medsData, 
+        notesData, 
+        investigationsData,
+        healthPhysicalData,
+        timelineData,
+        filesData
+      ] = await Promise.all([
+        api.getEmergencyVitals(visitId).catch(() => []),
+        api.getEmergencyMedications(visitId).catch(() => []),
+        api.getEmergencyNotes(visitId).catch(() => []),
+        api.getEmergencyInvestigations(visitId).catch(() => []),
+        api.getEmergencyHealthPhysical(visitId).catch(() => []),
+        api.getEmergencyTimeline(visitId).catch(() => []),
+        api.getEmergencyPatientFiles(visitId).catch(() => [])
+      ]);
+      
+      // Separate lab and radiology orders
+      const labData = investigationsData.filter((inv: any) => inv.investigation_type === 'lab');
+      const radiologyData = investigationsData.filter((inv: any) => inv.investigation_type === 'radiology');
+      
+      setVitals(vitalsData);
+      setMedications(medsData);
+      setNotes(notesData);
+      setLabOrders(labData);
+      setRadiologyOrders(radiologyData);
+      setHealthPhysical(healthPhysicalData);
+      setTimeline(timelineData);
+      setFiles(filesData);
+      
+      // Load past visits if patient ID is available
+      const patientDbId = patientData?.id || (visit as any)?.patientId || (visit as any)?.patient_id;
+      if (patientDbId) {
+        try {
+          const pastVisitsData = await api.getEmergencyHistory({ patient_id: patientDbId });
+          setPastVisits(pastVisitsData);
+        } catch (error) {
+          console.error('Failed to load past visits:', error);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading patient data:', error);
+      // Use patient prop as fallback
+      setPatientData(patient);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // PDF Generation Function
   const generatePDF = () => {
@@ -529,22 +639,23 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('PATIENT INFORMATION', 15, yPosition + 6);
       yPosition += 15;
 
+      const p = patientData || patient || mockPatient;
       doc.setFontSize(10);
-      doc.text(`Name: ${mockPatient.name}`, 15, yPosition);
-      doc.text(`UHID: ${mockPatient.uhid}`, 120, yPosition);
+      doc.text(`Name: ${p.name || 'N/A'}`, 15, yPosition);
+      doc.text(`UHID: ${p.uhid || p.patient_id || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Age/Gender: ${mockPatient.age} Years / ${mockPatient.gender}`, 15, yPosition);
-      doc.text(`Blood Group: ${mockPatient.bloodGroup}`, 120, yPosition);
+      doc.text(`Age/Gender: ${p.age || 0} Years / ${p.gender || 'N/A'}`, 15, yPosition);
+      doc.text(`Blood Group: ${p.blood_group || p.bloodGroup || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`DOB: ${mockPatient.dob}`, 15, yPosition);
-      doc.text(`Marital Status: ${mockPatient.maritalStatus}`, 120, yPosition);
+      doc.text(`DOB: ${p.date_of_birth || p.dob || 'N/A'}`, 15, yPosition);
+      doc.text(`Marital Status: ${p.maritalStatus || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Occupation: ${mockPatient.occupation}`, 15, yPosition);
+      doc.text(`Occupation: ${p.occupation || 'N/A'}`, 15, yPosition);
       yPosition += 7;
-      doc.text(`Phone: ${mockPatient.phone}`, 15, yPosition);
-      doc.text(`Email: ${mockPatient.email}`, 120, yPosition);
+      doc.text(`Phone: ${p.phone || 'N/A'}`, 15, yPosition);
+      doc.text(`Email: ${p.email || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Address: ${mockPatient.address}`, 15, yPosition);
+      doc.text(`Address: ${p.address || 'N/A'}`, 15, yPosition);
       yPosition += 10;
 
       // Emergency Contact
@@ -556,10 +667,11 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       yPosition += 13;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`Name: ${mockPatient.emergencyContact.name}`, 15, yPosition);
-      doc.text(`Relation: ${mockPatient.emergencyContact.relation}`, 120, yPosition);
+      const ec = patientData?.emergency_contact || patient?.emergencyContact || mockPatient.emergencyContact;
+      doc.text(`Name: ${ec?.name || 'N/A'}`, 15, yPosition);
+      doc.text(`Relation: ${ec?.relation || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Phone: ${mockPatient.emergencyContact.phone}`, 15, yPosition);
+      doc.text(`Phone: ${ec?.phone || 'N/A'}`, 15, yPosition);
       yPosition += 12;
 
       // Insurance Information
@@ -571,12 +683,13 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       yPosition += 13;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`Provider: ${mockPatient.insurance.provider}`, 15, yPosition);
+      const ins = patientData?.insurance || patient?.insurance || mockPatient.insurance;
+      doc.text(`Provider: ${ins?.provider || 'N/A'}`, 15, yPosition);
       yPosition += 7;
-      doc.text(`Policy Number: ${mockPatient.insurance.policyNumber}`, 15, yPosition);
-      doc.text(`Coverage: ${mockPatient.insurance.coverage}`, 120, yPosition);
+      doc.text(`Policy Number: ${ins?.policyNumber || 'N/A'}`, 15, yPosition);
+      doc.text(`Coverage: ${ins?.coverage || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Valid Until: ${mockPatient.insurance.validUntil}`, 15, yPosition);
+      doc.text(`Valid Until: ${ins?.validUntil || 'N/A'}`, 15, yPosition);
       yPosition += 12;
 
       checkPageBreak(30);
@@ -590,30 +703,33 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       yPosition += 15;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`ER Number: ${mockPatient.erNumber}`, 15, yPosition);
-      doc.text(`Triage Level: ESI ${mockPatient.triageLevel}`, 120, yPosition);
+      const v = visitData || patient || {};
+      doc.text(`ER Number: ${v.erNumber || v.er_number || 'N/A'}`, 15, yPosition);
+      doc.text(`Triage Level: ESI ${v.triageLevel || v.triage_level || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Admission Date: ${mockPatient.admissionDate} at ${mockPatient.admissionTime}`, 15, yPosition);
+      const admDate = v.admissionDate || v.admission_date || v.arrivalTime || v.arrival_time || 'N/A';
+      doc.text(`Admission Date: ${admDate}`, 15, yPosition);
       yPosition += 7;
-      doc.text(`Ward: ${mockPatient.ward}`, 15, yPosition);
-      doc.text(`Bed Number: ${mockPatient.bedNumber}`, 120, yPosition);
+      doc.text(`Ward: ${wardName || v.ward || v.assignedWard || 'N/A'}`, 15, yPosition);
+      doc.text(`Bed Number: ${bedNumber || v.bedNumber || v.bed_number || 'N/A'}`, 120, yPosition);
       yPosition += 7;
-      doc.text(`Attending Doctor: ${mockPatient.attendingDoctor}`, 15, yPosition);
-      doc.text(`Severity: ${mockPatient.severity}`, 120, yPosition);
+      doc.text(`Attending Doctor: ${v.assignedDoctor || v.assigned_doctor || v.attendingDoctor || 'N/A'}`, 15, yPosition);
+      doc.text(`Status: ${v.status || v.currentStatus || 'N/A'}`, 120, yPosition);
       yPosition += 10;
       doc.setFontSize(11);
       doc.text('Primary Diagnosis:', 15, yPosition);
       yPosition += 6;
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text(mockPatient.diagnosis, 15, yPosition);
+      doc.text(v.diagnosis || v.chiefComplaint || 'N/A', 15, yPosition);
       doc.setFont('helvetica', 'normal');
       yPosition += 8;
       doc.setFontSize(11);
       doc.text('Chief Complaint:', 15, yPosition);
       yPosition += 6;
       doc.setFontSize(10);
-      const complaintLines = doc.splitTextToSize(mockPatient.chiefComplaint, pageWidth - 30);
+      const complaint = v.chiefComplaint || v.chief_complaint || 'N/A';
+      const complaintLines = doc.splitTextToSize(complaint, pageWidth - 30);
       doc.text(complaintLines, 15, yPosition);
       yPosition += complaintLines.length * 5 + 10;
 
@@ -627,20 +743,53 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('⚠ CRITICAL ALLERGIES ALERT', 15, yPosition + 6);
       yPosition += 15;
 
-      allergies.forEach((allergy) => {
-        checkPageBreak(20);
-        doc.setFillColor(255, 230, 230);
-        doc.rect(15, yPosition, pageWidth - 30, 18, 'F');
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${allergy.allergen} (${allergy.severity})`, 20, yPosition + 6);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text(`Reaction: ${allergy.reaction}`, 20, yPosition + 12);
-        doc.text(`Onset: ${allergy.onsetDate}`, 20, yPosition + 17);
-        yPosition += 22;
+      // Extract allergies from Health & Physical records
+      const allergiesForPDF: any[] = [];
+      healthPhysical.forEach((hp) => {
+        if (hp.allergies) {
+          try {
+            const parsed = typeof hp.allergies === 'string' ? JSON.parse(hp.allergies) : hp.allergies;
+            if (Array.isArray(parsed)) {
+              allergiesForPDF.push(...parsed);
+            } else if (typeof parsed === 'object') {
+              allergiesForPDF.push(parsed);
+            } else if (typeof hp.allergies === 'string' && hp.allergies.trim()) {
+              hp.allergies.split(/[,\n]/).forEach((allergy: string) => {
+                if (allergy.trim()) {
+                  allergiesForPDF.push({ allergen: allergy.trim(), reaction: 'Not specified', severity: 'Moderate' });
+                }
+              });
+            }
+          } catch (e) {
+            if (hp.allergies.trim()) {
+              allergiesForPDF.push({ allergen: hp.allergies, reaction: 'Not specified', severity: 'Moderate' });
+            }
+          }
+        }
       });
+
+      if (allergiesForPDF.length > 0) {
+        allergiesForPDF.forEach((allergy) => {
+          checkPageBreak(20);
+          doc.setFillColor(255, 230, 230);
+          doc.rect(15, yPosition, pageWidth - 30, 18, 'F');
+          doc.setTextColor(0, 0, 0);
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${allergy.allergen || allergy} (${allergy.severity || 'Moderate'})`, 20, yPosition + 6);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text(`Reaction: ${allergy.reaction || 'Not specified'}`, 20, yPosition + 12);
+          if (allergy.onsetDate) {
+            doc.text(`Onset: ${allergy.onsetDate}`, 20, yPosition + 17);
+          }
+          yPosition += 22;
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No allergies recorded', 20, yPosition);
+        yPosition += 10;
+      }
 
       yPosition += 5;
       checkPageBreak(30);
@@ -653,17 +802,19 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('CURRENT VITAL SIGNS', 15, yPosition + 6);
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(9);
-      doc.text(`Last Updated: ${currentVitals.lastUpdated}`, pageWidth - 60, yPosition + 6);
+      const lastVital = vitals && vitals.length > 0 ? vitals[0] : null;
+      const lastUpdated = lastVital ? new Date(lastVital.recorded_at || lastVital.created_at).toLocaleString() : 'N/A';
+      doc.text(`Last Updated: ${lastUpdated}`, pageWidth - 60, yPosition + 6);
       yPosition += 15;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
 
       const vitalsData = [
         ['Parameter', 'Value', 'Parameter', 'Value'],
-        ['Heart Rate', `${currentVitals.heartRate} bpm`, 'Blood Pressure', `${currentVitals.bloodPressure} mmHg`],
-        ['Temperature', `${currentVitals.temperature}°F`, 'SpO2', `${currentVitals.spo2}%`],
-        ['Respiratory Rate', `${currentVitals.respiratoryRate}/min`, 'Weight', `${currentVitals.weight} lbs`],
-        ['Height', `${currentVitals.height} cm`, 'BMI', `${currentVitals.bmi} kg/m²`]
+        ['Heart Rate', `${lastVital?.pulse || currentVitals.heartRate || 'N/A'} bpm`, 'Blood Pressure', `${lastVital?.bp || currentVitals.bloodPressure || 'N/A'} mmHg`],
+        ['Temperature', `${lastVital?.temp || currentVitals.temperature || 'N/A'}°F`, 'SpO2', `${lastVital?.spo2 || currentVitals.spo2 || 'N/A'}%`],
+        ['Respiratory Rate', `${lastVital?.resp || currentVitals.respiratoryRate || 'N/A'}/min`, 'Weight', `${currentVitals.weight || 'N/A'} lbs`],
+        ['Height', `${currentVitals.height || 'N/A'} cm`, 'BMI', `${currentVitals.bmi || 'N/A'} kg/m²`]
       ];
 
       doc.autoTable({
@@ -692,19 +843,58 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('PAST MEDICAL HISTORY', 15, yPosition + 6);
       yPosition += 15;
 
-      medicalHistory.forEach((condition, index) => {
-        checkPageBreak(18);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${index + 1}. ${condition.condition}`, 15, yPosition);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        yPosition += 5;
-        doc.text(`   Diagnosed: ${condition.diagnosedDate} | Status: ${condition.status}`, 15, yPosition);
-        yPosition += 5;
-        doc.text(`   ${condition.notes}`, 15, yPosition);
-        yPosition += 8;
+      // Extract medical history from Health & Physical records
+      const medicalHistoryForPDF: any[] = [];
+      healthPhysical.forEach((hp) => {
+        if (hp.past_medical_history) {
+          try {
+            const parsed = typeof hp.past_medical_history === 'string' ? JSON.parse(hp.past_medical_history) : hp.past_medical_history;
+            if (Array.isArray(parsed)) {
+              medicalHistoryForPDF.push(...parsed);
+            } else if (typeof parsed === 'object') {
+              medicalHistoryForPDF.push(parsed);
+            } else if (typeof hp.past_medical_history === 'string' && hp.past_medical_history.trim()) {
+              hp.past_medical_history.split(/[;\n]/).forEach((condition: string) => {
+                if (condition.trim()) {
+                  medicalHistoryForPDF.push({ condition: condition.trim(), status: 'Chronic', notes: 'From medical records' });
+                }
+              });
+            }
+          } catch (e) {
+            if (hp.past_medical_history.trim()) {
+              medicalHistoryForPDF.push({ condition: hp.past_medical_history, status: 'Chronic', notes: 'From medical records' });
+            }
+          }
+        }
       });
+
+      if (medicalHistoryForPDF.length > 0) {
+        medicalHistoryForPDF.forEach((condition, index) => {
+          checkPageBreak(18);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${index + 1}. ${condition.condition || condition}`, 15, yPosition);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          yPosition += 5;
+          if (condition.diagnosedDate) {
+            doc.text(`   Diagnosed: ${condition.diagnosedDate} | Status: ${condition.status || 'Chronic'}`, 15, yPosition);
+          } else {
+            doc.text(`   Status: ${condition.status || 'Chronic'}`, 15, yPosition);
+          }
+          yPosition += 5;
+          if (condition.notes) {
+            doc.text(`   ${condition.notes}`, 15, yPosition);
+            yPosition += 8;
+          } else {
+            yPosition += 5;
+          }
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No medical history recorded', 15, yPosition);
+        yPosition += 10;
+      }
 
       yPosition += 5;
 
@@ -720,31 +910,38 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('CURRENT MEDICATIONS', 15, yPosition + 6);
       yPosition += 15;
 
-      const medicationsTableData = currentMedications.map(med => [
-        med.name,
-        med.dosage,
-        med.route,
-        med.frequency,
-        med.indication
-      ]);
+      const medicationsTableData = medications && medications.length > 0 
+        ? medications.map(med => [
+            med.medication_name || med.name || 'N/A',
+            med.dosage || 'N/A',
+            med.route || 'N/A',
+            med.frequency || 'N/A',
+            med.notes || 'N/A'
+          ])
+        : [];
 
-      doc.autoTable({
-        startY: yPosition,
-        head: [['Medication', 'Dosage', 'Route', 'Frequency', 'Indication']],
-        body: medicationsTableData,
-        theme: 'striped',
-        headStyles: { fillColor: [47, 128, 237], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 35 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 20 },
-          3: { cellWidth: 35 },
-          4: { cellWidth: 55 }
-        }
-      });
-
-      yPosition = doc.lastAutoTable.finalY + 10;
+      if (medicationsTableData.length > 0) {
+        doc.autoTable({
+          startY: yPosition,
+          head: [['Medication', 'Dosage', 'Route', 'Frequency', 'Notes']],
+          body: medicationsTableData,
+          theme: 'striped',
+          headStyles: { fillColor: [47, 128, 237], textColor: 255 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 35 },
+            1: { cellWidth: 25 },
+            2: { cellWidth: 20 },
+            3: { cellWidth: 35 },
+            4: { cellWidth: 55 }
+          }
+        });
+        yPosition = doc.lastAutoTable.finalY + 10;
+      } else {
+        doc.setFontSize(10);
+        doc.text('No medications recorded', 15, yPosition);
+        yPosition += 10;
+      }
 
       // New Page for Lab Results
       doc.addPage();
@@ -758,7 +955,17 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('LABORATORY RESULTS', 15, yPosition + 6);
       yPosition += 15;
 
-      labResults.forEach((lab) => {
+      const labsForPDF = labOrders && labOrders.length > 0 
+        ? labOrders.filter(l => l.investigation_type === 'lab' && l.status === 'completed').map(l => ({
+            testName: l.test_name,
+            date: new Date(l.ordered_at || l.created_at).toLocaleString(),
+            status: l.status,
+            results: l.result_value ? [{ parameter: l.test_name, value: l.result_value, unit: '', range: '', status: 'Normal' }] : []
+          }))
+        : [];
+
+      if (labsForPDF.length > 0) {
+        labsForPDF.forEach((lab) => {
         checkPageBreak(50);
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
@@ -806,8 +1013,13 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
           }
         });
 
-        yPosition = doc.lastAutoTable.finalY + 8;
-      });
+          yPosition = doc.lastAutoTable.finalY + 8;
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No lab results available', 15, yPosition);
+        yPosition += 10;
+      }
 
       // New Page for Radiology
       doc.addPage();
@@ -821,7 +1033,19 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('RADIOLOGY & IMAGING REPORTS', 15, yPosition + 6);
       yPosition += 15;
 
-      radiologyReports.forEach((report) => {
+      const radiologyForPDF = radiologyOrders && radiologyOrders.length > 0
+        ? radiologyOrders.map(order => ({
+            examType: order.test_name || 'Radiology Exam',
+            date: order.ordered_at ? new Date(order.ordered_at).toLocaleString() : 'N/A',
+            orderedBy: order.ordered_by_name || 'N/A',
+            findings: order.result_value || 'No findings available',
+            impression: order.result_value ? 'See findings above' : 'No impression available',
+            recommendation: 'N/A'
+          }))
+        : [];
+
+      if (radiologyForPDF.length > 0) {
+        radiologyForPDF.forEach((report) => {
         checkPageBreak(60);
         doc.setFillColor(245, 245, 255);
         doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
@@ -866,9 +1090,14 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         const recommendationLines = doc.splitTextToSize(report.recommendation, pageWidth - 30);
-        doc.text(recommendationLines, 15, yPosition);
-        yPosition += recommendationLines.length * 4 + 10;
-      });
+          doc.text(recommendationLines, 15, yPosition);
+          yPosition += recommendationLines.length * 4 + 10;
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No radiology reports available', 15, yPosition);
+        yPosition += 10;
+      }
 
       // New Page for Doctor's Notes
       doc.addPage();
@@ -879,10 +1108,20 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
       doc.setTextColor(0, 150, 0);
       doc.setFontSize(14);
-      doc.text("DOCTOR'S NOTES (SOAP FORMAT)", 15, yPosition + 6);
+      doc.text("DOCTOR'S NOTES", 15, yPosition + 6);
       yPosition += 15;
 
-      doctorsNotes.forEach((note) => {
+      const notesForPDF = notes && notes.length > 0
+        ? notes.map(n => ({
+            noteType: n.note_type || 'Doctor Note',
+            date: new Date(n.recorded_at || n.created_at).toLocaleString(),
+            doctor: n.recorded_by_name || 'N/A',
+            noteText: n.note_text || 'N/A'
+          }))
+        : [];
+
+      if (notesForPDF.length > 0) {
+        notesForPDF.forEach((note) => {
         checkPageBreak(80);
         doc.setFillColor(250, 250, 250);
         doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
@@ -948,9 +1187,23 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         const planLines = doc.splitTextToSize(note.plan, pageWidth - 35);
-        doc.text(planLines, 18, yPosition);
-        yPosition += planLines.length * 4 + 10;
-      });
+          // For PDF, show note text directly (not SOAP format)
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${note.noteType} - ${note.date}`, 15, yPosition);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text(`By: ${note.doctor}`, 15, yPosition + 5);
+          yPosition += 10;
+          const noteLines = doc.splitTextToSize(note.noteText, pageWidth - 30);
+          doc.text(noteLines, 15, yPosition);
+          yPosition += noteLines.length * 4 + 10;
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No doctor\'s notes available', 15, yPosition);
+        yPosition += 10;
+      }
 
       // New Page for Timeline
       doc.addPage();
@@ -964,27 +1217,92 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       doc.text('TREATMENT TIMELINE', 15, yPosition + 6);
       yPosition += 15;
 
-      const timelineTableData = treatmentTimeline.map(item => [
+      // Aggregate timeline events from multiple sources
+      const timelineEventsForPDF: any[] = [];
+      
+      // Add status history events
+      timeline.forEach((event) => {
+        timelineEventsForPDF.push({
+          time: new Date(event.changed_at || event.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          event: `Status Changed to ${event.new_status || event.status}`,
+          type: 'status_change',
+          user: event.changed_by_name || 'System'
+        });
+      });
+      
+      // Add vital signs events
+      vitals.forEach((vital) => {
+        timelineEventsForPDF.push({
+          time: new Date(vital.recorded_at || vital.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          event: `Vital Signs Recorded - BP: ${vital.bp || 'N/A'}, Pulse: ${vital.pulse || 'N/A'}`,
+          type: 'vital_signs',
+          user: vital.recorded_by_name || 'Nurse'
+        });
+      });
+      
+      // Add medication events
+      medications.forEach((med) => {
+        timelineEventsForPDF.push({
+          time: new Date(med.administered_at || med.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          event: `Medication: ${med.medication_name || med.name || 'N/A'} - ${med.dosage || 'N/A'}`,
+          type: 'medication',
+          user: med.administered_by_name || 'Nurse'
+        });
+      });
+      
+      // Add investigation events
+      [...labOrders, ...radiologyOrders].forEach((order) => {
+        timelineEventsForPDF.push({
+          time: new Date(order.ordered_at || order.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          event: `${order.investigation_type === 'radiology' ? 'Radiology' : 'Lab'} Order: ${order.test_name || 'N/A'}`,
+          type: 'investigation',
+          user: order.ordered_by_name || 'Doctor'
+        });
+      });
+      
+      // Add note events
+      notes.forEach((note) => {
+        timelineEventsForPDF.push({
+          time: new Date(note.recorded_at || note.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          event: `Treatment Note Added`,
+          type: 'documentation',
+          user: note.recorded_by_name || 'Doctor'
+        });
+      });
+      
+      // Sort by time
+      timelineEventsForPDF.sort((a, b) => {
+        const timeA = a.time;
+        const timeB = b.time;
+        return timeA.localeCompare(timeB);
+      });
+
+      const timelineTableData = timelineEventsForPDF.map(item => [
         item.time,
         item.event,
-        item.type.toUpperCase(),
+        item.type.toUpperCase().replace('_', ' '),
         item.user
       ]);
 
-      doc.autoTable({
-        startY: yPosition,
-        head: [['Time', 'Event', 'Type', 'By']],
-        body: timelineTableData,
-        theme: 'striped',
-        headStyles: { fillColor: [255, 165, 0], textColor: 0 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 25 },
-          1: { cellWidth: 95 },
-          2: { cellWidth: 30, halign: 'center' },
-          3: { cellWidth: 30 }
-        }
-      });
+      if (timelineTableData.length > 0) {
+        doc.autoTable({
+          startY: yPosition,
+          head: [['Time', 'Event', 'Type', 'By']],
+          body: timelineTableData,
+          theme: 'striped',
+          headStyles: { fillColor: [255, 165, 0], textColor: 0 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 25 },
+            1: { cellWidth: 95 },
+            2: { cellWidth: 30, halign: 'center' },
+            3: { cellWidth: 30 }
+          }
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.text('No timeline events recorded', 15, yPosition);
+      }
 
       // Footer on last page
       const pageCount = doc.getNumberOfPages();
@@ -997,7 +1315,8 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
       }
 
       // Save the PDF
-      doc.save(`Medical_Record_${mockPatient.uhid}_${mockPatient.name.replace(/ /g, '_')}.pdf`);
+      const patientInfo = patientData || patient || mockPatient;
+      doc.save(`Medical_Record_${patientInfo.uhid || patientInfo.patient_id || 'N/A'}_${(patientInfo.name || 'Patient').replace(/ /g, '_')}.pdf`);
       toast.success('PDF generated successfully!');
     } catch (error) {
       console.error('PDF Generation Error:', error);
@@ -1061,12 +1380,12 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <div>
                   <h1 className="text-2xl font-semibold text-gray-900">Medical Records</h1>
                   <p className="text-sm text-gray-600">
-                    {mockPatient.name} • {mockPatient.uhid} • {wardName} - {bedNumber}
+                    {(patientData || patient || mockPatient)?.name || 'Patient'} • {(patientData || patient || mockPatient)?.uhid || (patientData || patient || mockPatient)?.patient_id || 'N/A'} • {wardName || 'N/A'} - {bedNumber || 'N/A'}
                   </p>
                 </div>
               </div>
               <Badge className="bg-red-100 text-red-800">
-                {mockPatient.severity}
+                {(visitData || patient)?.status || (visitData || patient)?.currentStatus || mockPatient.severity}
               </Badge>
             </div>
             <div className="flex gap-2">
@@ -1078,11 +1397,27 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <Printer className="w-4 h-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // Share functionality - copy link to clipboard
+                  const url = window.location.href;
+                  navigator.clipboard.writeText(url).then(() => {
+                    toast.success('Link copied to clipboard!');
+                  }).catch(() => {
+                    toast.error('Failed to copy link');
+                  });
+                }}
+              >
                 <Share2 className="w-4 h-4 mr-2" />
                 Share
               </Button>
-              <Button className="bg-blue-600 hover:bg-blue-700" size="sm">
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700" 
+                size="sm"
+                onClick={() => setShowEditPatient(true)}
+              >
                 <Edit className="w-4 h-4 mr-2" />
                 Update Records
               </Button>
@@ -1093,27 +1428,27 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
               <p className="text-xs text-blue-600 font-medium">Age/Gender</p>
-              <p className="text-xl font-bold text-blue-700">{mockPatient.age}Y / {mockPatient.gender}</p>
+              <p className="text-xl font-bold text-blue-700">{(patientData || patient || mockPatient)?.age || 0}Y / {(patientData || patient || mockPatient)?.gender || 'N/A'}</p>
             </div>
             <div className="bg-red-50 rounded-lg p-3 border border-red-200">
               <p className="text-xs text-red-600 font-medium">Blood Group</p>
-              <p className="text-xl font-bold text-red-700">{mockPatient.bloodGroup}</p>
+              <p className="text-xl font-bold text-red-700">{(patientData || patient || mockPatient)?.blood_group || (patientData || patient || mockPatient)?.bloodGroup || 'N/A'}</p>
             </div>
             <div className="bg-green-50 rounded-lg p-3 border border-green-200">
               <p className="text-xs text-green-600 font-medium">Admission Date</p>
-              <p className="text-sm font-bold text-green-700">{mockPatient.admissionDate}</p>
+              <p className="text-sm font-bold text-green-700">{(visitData || patient)?.admissionDate || (visitData || patient)?.arrivalTime || (visitData || patient)?.arrival_time || 'N/A'}</p>
             </div>
             <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
               <p className="text-xs text-purple-600 font-medium">ER Number</p>
-              <p className="text-sm font-bold text-purple-700">{mockPatient.erNumber}</p>
+              <p className="text-sm font-bold text-purple-700">{(visitData || patient)?.erNumber || (visitData || patient)?.er_number || 'N/A'}</p>
             </div>
             <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
               <p className="text-xs text-orange-600 font-medium">Attending</p>
-              <p className="text-sm font-bold text-orange-700">{mockPatient.attendingDoctor.replace('Dr. ', '')}</p>
+              <p className="text-sm font-bold text-orange-700">{((visitData || patient)?.assignedDoctor || (visitData || patient)?.attendingDoctor || 'N/A').replace('Dr. ', '')}</p>
             </div>
             <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
               <p className="text-xs text-yellow-600 font-medium">Triage Level</p>
-              <p className="text-xl font-bold text-yellow-700">ESI {mockPatient.triageLevel}</p>
+              <p className="text-xl font-bold text-yellow-700">ESI {(visitData || patient)?.triageLevel || (visitData || patient)?.triage_level || 'N/A'}</p>
             </div>
           </div>
         </div>
@@ -1132,14 +1467,14 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <div className="flex justify-center mb-4">
                   <Avatar className="w-24 h-24">
                     <AvatarFallback className="text-2xl bg-blue-600 text-white">
-                      {mockPatient.name.split(' ').map(n => n[0]).join('')}
+                      {((patientData || patient || mockPatient)?.name || 'P').split(' ').map((n: string) => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
                 </div>
                 
                 <div className="text-center space-y-1">
-                  <h3 className="font-semibold text-gray-900">{mockPatient.name}</h3>
-                  <p className="text-sm text-gray-600">{mockPatient.occupation}</p>
+                  <h3 className="font-semibold text-gray-900">{(patientData || patient || mockPatient)?.name || 'Patient'}</h3>
+                  <p className="text-sm text-gray-600">{(patientData || patient || mockPatient)?.occupation || 'N/A'}</p>
                 </div>
 
                 <Separator />
@@ -1147,23 +1482,23 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-gray-600 text-xs mb-1">Date of Birth</p>
-                    <p className="font-medium">{mockPatient.dob}</p>
+                    <p className="font-medium">{(patientData || patient || mockPatient)?.date_of_birth || (patientData || patient || mockPatient)?.dob || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 text-xs mb-1">Marital Status</p>
-                    <p className="font-medium">{mockPatient.maritalStatus}</p>
+                    <p className="font-medium">{(patientData || patient || mockPatient)?.maritalStatus || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 text-xs mb-1">Phone</p>
-                    <p className="font-medium">{mockPatient.phone}</p>
+                    <p className="font-medium">{(patientData || patient || mockPatient)?.phone || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 text-xs mb-1">Email</p>
-                    <p className="font-medium text-xs">{mockPatient.email}</p>
+                    <p className="font-medium text-xs">{(patientData || patient || mockPatient)?.email || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 text-xs mb-1">Address</p>
-                    <p className="font-medium text-xs">{mockPatient.address}</p>
+                    <p className="font-medium text-xs">{(patientData || patient || mockPatient)?.address || 'N/A'}</p>
                   </div>
                 </div>
 
@@ -1172,9 +1507,9 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <div>
                   <p className="text-gray-600 text-xs mb-2">Emergency Contact</p>
                   <div className="bg-red-50 p-3 rounded-lg space-y-1">
-                    <p className="font-medium text-sm">{mockPatient.emergencyContact.name}</p>
-                    <p className="text-xs text-gray-600">{mockPatient.emergencyContact.relation}</p>
-                    <p className="text-sm font-medium text-red-600">{mockPatient.emergencyContact.phone}</p>
+                    <p className="font-medium text-sm">{((patientData || patient || mockPatient)?.emergency_contact || (patientData || patient || mockPatient)?.emergencyContact || mockPatient.emergencyContact)?.name || 'N/A'}</p>
+                    <p className="text-xs text-gray-600">{((patientData || patient || mockPatient)?.emergency_contact || (patientData || patient || mockPatient)?.emergencyContact || mockPatient.emergencyContact)?.relation || 'N/A'}</p>
+                    <p className="text-sm font-medium text-red-600">{((patientData || patient || mockPatient)?.emergency_contact || (patientData || patient || mockPatient)?.emergencyContact || mockPatient.emergencyContact)?.phone || 'N/A'}</p>
                   </div>
                 </div>
 
@@ -1183,11 +1518,11 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 <div>
                   <p className="text-gray-600 text-xs mb-2">Insurance Details</p>
                   <div className="bg-green-50 p-3 rounded-lg space-y-1">
-                    <p className="font-medium text-sm">{mockPatient.insurance.provider}</p>
-                    <p className="text-xs text-gray-600">Policy: {mockPatient.insurance.policyNumber}</p>
-                    <p className="text-xs text-gray-600">Valid until: {mockPatient.insurance.validUntil}</p>
+                    <p className="font-medium text-sm">{((patientData || patient || mockPatient)?.insurance || mockPatient.insurance)?.provider || 'N/A'}</p>
+                    <p className="text-xs text-gray-600">Policy: {((patientData || patient || mockPatient)?.insurance || mockPatient.insurance)?.policyNumber || 'N/A'}</p>
+                    <p className="text-xs text-gray-600">Valid until: {((patientData || patient || mockPatient)?.insurance || mockPatient.insurance)?.validUntil || 'N/A'}</p>
                     <Badge className="bg-green-600 text-white mt-1">
-                      {mockPatient.insurance.coverage}
+                      {((patientData || patient || mockPatient)?.insurance || mockPatient.insurance)?.coverage || 'N/A'}
                     </Badge>
                   </div>
                 </div>
@@ -1203,34 +1538,74 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {allergies.map((allergy) => (
-                  <Alert key={allergy.id} className="border-red-300 bg-white">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription>
-                      <p className="font-medium text-red-800">{allergy.allergen}</p>
-                      <p className="text-xs text-gray-600 mt-1">{allergy.reaction}</p>
-                      <Badge className={allergy.severity === 'Critical' ? 'bg-red-600 text-white mt-1' : 'bg-orange-600 text-white mt-1'}>
-                        {allergy.severity}
-                      </Badge>
-                    </AlertDescription>
-                  </Alert>
-                ))}
+                {(() => {
+                  // Extract allergies from Health & Physical records
+                  const allergiesList: any[] = [];
+                  healthPhysical.forEach((hp) => {
+                    if (hp.allergies) {
+                      // Parse allergies if it's a string, or use as array
+                      try {
+                        const parsed = typeof hp.allergies === 'string' ? JSON.parse(hp.allergies) : hp.allergies;
+                        if (Array.isArray(parsed)) {
+                          allergiesList.push(...parsed);
+                        } else if (typeof parsed === 'object') {
+                          allergiesList.push(parsed);
+                        } else if (typeof hp.allergies === 'string' && hp.allergies.trim()) {
+                          // If it's a plain string, split by comma or newline
+                          hp.allergies.split(/[,\n]/).forEach((allergy: string) => {
+                            if (allergy.trim()) {
+                              allergiesList.push({ allergen: allergy.trim(), reaction: 'Not specified', severity: 'Moderate' });
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        // If not JSON, treat as plain text
+                        if (hp.allergies.trim()) {
+                          allergiesList.push({ allergen: hp.allergies, reaction: 'Not specified', severity: 'Moderate' });
+                        }
+                      }
+                    }
+                  });
+                  
+                  if (allergiesList.length === 0) {
+                    return (
+                      <div className="text-center py-4 text-gray-500 text-sm">
+                        No allergies recorded
+                      </div>
+                    );
+                  }
+                  
+                  return allergiesList.map((allergy, idx) => (
+                    <Alert key={idx} className="border-red-300 bg-white">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription>
+                        <p className="font-medium text-red-800">{allergy.allergen || allergy}</p>
+                        <p className="text-xs text-gray-600 mt-1">{allergy.reaction || 'Not specified'}</p>
+                        <Badge className={allergy.severity === 'Critical' ? 'bg-red-600 text-white mt-1' : 'bg-orange-600 text-white mt-1'}>
+                          {allergy.severity || 'Moderate'}
+                        </Badge>
+                      </AlertDescription>
+                    </Alert>
+                  ));
+                })()}
               </CardContent>
             </Card>
           </div>
 
           {/* Main Content Area */}
           <div className="lg:col-span-3 space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-7">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="vitals">Vitals</TabsTrigger>
-                <TabsTrigger value="medications">Medications</TabsTrigger>
-                <TabsTrigger value="labs">Lab Results</TabsTrigger>
-                <TabsTrigger value="radiology">Radiology</TabsTrigger>
-                <TabsTrigger value="notes">Doctor's Notes</TabsTrigger>
-                <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              </TabsList>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <div className="overflow-x-auto">
+                <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-full min-w-max">
+                  <TabsTrigger value="overview" className="whitespace-nowrap">Overview</TabsTrigger>
+                  <TabsTrigger value="vitals" className="whitespace-nowrap">Vitals</TabsTrigger>
+                  <TabsTrigger value="medications" className="whitespace-nowrap">Medications</TabsTrigger>
+                  <TabsTrigger value="labs" className="whitespace-nowrap">Lab Results</TabsTrigger>
+                  <TabsTrigger value="radiology" className="whitespace-nowrap">Radiology</TabsTrigger>
+                  <TabsTrigger value="notes" className="whitespace-nowrap">Doctor's Notes</TabsTrigger>
+                  <TabsTrigger value="timeline" className="whitespace-nowrap">Timeline</TabsTrigger>
+                </TabsList>
+              </div>
 
               {/* Overview Tab */}
               <TabsContent value="overview" className="space-y-6 mt-6">
@@ -1245,12 +1620,12 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                   <CardContent className="pt-6 space-y-4">
                     <div>
                       <p className="text-sm text-gray-600 mb-2">Primary Diagnosis</p>
-                      <p className="text-xl font-semibold text-gray-900">{mockPatient.diagnosis}</p>
+                      <p className="text-xl font-semibold text-gray-900">{(visitData || patient)?.diagnosis || (visitData || patient)?.chiefComplaint || 'N/A'}</p>
                     </div>
                     <Separator />
                     <div>
                       <p className="text-sm text-gray-600 mb-2">Chief Complaint</p>
-                      <p className="text-gray-800">{mockPatient.chiefComplaint}</p>
+                      <p className="text-gray-800">{(visitData || patient)?.chiefComplaint || (visitData || patient)?.chief_complaint || 'N/A'}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -1260,76 +1635,93 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>Current Vital Signs</CardTitle>
-                      <span className="text-xs text-gray-500">{currentVitals.lastUpdated}</span>
+                      <span className="text-xs text-gray-500">
+                        {vitals && vitals.length > 0 
+                          ? `Last updated: ${new Date(vitals[0].recorded_at || vitals[0].created_at).toLocaleString()}`
+                          : 'No vitals recorded'}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Heart className="w-5 h-5 text-red-600" />
-                          <span className="text-sm text-gray-600">Heart Rate</span>
+                    {(() => {
+                      const lastVital = vitals && vitals.length > 0 ? vitals[0] : null;
+                      if (!lastVital) {
+                        return (
+                          <div className="text-center py-8 text-gray-500">
+                            No vital signs recorded yet
+                          </div>
+                        );
+                      }
+                      const v = lastVital;
+                      return (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Heart className="w-5 h-5 text-red-600" />
+                              <span className="text-sm text-gray-600">Heart Rate</span>
+                            </div>
+                            <p className="text-2xl font-bold text-red-700">{v.pulse || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">bpm</p>
+                          </div>
+                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Activity className="w-5 h-5 text-blue-600" />
+                              <span className="text-sm text-gray-600">Blood Pressure</span>
+                            </div>
+                            <p className="text-2xl font-bold text-blue-700">{v.bp || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">mmHg</p>
+                          </div>
+                          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Thermometer className="w-5 h-5 text-orange-600" />
+                              <span className="text-sm text-gray-600">Temperature</span>
+                            </div>
+                            <p className="text-2xl font-bold text-orange-700">{v.temp || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">°F</p>
+                          </div>
+                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Droplet className="w-5 h-5 text-green-600" />
+                              <span className="text-sm text-gray-600">SpO2</span>
+                            </div>
+                            <p className="text-2xl font-bold text-green-700">{v.spo2 || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">%</p>
+                          </div>
+                          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Wind className="w-5 h-5 text-purple-600" />
+                              <span className="text-sm text-gray-600">Resp. Rate</span>
+                            </div>
+                            <p className="text-2xl font-bold text-purple-700">{v.resp || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">/min</p>
+                          </div>
+                          <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Target className="w-5 h-5 text-indigo-600" />
+                              <span className="text-sm text-gray-600">Weight</span>
+                            </div>
+                            <p className="text-2xl font-bold text-indigo-700">{v.weight || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">lbs</p>
+                          </div>
+                          <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Target className="w-5 h-5 text-teal-600" />
+                              <span className="text-sm text-gray-600">Height</span>
+                            </div>
+                            <p className="text-2xl font-bold text-teal-700">{v.height || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">cm</p>
+                          </div>
+                          <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <BarChart3 className="w-5 h-5 text-yellow-600" />
+                              <span className="text-sm text-gray-600">BMI</span>
+                            </div>
+                            <p className="text-2xl font-bold text-yellow-700">{v.bmi || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">kg/m²</p>
+                          </div>
                         </div>
-                        <p className="text-2xl font-bold text-red-700">{currentVitals.heartRate}</p>
-                        <p className="text-xs text-gray-600">bpm</p>
-                      </div>
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Activity className="w-5 h-5 text-blue-600" />
-                          <span className="text-sm text-gray-600">Blood Pressure</span>
-                        </div>
-                        <p className="text-2xl font-bold text-blue-700">{currentVitals.bloodPressure}</p>
-                        <p className="text-xs text-gray-600">mmHg</p>
-                      </div>
-                      <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Thermometer className="w-5 h-5 text-orange-600" />
-                          <span className="text-sm text-gray-600">Temperature</span>
-                        </div>
-                        <p className="text-2xl font-bold text-orange-700">{currentVitals.temperature}</p>
-                        <p className="text-xs text-gray-600">°F</p>
-                      </div>
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Droplet className="w-5 h-5 text-green-600" />
-                          <span className="text-sm text-gray-600">SpO2</span>
-                        </div>
-                        <p className="text-2xl font-bold text-green-700">{currentVitals.spo2}</p>
-                        <p className="text-xs text-gray-600">%</p>
-                      </div>
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Wind className="w-5 h-5 text-purple-600" />
-                          <span className="text-sm text-gray-600">Resp. Rate</span>
-                        </div>
-                        <p className="text-2xl font-bold text-purple-700">{currentVitals.respiratoryRate}</p>
-                        <p className="text-xs text-gray-600">/min</p>
-                      </div>
-                      <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Target className="w-5 h-5 text-indigo-600" />
-                          <span className="text-sm text-gray-600">Weight</span>
-                        </div>
-                        <p className="text-2xl font-bold text-indigo-700">{currentVitals.weight}</p>
-                        <p className="text-xs text-gray-600">lbs</p>
-                      </div>
-                      <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Target className="w-5 h-5 text-teal-600" />
-                          <span className="text-sm text-gray-600">Height</span>
-                        </div>
-                        <p className="text-2xl font-bold text-teal-700">{currentVitals.height}</p>
-                        <p className="text-xs text-gray-600">cm</p>
-                      </div>
-                      <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <BarChart3 className="w-5 h-5 text-yellow-600" />
-                          <span className="text-sm text-gray-600">BMI</span>
-                        </div>
-                        <p className="text-2xl font-bold text-yellow-700">{currentVitals.bmi}</p>
-                        <p className="text-xs text-gray-600">kg/m²</p>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
 
@@ -1342,20 +1734,63 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {medicalHistory.map((condition) => (
-                        <div key={condition.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-gray-900">{condition.condition}</h4>
-                            <Badge className="bg-blue-100 text-blue-800">{condition.status}</Badge>
+                    {(() => {
+                      // Extract medical history from Health & Physical records
+                      const medicalHistoryList: any[] = [];
+                      healthPhysical.forEach((hp) => {
+                        if (hp.past_medical_history) {
+                          try {
+                            const parsed = typeof hp.past_medical_history === 'string' ? JSON.parse(hp.past_medical_history) : hp.past_medical_history;
+                            if (Array.isArray(parsed)) {
+                              medicalHistoryList.push(...parsed);
+                            } else if (typeof parsed === 'object') {
+                              medicalHistoryList.push(parsed);
+                            } else if (typeof hp.past_medical_history === 'string' && hp.past_medical_history.trim()) {
+                              // If it's a plain string, split by newline or semicolon
+                              hp.past_medical_history.split(/[;\n]/).forEach((condition: string) => {
+                                if (condition.trim()) {
+                                  medicalHistoryList.push({ condition: condition.trim(), status: 'Chronic', notes: 'From medical records' });
+                                }
+                              });
+                            }
+                          } catch (e) {
+                            // If not JSON, treat as plain text
+                            if (hp.past_medical_history.trim()) {
+                              medicalHistoryList.push({ condition: hp.past_medical_history, status: 'Chronic', notes: 'From medical records' });
+                            }
+                          }
+                        }
+                      });
+                      
+                      if (medicalHistoryList.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-gray-500">
+                            No medical history recorded
                           </div>
-                          <div className="text-sm space-y-1">
-                            <p className="text-gray-600">Diagnosed: {condition.diagnosedDate}</p>
-                            <p className="text-gray-700">{condition.notes}</p>
-                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <div className="space-y-3">
+                          {medicalHistoryList.map((condition, idx) => (
+                            <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-semibold text-gray-900">{condition.condition || condition}</h4>
+                                <Badge className="bg-blue-100 text-blue-800">{condition.status || 'Chronic'}</Badge>
+                              </div>
+                              <div className="text-sm space-y-1">
+                                {condition.diagnosedDate && (
+                                  <p className="text-gray-600">Diagnosed: {condition.diagnosedDate}</p>
+                                )}
+                                {condition.notes && (
+                                  <p className="text-gray-700">{condition.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
 
@@ -1368,25 +1803,40 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {pastVisits.map((visit) => (
-                        <div key={visit.id} className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <p className="font-semibold text-gray-900">{visit.erNumber}</p>
-                              <p className="text-sm text-gray-600">{visit.visitDate}</p>
+                    {pastVisits.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No past emergency visits found
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {pastVisits.map((visit) => {
+                          const arrivalTime = visit.arrival_time || visit.arrivalTime;
+                          const visitDate = arrivalTime ? new Date(arrivalTime).toLocaleDateString() : 'N/A';
+                          const dispositionTime = visit.disposition_time;
+                          const duration = arrivalTime && dispositionTime 
+                            ? `${Math.round((new Date(dispositionTime).getTime() - new Date(arrivalTime).getTime()) / (1000 * 60 * 60))}h ${Math.round(((new Date(dispositionTime).getTime() - new Date(arrivalTime).getTime()) / (1000 * 60)) % 60)}m`
+                            : 'N/A';
+                          
+                          return (
+                            <div key={visit.id} className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <p className="font-semibold text-gray-900">{visit.er_number || visit.erNumber || 'N/A'}</p>
+                                  <p className="text-sm text-gray-600">{visitDate}</p>
+                                </div>
+                                <Badge className="bg-purple-100 text-purple-800">{duration}</Badge>
+                              </div>
+                              <div className="text-sm space-y-1">
+                                <p><span className="text-gray-600">Complaint:</span> {visit.chief_complaint || visit.chiefComplaint || 'N/A'}</p>
+                                <p><span className="text-gray-600">Diagnosis:</span> {visit.primary_diagnosis || visit.diagnosis || visit.chief_complaint || 'N/A'}</p>
+                                <p><span className="text-gray-600">Disposition:</span> {visit.disposition || 'N/A'}</p>
+                                <p><span className="text-gray-600">Doctor:</span> {visit.doctor_name || visit.doctor || 'N/A'}</p>
+                              </div>
                             </div>
-                            <Badge className="bg-purple-100 text-purple-800">{visit.duration}</Badge>
-                          </div>
-                          <div className="text-sm space-y-1">
-                            <p><span className="text-gray-600">Complaint:</span> {visit.chiefComplaint}</p>
-                            <p><span className="text-gray-600">Diagnosis:</span> {visit.diagnosis}</p>
-                            <p><span className="text-gray-600">Disposition:</span> {visit.disposition}</p>
-                            <p><span className="text-gray-600">Doctor:</span> {visit.doctor}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -1399,58 +1849,77 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                     <CardDescription>Real-time monitoring since admission</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-8">
-                      {/* Heart Rate Chart */}
-                      <div>
-                        <h4 className="font-medium mb-4 flex items-center gap-2">
-                          <Heart className="w-4 h-4 text-red-600" />
-                          Heart Rate (bpm)
-                        </h4>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <RechartsLineChart data={vitalSignsHistory}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis domain={[60, 120]} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="heartRate" stroke="#dc2626" strokeWidth={2} dot={{ fill: '#dc2626' }} />
-                          </RechartsLineChart>
-                        </ResponsiveContainer>
-                      </div>
+                    {vitals && vitals.length > 0 ? (
+                      <div className="space-y-8">
+                        {/* Heart Rate Chart */}
+                        <div>
+                          <h4 className="font-medium mb-4 flex items-center gap-2">
+                            <Heart className="w-4 h-4 text-red-600" />
+                            Heart Rate (bpm)
+                          </h4>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <RechartsLineChart data={vitals.slice(-10).reverse().map((v) => ({
+                              time: new Date(v.recorded_at || v.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                              heartRate: v.pulse || 0,
+                              bloodPressure: v.bp ? parseInt(v.bp.split('/')[0]) : 0,
+                              temperature: v.temp || 0,
+                              spo2: v.spo2 || 0,
+                              respRate: v.resp || 0
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="time" />
+                              <YAxis domain={[60, 120]} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="heartRate" stroke="#dc2626" strokeWidth={2} dot={{ fill: '#dc2626' }} />
+                            </RechartsLineChart>
+                          </ResponsiveContainer>
+                        </div>
 
-                      {/* Blood Pressure Chart */}
-                      <div>
-                        <h4 className="font-medium mb-4 flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-blue-600" />
-                          Blood Pressure (mmHg) - Systolic
-                        </h4>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <RechartsLineChart data={vitalSignsHistory}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis domain={[100, 180]} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="bloodPressure" stroke="#2563eb" strokeWidth={2} dot={{ fill: '#2563eb' }} />
-                          </RechartsLineChart>
-                        </ResponsiveContainer>
-                      </div>
+                        {/* Blood Pressure Chart */}
+                        <div>
+                          <h4 className="font-medium mb-4 flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-blue-600" />
+                            Blood Pressure (mmHg) - Systolic
+                          </h4>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <RechartsLineChart data={vitals.slice(-10).reverse().map((v) => ({
+                              time: new Date(v.recorded_at || v.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                              bloodPressure: v.bp ? parseInt(v.bp.split('/')[0]) : 0
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="time" />
+                              <YAxis domain={[100, 180]} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="bloodPressure" stroke="#2563eb" strokeWidth={2} dot={{ fill: '#2563eb' }} />
+                            </RechartsLineChart>
+                          </ResponsiveContainer>
+                        </div>
 
-                      {/* SpO2 Chart */}
-                      <div>
-                        <h4 className="font-medium mb-4 flex items-center gap-2">
-                          <Droplet className="w-4 h-4 text-green-600" />
-                          Oxygen Saturation (%)
-                        </h4>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <RechartsLineChart data={vitalSignsHistory}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis domain={[85, 100]} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="spo2" stroke="#16a34a" strokeWidth={2} dot={{ fill: '#16a34a' }} />
-                          </RechartsLineChart>
-                        </ResponsiveContainer>
+                        {/* SpO2 Chart */}
+                        <div>
+                          <h4 className="font-medium mb-4 flex items-center gap-2">
+                            <Droplet className="w-4 h-4 text-green-600" />
+                            Oxygen Saturation (%)
+                          </h4>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <RechartsLineChart data={vitals.slice(-10).reverse().map((v) => ({
+                              time: new Date(v.recorded_at || v.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                              spo2: v.spo2 || 0
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="time" />
+                              <YAxis domain={[85, 100]} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="spo2" stroke="#16a34a" strokeWidth={2} dot={{ fill: '#16a34a' }} />
+                            </RechartsLineChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        No vital signs data available for charts
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1472,16 +1941,37 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {vitalSignsHistory.map((vital, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium">{vital.time}</TableCell>
-                            <TableCell>{vital.heartRate} bpm</TableCell>
-                            <TableCell>{vital.bloodPressure} mmHg</TableCell>
-                            <TableCell>{vital.temperature}°F</TableCell>
-                            <TableCell>{vital.spo2}%</TableCell>
-                            <TableCell>{vital.respRate}/min</TableCell>
-                          </TableRow>
-                        ))}
+                        {(() => {
+                          if (!vitals || vitals.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                                  No vital signs recorded yet
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+                          
+                          const vitalsToShow = vitals.slice(-20).reverse().map((v) => ({
+                            time: new Date(v.recorded_at || v.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                            heartRate: v.pulse || 0,
+                            bloodPressure: v.bp || 'N/A',
+                            temperature: v.temp || 0,
+                            spo2: v.spo2 || 0,
+                            respRate: v.resp || 0
+                          }));
+                          
+                          return vitalsToShow.map((vital, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{vital.time}</TableCell>
+                              <TableCell>{vital.heartRate} bpm</TableCell>
+                              <TableCell>{vital.bloodPressure} {typeof vital.bloodPressure === 'string' ? '' : 'mmHg'}</TableCell>
+                              <TableCell>{vital.temperature}°F</TableCell>
+                              <TableCell>{vital.spo2}%</TableCell>
+                              <TableCell>{vital.respRate}/min</TableCell>
+                            </TableRow>
+                          ));
+                        })()}
                       </TableBody>
                     </Table>
                   </CardContent>
@@ -1497,7 +1987,11 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                         <Pill className="w-5 h-5 text-blue-600" />
                         Current Medications
                       </CardTitle>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                      <Button 
+                        size="sm" 
+                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={() => setShowAddMedication(true)}
+                      >
                         <Plus className="w-4 h-4 mr-2" />
                         Add Medication
                       </Button>
@@ -1505,38 +1999,49 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {currentMedications.map((med) => (
-                        <div key={med.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h4 className="font-semibold text-gray-900 text-lg">{med.name}</h4>
-                              <p className="text-sm text-gray-600">{med.indication}</p>
+                      {(() => {
+                        if (!medications || medications.length === 0) {
+                          return (
+                            <div className="text-center py-12 text-gray-500">
+                              No medications recorded yet
                             </div>
-                            <Badge className="bg-green-600 text-white">{med.status}</Badge>
+                          );
+                        }
+                        return medications.map((med, idx) => (
+                          <div key={med.id || idx} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <h4 className="font-semibold text-gray-900 text-lg">{med.medication_name || med.name || 'N/A'}</h4>
+                                <p className="text-sm text-gray-600">{med.indication || med.notes || 'N/A'}</p>
+                              </div>
+                              <Badge className={med.status === 'Active' || med.status === 'given' ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'}>
+                                {med.status || 'N/A'}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-600">Dosage</p>
+                                <p className="font-medium">{med.dosage || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Route</p>
+                                <p className="font-medium">{med.route || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Frequency</p>
+                                <p className="font-medium">{med.frequency || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Started</p>
+                                <p className="font-medium">{med.administered_at || med.startDate || new Date(med.created_at || '').toLocaleDateString()}</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-blue-300">
+                              <p className="text-xs text-gray-600">Prescribed by: {med.administered_by_name || med.prescribedBy || 'N/A'}</p>
+                            </div>
                           </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-600">Dosage</p>
-                              <p className="font-medium">{med.dosage}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Route</p>
-                              <p className="font-medium">{med.route}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Frequency</p>
-                              <p className="font-medium">{med.frequency}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Started</p>
-                              <p className="font-medium">{med.startDate}</p>
-                            </div>
-                          </div>
-                          <div className="mt-3 pt-3 border-t border-blue-300">
-                            <p className="text-xs text-gray-600">Prescribed by: {med.prescribedBy}</p>
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
@@ -1544,7 +2049,26 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
 
               {/* Lab Results Tab */}
               <TabsContent value="labs" className="space-y-6 mt-6">
-                {labResults.map((lab) => (
+                {(() => {
+                  const labsToShow = labOrders && labOrders.length > 0 
+                    ? labOrders.filter(l => l.investigation_type === 'lab' && l.status === 'completed').map(l => ({
+                        id: l.id,
+                        testName: l.test_name,
+                        date: new Date(l.ordered_at || l.created_at).toLocaleString(),
+                        status: l.status,
+                        results: l.result_value ? [{ parameter: l.test_name, value: l.result_value, unit: '', range: '', status: 'Normal' }] : []
+                      }))
+                    : [];
+                  
+                  if (labsToShow.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-gray-500">
+                        No lab results available yet
+                      </div>
+                    );
+                  }
+                  
+                  return labsToShow.map((lab) => (
                   <Card key={lab.id}>
                     <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
                       <div className="flex items-center justify-between">
@@ -1587,126 +2111,179 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                       </Table>
                     </CardContent>
                   </Card>
-                ))}
+                ));
+                })()}
               </TabsContent>
 
               {/* Radiology Tab */}
               <TabsContent value="radiology" className="space-y-6 mt-6">
-                {radiologyReports.map((report) => (
-                  <Card key={report.id}>
-                    <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <Scan className="w-5 h-5 text-indigo-600" />
-                            {report.examType}
-                          </CardTitle>
-                          <CardDescription>{report.date}</CardDescription>
-                        </div>
-                        <Badge className="bg-blue-600 text-white">{report.status}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-4">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-600">Ordered By</p>
-                          <p className="font-medium">{report.orderedBy}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600">
-                            {report.radiologist ? 'Radiologist' : 'Cardiologist'}
-                          </p>
-                          <p className="font-medium">{report.radiologist || report.cardiologist}</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Findings</h4>
-                        <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{report.findings}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Impression</h4>
-                        <p className="text-gray-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                          {report.impression}
-                        </p>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                        <p className="text-gray-700 bg-green-50 p-3 rounded-lg border border-green-200">
-                          {report.recommendation}
-                        </p>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Images
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Download className="w-4 h-4 mr-2" />
-                          Download Report
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {radiologyOrders.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    No radiology reports available yet
+                  </div>
+                ) : (
+                  radiologyOrders.map((order) => {
+                    const handleViewImages = () => {
+                      // Check if there are files associated with this order
+                      const relatedFiles = files.filter(f => 
+                        f.category === 'Radiology' && 
+                        (f.description?.toLowerCase().includes(order.test_name?.toLowerCase() || '') ||
+                         f.file_name?.toLowerCase().includes(order.test_name?.toLowerCase() || ''))
+                      );
+                      
+                      if (relatedFiles.length > 0) {
+                        // Open files in new tab or show dialog
+                        relatedFiles.forEach(file => {
+                          window.open(file.file_path, '_blank');
+                        });
+                        toast.success(`Opening ${relatedFiles.length} file(s)`);
+                      } else {
+                        toast.info('No images found for this radiology order');
+                      }
+                    };
+                    
+                    const handleDownloadReport = () => {
+                      if (order.result_file_path) {
+                        window.open(order.result_file_path, '_blank');
+                        toast.success('Downloading report...');
+                      } else if (order.result_value) {
+                        // Create a text file with the result
+                        const blob = new Blob([order.result_value], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `Radiology_Report_${order.test_name}_${order.id}.txt`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        toast.success('Report downloaded');
+                      } else {
+                        toast.error('No report available to download');
+                      }
+                    };
+                    
+                    return (
+                      <Card key={order.id}>
+                        <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <CardTitle className="flex items-center gap-2">
+                                <Scan className="w-5 h-5 text-indigo-600" />
+                                {order.test_name || 'Radiology Exam'}
+                              </CardTitle>
+                              <CardDescription>
+                                {order.ordered_at ? new Date(order.ordered_at).toLocaleString() : 'N/A'}
+                              </CardDescription>
+                            </div>
+                            <Badge className={
+                              order.status === 'completed' ? 'bg-green-600 text-white' :
+                              order.status === 'in-progress' ? 'bg-blue-600 text-white' :
+                              'bg-yellow-600 text-white'
+                            }>
+                              {order.status || 'ordered'}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-6 space-y-4">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Ordered By</p>
+                              <p className="font-medium">{order.ordered_by_name || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">Priority</p>
+                              <p className="font-medium">{order.priority || 'Routine'}</p>
+                            </div>
+                          </div>
+                          {order.result_value && (
+                            <>
+                              <Separator />
+                              <div>
+                                <h4 className="font-semibold text-gray-900 mb-2">Findings</h4>
+                                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg whitespace-pre-line">
+                                  {order.result_value}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                          {order.status === 'completed' && (
+                            <div className="flex gap-2 pt-4">
+                              <Button variant="outline" size="sm" onClick={handleViewImages}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Images
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={handleDownloadReport}>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download Report
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                )}
               </TabsContent>
 
               {/* Doctor's Notes Tab */}
               <TabsContent value="notes" className="space-y-6 mt-6">
-                {doctorsNotes.map((note) => (
-                  <Card key={note.id}>
-                    <CardHeader className="bg-gradient-to-r from-green-50 to-teal-50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <ClipboardList className="w-5 h-5 text-green-600" />
-                            {note.noteType}
-                          </CardTitle>
-                          <CardDescription>
-                            {note.doctor} ({note.specialty}) • {note.date} at {note.time}
-                          </CardDescription>
-                        </div>
+                {(() => {
+                  const notesToShow = notes && notes.length > 0
+                    ? notes.map(n => ({
+                        id: n.id,
+                        noteType: n.note_type || 'Doctor Note',
+                        date: new Date(n.recorded_at || n.created_at).toLocaleString(),
+                        doctor: n.recorded_by_name || 'N/A',
+                        noteText: n.note_text || 'N/A'
+                      }))
+                    : [];
+                  
+                  if (notesToShow.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-gray-500">
+                        No doctor's notes available yet
                       </div>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">S</span>
-                          Subjective
-                        </h4>
-                        <p className="text-gray-700 bg-blue-50 p-3 rounded-lg">{note.subjective}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-sm">O</span>
-                          Objective
-                        </h4>
-                        <p className="text-gray-700 bg-purple-50 p-3 rounded-lg">{note.objective}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-sm">A</span>
-                          Assessment
-                        </h4>
-                        <p className="text-gray-700 bg-orange-50 p-3 rounded-lg">{note.assessment}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm">P</span>
-                          Plan
-                        </h4>
-                        <div className="text-gray-700 bg-green-50 p-3 rounded-lg whitespace-pre-line">
-                          {note.plan}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                
-                <Button className="w-full bg-green-600 hover:bg-green-700">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add New Note
-                </Button>
+                    );
+                  }
+                  
+                  return (
+                    <>
+                      {notesToShow.map((note) => (
+                        <Card key={note.id}>
+                          <CardHeader className="bg-gradient-to-r from-green-50 to-teal-50">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <CardTitle className="flex items-center gap-2">
+                                  <ClipboardList className="w-5 h-5 text-green-600" />
+                                  {note.noteType}
+                                </CardTitle>
+                                <CardDescription>
+                                  {note.doctor} • {note.date}
+                                </CardDescription>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-6 space-y-4">
+                            <div>
+                              <h4 className="font-semibold text-gray-900 mb-2">Note</h4>
+                              <p className="text-gray-700 bg-gray-50 p-3 rounded-lg whitespace-pre-line">
+                                {note.noteText}
+                              </p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      <Button 
+                        className="w-full bg-green-600 hover:bg-green-700"
+                        onClick={() => setShowAddNote(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add New Note
+                      </Button>
+                    </>
+                  );
+                })()}
               </TabsContent>
 
               {/* Timeline Tab */}
@@ -1715,39 +2292,134 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-blue-600" />
-                      Treatment Timeline - Today
+                      Treatment Timeline
                     </CardTitle>
                     <CardDescription>Chronological record of all events and interventions</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="relative">
-                      {/* Timeline Line */}
-                      <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+                    {(() => {
+                      // Aggregate timeline events from multiple sources (similar to EmergencyPatientProfile)
+                      const timelineEvents: any[] = [];
                       
-                      {/* Timeline Items */}
-                      <div className="space-y-6">
-                        {treatmentTimeline.map((item, index) => (
-                          <div key={index} className="relative pl-14">
-                            {/* Timeline Dot */}
-                            <div className={`absolute left-0 w-12 h-12 rounded-full border-4 border-white shadow-lg flex items-center justify-center ${getTimelineColor(item.type)}`}>
-                              {getTimelineIcon(item.type)}
-                            </div>
-                            
-                            {/* Timeline Content */}
-                            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-semibold text-gray-900">{item.time}</span>
-                                <Badge className={getTimelineColor(item.type)}>
-                                  {item.type}
-                                </Badge>
-                              </div>
-                              <p className="text-gray-700">{item.event}</p>
-                              <p className="text-xs text-gray-500 mt-2">By: {item.user}</p>
-                            </div>
+                      // Add status history events
+                      timeline.forEach((event) => {
+                        timelineEvents.push({
+                          id: `status-${event.id}`,
+                          type: 'status_change',
+                          timestamp: new Date(event.changed_at || event.created_at),
+                          title: `Status Changed to ${event.new_status || event.status}`,
+                          description: event.notes || `Status changed from ${event.old_status || 'N/A'} to ${event.new_status || event.status}`,
+                          user: event.changed_by_name || 'System',
+                          icon: getTimelineIcon('alert'),
+                          color: getTimelineColor('alert')
+                        });
+                      });
+                      
+                      // Add vital signs events
+                      vitals.forEach((vital) => {
+                        timelineEvents.push({
+                          id: `vital-${vital.id}`,
+                          type: 'vital_signs',
+                          timestamp: new Date(vital.recorded_at || vital.created_at),
+                          title: 'Vital Signs Recorded',
+                          description: `BP: ${vital.bp || 'N/A'}, Pulse: ${vital.pulse || 'N/A'}, Temp: ${vital.temp || 'N/A'}°F, SpO2: ${vital.spo2 || 'N/A'}%`,
+                          user: vital.recorded_by_name || 'Nurse',
+                          icon: getTimelineIcon('investigation'),
+                          color: getTimelineColor('investigation')
+                        });
+                      });
+                      
+                      // Add medication events
+                      medications.forEach((med) => {
+                        timelineEvents.push({
+                          id: `med-${med.id}`,
+                          type: 'medication',
+                          timestamp: new Date(med.administered_at || med.created_at),
+                          title: 'Medication Administered',
+                          description: `${med.medication_name || med.name || 'N/A'} - ${med.dosage || 'N/A'}`,
+                          user: med.administered_by_name || 'Nurse',
+                          icon: getTimelineIcon('medication'),
+                          color: getTimelineColor('medication')
+                        });
+                      });
+                      
+                      // Add investigation events
+                      [...labOrders, ...radiologyOrders].forEach((order) => {
+                        timelineEvents.push({
+                          id: `investigation-${order.id}`,
+                          type: 'investigation',
+                          timestamp: new Date(order.ordered_at || order.created_at),
+                          title: `${order.investigation_type === 'radiology' ? 'Radiology' : 'Lab'} Order`,
+                          description: `${order.test_name || 'N/A'} - Status: ${order.status || 'ordered'}`,
+                          user: order.ordered_by_name || 'Doctor',
+                          icon: getTimelineIcon('investigation'),
+                          color: getTimelineColor('investigation')
+                        });
+                      });
+                      
+                      // Add note events
+                      notes.forEach((note) => {
+                        timelineEvents.push({
+                          id: `note-${note.id}`,
+                          type: 'documentation',
+                          timestamp: new Date(note.recorded_at || note.created_at),
+                          title: 'Treatment Note Added',
+                          description: note.note_text?.substring(0, 100) || 'Note recorded',
+                          user: note.recorded_by_name || 'Doctor',
+                          icon: getTimelineIcon('documentation'),
+                          color: getTimelineColor('documentation')
+                        });
+                      });
+                      
+                      // Sort by timestamp (newest first)
+                      timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+                      
+                      if (timelineEvents.length === 0) {
+                        return (
+                          <div className="text-center py-12 text-gray-500">
+                            No timeline events recorded yet
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        );
+                      }
+                      
+                      return (
+                        <div className="relative">
+                          {/* Timeline Line */}
+                          <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+                          
+                          {/* Timeline Items */}
+                          <div className="space-y-6">
+                            {timelineEvents.map((item) => {
+                              const eventDate = item.timestamp;
+                              const timeStr = eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                              const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              
+                              return (
+                                <div key={item.id} className="relative pl-14">
+                                  {/* Timeline Dot */}
+                                  <div className={`absolute left-0 w-12 h-12 rounded-full border-4 border-white shadow-lg flex items-center justify-center ${item.color}`}>
+                                    {item.icon}
+                                  </div>
+                                  
+                                  {/* Timeline Content */}
+                                  <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-semibold text-gray-900">{timeStr} - {dateStr}</span>
+                                      <Badge className={item.color}>
+                                        {item.type.replace('_', ' ')}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-gray-900 font-medium mb-1">{item.title}</p>
+                                    <p className="text-gray-700 text-sm">{item.description}</p>
+                                    <p className="text-xs text-gray-500 mt-2">By: {item.user}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -1755,6 +2427,45 @@ export function PatientMedicalRecords({ patientId, bedNumber, wardName, onClose 
           </div>
         </div>
       </div>
+
+      {/* Dialogs */}
+      {showEditPatient && patient && (
+        <EditEmergencyPatient
+          patient={patient}
+          onClose={() => setShowEditPatient(false)}
+          onSave={() => {
+            setShowEditPatient(false);
+            loadPatientData();
+            toast.success('Patient records updated successfully!');
+          }}
+        />
+      )}
+
+      {showAddMedication && visitId && (
+        <AddMedicationDialog
+          patient={patient}
+          visitId={visitId}
+          onClose={() => setShowAddMedication(false)}
+          onSave={() => {
+            setShowAddMedication(false);
+            loadPatientData();
+            toast.success('Medication added successfully!');
+          }}
+        />
+      )}
+
+      {showAddNote && visitId && (
+        <AddNoteDialog
+          patient={patient}
+          visitId={visitId}
+          onClose={() => setShowAddNote(false)}
+          onSave={() => {
+            setShowAddNote(false);
+            loadPatientData();
+            toast.success('Note added successfully!');
+          }}
+        />
+      )}
     </div>
   );
 }

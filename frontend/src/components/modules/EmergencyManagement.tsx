@@ -9,7 +9,7 @@
  * - Emergency Duty Roster: Staff scheduling and duty management
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -36,6 +36,10 @@ import { PatientVitalsManagement } from './PatientVitalsManagement';
 import { EmergencyPatientProfile } from './EmergencyPatientProfile';
 import { EmergencyHistoryDetail } from './EmergencyHistoryDetail';
 import { UpdateVitalsDialog } from './UpdateVitalsDialog';
+import { AddEmergencyBedDialog } from './AddEmergencyBedDialog';
+import { EditEmergencyBedDialog } from './EditEmergencyBedDialog';
+import { AddDutyDialog } from './AddDutyDialog';
+import { EditDutyDialog } from './EditDutyDialog';
 import {
   Ambulance,
   Activity,
@@ -91,9 +95,11 @@ import {
   Trash2,
   BedDouble,
   UserCircle,
-  FileCheck
+  FileCheck,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 // ============= INTERFACES =============
 
@@ -119,6 +125,7 @@ interface AdmittedPatient {
     temp: number;
     spo2: number;
   };
+  vitals?: any[]; // Array of vital sign records from emergency_vital_signs table
 }
 
 interface Ward {
@@ -173,7 +180,7 @@ interface DutyRoster {
 
 // ============= MOCK DATA =============
 
-const mockAdmittedPatients: AdmittedPatient[] = [
+const admittedPatients: AdmittedPatient[] = [
   {
     id: '1',
     erNumber: 'ER-2024-156',
@@ -248,7 +255,7 @@ const mockAdmittedPatients: AdmittedPatient[] = [
   }
 ];
 
-const mockWards: Ward[] = [
+const wards: Ward[] = [
   {
     id: '1',
     name: 'Emergency Ward A',
@@ -295,7 +302,7 @@ const mockWards: Ward[] = [
   }
 ];
 
-const mockBedDetails: BedDetail[] = [
+const bedDetails: BedDetail[] = [
   { id: '1', bedNumber: 'EA-01', ward: 'Emergency Ward A', floor: 'Ground Floor', type: 'Regular', status: 'Available', lastCleaned: '2024-11-21 06:00' },
   { id: '2', bedNumber: 'EA-02', ward: 'Emergency Ward A', floor: 'Ground Floor', type: 'Regular', status: 'Occupied', patientName: 'John Doe', uhid: 'UHID-89401', admissionDate: '2024-11-20' },
   { id: '3', bedNumber: 'EA-03', ward: 'Emergency Ward A', floor: 'Ground Floor', type: 'Regular', status: 'Under Cleaning' },
@@ -308,7 +315,7 @@ const mockBedDetails: BedDetail[] = [
   { id: '10', bedNumber: 'EB-02', ward: 'Emergency Ward B', floor: 'Ground Floor', type: 'Regular', status: 'Available', lastCleaned: '2024-11-21 06:45' }
 ];
 
-const mockPatientHistory: PatientHistory[] = [
+const patientHistory: PatientHistory[] = [
   {
     id: '1',
     erNumber: 'ER-2024-100',
@@ -376,68 +383,6 @@ const mockPatientHistory: PatientHistory[] = [
   }
 ];
 
-const mockDutyRoster: DutyRoster[] = [
-  {
-    id: '1',
-    doctorName: 'Dr. Sarah Mitchell',
-    specialization: 'Emergency Medicine',
-    shiftType: 'Morning',
-    shiftTime: '06:00 AM - 02:00 PM',
-    date: '2024-11-21',
-    status: 'On Duty',
-    contact: '+1-555-0201'
-  },
-  {
-    id: '2',
-    doctorName: 'Dr. Michael Brown',
-    specialization: 'Emergency Medicine',
-    shiftType: 'Morning',
-    shiftTime: '06:00 AM - 02:00 PM',
-    date: '2024-11-21',
-    status: 'On Duty',
-    contact: '+1-555-0202'
-  },
-  {
-    id: '3',
-    doctorName: 'Dr. Emily Davis',
-    specialization: 'Trauma Surgery',
-    shiftType: 'Evening',
-    shiftTime: '02:00 PM - 10:00 PM',
-    date: '2024-11-21',
-    status: 'Scheduled',
-    contact: '+1-555-0203'
-  },
-  {
-    id: '4',
-    doctorName: 'Dr. James Wilson',
-    specialization: 'Critical Care',
-    shiftType: 'Evening',
-    shiftTime: '02:00 PM - 10:00 PM',
-    date: '2024-11-21',
-    status: 'Scheduled',
-    contact: '+1-555-0204'
-  },
-  {
-    id: '5',
-    doctorName: 'Dr. Lisa Anderson',
-    specialization: 'Emergency Medicine',
-    shiftType: 'Night',
-    shiftTime: '10:00 PM - 06:00 AM',
-    date: '2024-11-21',
-    status: 'Scheduled',
-    contact: '+1-555-0205'
-  },
-  {
-    id: '6',
-    doctorName: 'Dr. Robert Taylor',
-    specialization: 'Emergency Medicine',
-    shiftType: 'Night',
-    shiftTime: '10:00 PM - 06:00 AM',
-    date: '2024-11-21',
-    status: 'Scheduled',
-    contact: '+1-555-0206'
-  }
-];
 
 // ============= HELPER FUNCTIONS =============
 
@@ -489,6 +434,241 @@ export function EmergencyManagement() {
   const [showPatientProfile, setShowPatientProfile] = useState(false);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<any>(null);
   const [showUpdateVitals, setShowUpdateVitals] = useState(false);
+  const [showAddBedDialog, setShowAddBedDialog] = useState(false);
+  const [showEditBedDialog, setShowEditBedDialog] = useState(false);
+  const [selectedBed, setSelectedBed] = useState<BedDetail | null>(null);
+  const [showAddDutyDialog, setShowAddDutyDialog] = useState(false);
+  const [showEditDutyDialog, setShowEditDutyDialog] = useState(false);
+  const [selectedDuty, setSelectedDuty] = useState<DutyRoster | null>(null);
+  const [selectedRosterDate, setSelectedRosterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [rosterViewMode, setRosterViewMode] = useState<'day' | 'week'>('day');
+
+  // Data state
+  const [admittedPatients, setAdmittedPatients] = useState<AdmittedPatient[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
+  const [bedDetails, setBedDetails] = useState<BedDetail[]>([]);
+  const [patientHistory, setPatientHistory] = useState<PatientHistory[]>([]);
+  const [dutyRoster, setDutyRoster] = useState<DutyRoster[]>([]);
+  
+  // Loading state
+  const [loading, setLoading] = useState(false);
+
+  // Handler for transfer button
+  const handleTransferClick = (patient: AdmittedPatient) => {
+    console.log('handleTransferClick called with patient:', patient);
+    setSelectedPatient(patient);
+    setShowTransferDialog(true);
+    console.log('State set - showTransferDialog should be true, selectedPatient:', patient);
+  };
+
+  // Transform API data to component format
+  const transformToAdmittedPatient = (apiData: any): AdmittedPatient => ({
+    id: apiData.id?.toString() || '',
+    erNumber: apiData.erNumber || apiData.er_number || '',
+    uhid: apiData.uhid || apiData.patient_uhid || '',
+    name: apiData.name || apiData.patient_name || '',
+    age: apiData.age || apiData.patient_age || 0,
+    gender: (apiData.gender || apiData.patient_gender || 'Other') as 'Male' | 'Female' | 'Other',
+    admissionDate: apiData.admissionDate || (apiData.arrival_time ? apiData.arrival_time.split(' ')[0] : ''),
+    admissionTime: apiData.admissionTime || (apiData.arrival_time ? new Date(apiData.arrival_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''),
+    triageLevel: apiData.triageLevel || apiData.triage_level || 0,
+    diagnosis: apiData.diagnosis || apiData.primary_diagnosis || apiData.chief_complaint || '',
+    assignedWard: apiData.assignedWard || apiData.assigned_ward_name || '',
+    bedNumber: apiData.bedNumber || apiData.assigned_bed_number || '',
+    attendingDoctor: apiData.attendingDoctor || apiData.doctor_name || '',
+    admissionType: (apiData.admissionType || apiData.admission_type || 'Ward') as 'Ward' | 'Private Room' | 'ICU',
+    status: (apiData.status || 'Stable') as 'Stable' | 'Critical' | 'Under Observation',
+    vitalSigns: {
+      bp: apiData.vitalSigns?.bp || apiData.vitals_bp || '',
+      pulse: apiData.vitalSigns?.pulse || apiData.vitals_pulse || 0,
+      temp: apiData.vitalSigns?.temp || apiData.vitals_temp || 0,
+      spo2: apiData.vitalSigns?.spo2 || apiData.vitals_spo2 || 0
+    },
+    vitals: Array.isArray(apiData.vitals) ? apiData.vitals : [] // Preserve vitals array from API
+  });
+
+  const transformToWard = (apiData: any): Ward => ({
+    id: apiData.id?.toString() || '',
+    name: apiData.name || '',
+    type: (apiData.type || 'General') as 'General' | 'Emergency' | 'ICU',
+    totalBeds: apiData.total_beds || apiData.totalBeds || 0,
+    occupiedBeds: apiData.occupied_beds || apiData.occupiedBeds || 0,
+    availableBeds: apiData.available_beds || apiData.availableBeds || 0,
+    status: (apiData.status || 'Active') as 'Active' | 'Maintenance',
+    incharge: apiData.incharge_name || apiData.incharge || '',
+    contact: apiData.contact || ''
+  });
+
+  const transformToBedDetail = (apiData: any): BedDetail & { ward_id?: string; wardId?: string } => ({
+    id: apiData.id?.toString() || '',
+    bedNumber: apiData.bed_number || apiData.bedNumber || '',
+    ward: apiData.ward_name || apiData.ward || '',
+    floor: apiData.floor_name || apiData.floor || '',
+    type: (apiData.bed_type || 'Regular') as 'Regular' | 'ICU' | 'Isolation',
+    status: (apiData.status || 'Available') as 'Occupied' | 'Available' | 'Under Cleaning' | 'Maintenance',
+    patientName: apiData.patient_name || undefined,
+    uhid: apiData.uhid || undefined,
+    admissionDate: apiData.admission_date || undefined,
+    lastCleaned: apiData.last_cleaned_at || undefined,
+    ward_id: apiData.ward_id?.toString() || apiData.wardId?.toString() || undefined,
+    wardId: apiData.ward_id?.toString() || apiData.wardId?.toString() || undefined
+  });
+
+  const transformToPatientHistory = (apiData: any): PatientHistory => ({
+    id: apiData.id?.toString() || '',
+    erNumber: apiData.erNumber || apiData.er_number || '',
+    uhid: apiData.uhid || apiData.patient_uhid || '',
+    patientName: apiData.patientName || apiData.patient_name || '',
+    visitDate: apiData.visitDate || (apiData.arrival_time ? apiData.arrival_time.split(' ')[0] : ''),
+    chiefComplaint: apiData.chiefComplaint || apiData.chief_complaint || '',
+    diagnosis: apiData.diagnosis || apiData.primary_diagnosis || '',
+    treatment: apiData.treatment || apiData.discharge_summary || '',
+    disposition: apiData.disposition || '',
+    doctor: apiData.doctor || apiData.doctor_name || '',
+    duration: apiData.duration || ''
+  });
+
+  const transformToDutyRoster = (apiData: any): DutyRoster & { userId?: string; user_id?: string; shift_start_time?: string; shift_end_time?: string; notes?: string } => ({
+    id: apiData.id?.toString() || '',
+    doctorName: apiData.doctor_name || apiData.user_name || apiData.doctorName || '',
+    specialization: apiData.doctor_specialty || apiData.specialization || '',
+    shiftType: (apiData.shift_type || apiData.shiftType || 'Morning') as 'Morning' | 'Evening' | 'Night',
+    shiftTime: apiData.shift_time || `${apiData.shift_start_time || ''} - ${apiData.shift_end_time || ''}`,
+    date: apiData.date || '',
+    status: (apiData.status || 'Scheduled') as 'Scheduled' | 'On Duty' | 'Completed' | 'Absent',
+    contact: apiData.user_phone || apiData.contact || '',
+    userId: apiData.user_id?.toString() || apiData.userId?.toString() || undefined,
+    user_id: apiData.user_id?.toString() || apiData.userId?.toString() || undefined,
+    shift_start_time: apiData.shift_start_time || undefined,
+    shift_end_time: apiData.shift_end_time || undefined,
+    notes: apiData.notes || undefined
+  });
+
+  // Load data functions
+  const loadAdmittedPatients = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getAdmittedEmergencyPatients({ search: searchQuery });
+      console.log('Admitted patients data:', data); // Debug log
+      if (data && Array.isArray(data)) {
+        setAdmittedPatients(data.map(transformToAdmittedPatient));
+      } else {
+        console.warn('Expected array but got:', data);
+        setAdmittedPatients([]);
+      }
+    } catch (error: any) {
+      console.error('Error loading admitted patients:', error);
+      toast.error('Failed to load admitted patients: ' + (error.message || 'Unknown error'));
+      setAdmittedPatients([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadWards = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getEmergencyWards();
+      setWards(data.map(transformToWard));
+    } catch (error: any) {
+      toast.error('Failed to load wards: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBedDetails = async () => {
+    try {
+      setLoading(true);
+      // The API endpoint /api/emergency/ward-beds queries emergency_ward_beds table
+      // which only contains beds from emergency_wards, so all returned beds are emergency beds
+      const data = await api.getEmergencyWardBeds({ search: searchQuery });
+      setBedDetails(data.map(transformToBedDetail));
+    } catch (error: any) {
+      toast.error('Failed to load bed details: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getEmergencyHistory({ search: searchQuery });
+      setPatientHistory(data.map(transformToPatientHistory));
+    } catch (error: any) {
+      toast.error('Failed to load history: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDutyRoster = async () => {
+    try {
+      setLoading(true);
+      let data;
+      if (rosterViewMode === 'week') {
+        // Calculate week start and end dates
+        const selectedDate = new Date(selectedRosterDate);
+        const dayOfWeek = selectedDate.getDay();
+        const weekStart = new Date(selectedDate);
+        weekStart.setDate(selectedDate.getDate() - dayOfWeek);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        
+        const weekStartStr = weekStart.toISOString().split('T')[0];
+        const weekEndStr = weekEnd.toISOString().split('T')[0];
+        data = await api.getEmergencyDutyRoster({ date_from: weekStartStr, date_to: weekEndStr });
+      } else {
+        data = await api.getEmergencyDutyRoster({ date: selectedRosterDate });
+      }
+      setDutyRoster(data.map(transformToDutyRoster));
+    } catch (error: any) {
+      toast.error('Failed to load duty roster: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load data when module changes
+  useEffect(() => {
+    switch (activeModule) {
+      case 'admitted':
+        loadAdmittedPatients();
+        break;
+      case 'wards':
+        loadWards();
+        break;
+      case 'beds':
+        loadBedDetails();
+        break;
+      case 'history':
+        loadHistory();
+        break;
+        case 'roster':
+          loadDutyRoster();
+          break;
+    }
+  }, [activeModule, selectedRosterDate, rosterViewMode]);
+
+  // Reload data when search query changes (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      switch (activeModule) {
+        case 'admitted':
+          loadAdmittedPatients();
+          break;
+        case 'beds':
+          loadBedDetails();
+          break;
+        case 'history':
+          loadHistory();
+          break;
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeModule]);
 
   // Show Admit Patient page if requested
   if (showAdmitPatient) {
@@ -544,53 +724,16 @@ export function EmergencyManagement() {
         patient={selectedPatient!}
         onSave={() => {
           setShowEditPatient(false);
-          toast.success('Patient information updated successfully!');
+          // Reload admitted patients to reflect changes
+          if (activeModule === 'patients') {
+            loadAdmittedPatients();
+          }
         }}
       />
     );
   }
 
-  // Show Transfer Patient dialog if requested
-  if (showTransferDialog) {
-    return (
-      <TransferPatientDialog
-        onClose={() => setShowTransferDialog(false)}
-        patient={selectedPatient!}
-        onTransfer={() => {
-          setShowTransferDialog(false);
-          toast.success('Patient transferred successfully!');
-        }}
-      />
-    );
-  }
-
-  // Show Delete Patient dialog if requested
-  if (showDeleteDialog) {
-    return (
-      <DeleteConfirmationDialog
-        onClose={() => setShowDeleteDialog(false)}
-        patient={selectedPatient!}
-        onDelete={() => {
-          setShowDeleteDialog(false);
-          toast.success('Patient record deleted successfully!');
-        }}
-      />
-    );
-  }
-
-  // Show Ambulance Request dialog if requested
-  if (showAmbulanceDialog) {
-    return (
-      <AmbulanceRequestDialog
-        onClose={() => setShowAmbulanceDialog(false)}
-        patient={selectedPatient!}
-        onRequest={() => {
-          setShowAmbulanceDialog(false);
-          toast.success('Ambulance requested successfully!');
-        }}
-      />
-    );
-  }
+  // Dialogs will be rendered conditionally at the end, not as early returns
 
   // Show Patient Medical Records page if requested
   if (showMedicalRecords) {
@@ -633,7 +776,7 @@ export function EmergencyManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Admitted</p>
-                <p className="text-3xl font-bold text-blue-600 mt-1">{mockAdmittedPatients.length}</p>
+                <p className="text-3xl font-bold text-blue-600 mt-1">{admittedPatients.length}</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Users className="w-6 h-6 text-blue-600" />
@@ -647,7 +790,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Critical</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">
-                  {mockAdmittedPatients.filter(p => p.status === 'Critical').length}
+                  {admittedPatients.filter(p => p.status === 'Critical').length}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center">
@@ -662,7 +805,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Stable</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">
-                  {mockAdmittedPatients.filter(p => p.status === 'Stable').length}
+                  {admittedPatients.filter(p => p.status === 'Stable').length}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
@@ -677,7 +820,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Under Observation</p>
                 <p className="text-3xl font-bold text-yellow-600 mt-1">
-                  {mockAdmittedPatients.filter(p => p.status === 'Under Observation').length}
+                  {admittedPatients.filter(p => p.status === 'Under Observation').length}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-yellow-100 flex items-center justify-center">
@@ -733,7 +876,22 @@ export function EmergencyManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockAdmittedPatients.map((patient) => (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-600">Loading admitted patients...</p>
+                  </TableCell>
+                </TableRow>
+              ) : admittedPatients.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-8">
+                    <p className="text-gray-600">No admitted patients found</p>
+                    <p className="text-sm text-gray-500 mt-2">Patients will appear here once they are admitted to a ward</p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                admittedPatients.map((patient) => (
                 <TableRow key={patient.id}>
                   <TableCell className="font-medium">{patient.erNumber}</TableCell>
                   <TableCell>{patient.uhid}</TableCell>
@@ -769,17 +927,25 @@ export function EmergencyManagement() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {/* Row 1 */}
-                      <Button 
-                        size="sm" 
-                        variant="outline"
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-2.5"
                         title="Transfer Patient"
-                        onClick={() => {
-                          setSelectedPatient(patient);
-                          setShowTransferDialog(true);
+                        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Transfer button mousedown!', patient);
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Transfer button clicked!', patient);
+                          handleTransferClick(patient);
                         }}
                       >
                         <ArrowLeftRight className="w-4 h-4" />
-                      </Button>
+                      </button>
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -892,14 +1058,30 @@ export function EmergencyManagement() {
                         size="sm" 
                         variant="outline"
                         title="Download Records"
-                        onClick={() => toast.success('Downloading patient records...')}
+                        onClick={async () => {
+                          try {
+                            // Generate and download patient records
+                            const visitId = patient.id ? (typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id) : null;
+                            if (visitId) {
+                              // This could open the patient profile with export functionality
+                              setSelectedPatient(patient);
+                              setShowPatientProfile(true);
+                              toast.info('Use Export button in Patient Profile to download records');
+                            } else {
+                              toast.error('Visit ID not found');
+                            }
+                          } catch (error) {
+                            toast.error('Failed to download records');
+                          }
+                        }}
                       >
                         <Download className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -918,7 +1100,7 @@ export function EmergencyManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Wards</p>
-                <p className="text-3xl font-bold text-blue-600 mt-1">{mockWards.length}</p>
+                <p className="text-3xl font-bold text-blue-600 mt-1">{wards.length}</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-blue-600" />
@@ -932,7 +1114,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Total Beds</p>
                 <p className="text-3xl font-bold text-purple-600 mt-1">
-                  {mockWards.reduce((acc, ward) => acc + ward.totalBeds, 0)}
+                  {wards.reduce((acc, ward) => acc + ward.totalBeds, 0)}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -947,7 +1129,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Occupied</p>
                 <p className="text-3xl font-bold text-orange-600 mt-1">
-                  {mockWards.reduce((acc, ward) => acc + ward.occupiedBeds, 0)}
+                  {wards.reduce((acc, ward) => acc + ward.occupiedBeds, 0)}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -962,7 +1144,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Available</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">
-                  {mockWards.reduce((acc, ward) => acc + ward.availableBeds, 0)}
+                  {wards.reduce((acc, ward) => acc + ward.availableBeds, 0)}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
@@ -1000,7 +1182,7 @@ export function EmergencyManagement() {
 
       {/* Wards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {mockWards.map((ward) => (
+              {wards.map((ward) => (
           <Card key={ward.id}>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1073,51 +1255,51 @@ export function EmergencyManagement() {
   const renderBedDetails = () => (
     <div className="space-y-6">
       {/* Bed Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
+      <div className="flex flex-row gap-4">
+        <Card className="flex-1">
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-sm text-gray-600">Total Beds</p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">{mockBedDetails.length}</p>
+              <p className="text-3xl font-bold text-blue-600 mt-1">{bedDetails.length}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="flex-1">
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-sm text-gray-600">Occupied</p>
               <p className="text-3xl font-bold text-orange-600 mt-1">
-                {mockBedDetails.filter(b => b.status === 'Occupied').length}
+                {bedDetails.filter(b => b.status === 'Occupied').length}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="flex-1">
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-sm text-gray-600">Available</p>
               <p className="text-3xl font-bold text-green-600 mt-1">
-                {mockBedDetails.filter(b => b.status === 'Available').length}
+                {bedDetails.filter(b => b.status === 'Available').length}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="flex-1">
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-sm text-gray-600">Cleaning</p>
               <p className="text-3xl font-bold text-yellow-600 mt-1">
-                {mockBedDetails.filter(b => b.status === 'Under Cleaning').length}
+                {bedDetails.filter(b => b.status === 'Under Cleaning').length}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="flex-1">
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-sm text-gray-600">Maintenance</p>
               <p className="text-3xl font-bold text-red-600 mt-1">
-                {mockBedDetails.filter(b => b.status === 'Maintenance').length}
+                {bedDetails.filter(b => b.status === 'Maintenance').length}
               </p>
             </div>
           </CardContent>
@@ -1127,12 +1309,15 @@ export function EmergencyManagement() {
       {/* Bed Details Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
+            <div className="flex-shrink-0">
               <CardTitle>Emergency Bed Details</CardTitle>
               <CardDescription>Real-time bed status and allocation</CardDescription>
             </div>
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700 flex-shrink-0"
+              onClick={() => setShowAddBedDialog(true)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Bed
             </Button>
@@ -1154,7 +1339,7 @@ export function EmergencyManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockBedDetails.map((bed) => (
+              {bedDetails.map((bed) => (
                 <TableRow key={bed.id}>
                   <TableCell className="font-medium">{bed.bedNumber}</TableCell>
                   <TableCell>{bed.ward}</TableCell>
@@ -1185,7 +1370,14 @@ export function EmergencyManagement() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedBed(bed);
+                          setShowEditBedDialog(true);
+                        }}
+                      >
                         <Edit className="w-4 h-4" />
                       </Button>
                       {bed.status === 'Available' && (
@@ -1267,7 +1459,7 @@ export function EmergencyManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockPatientHistory.map((record) => (
+              {patientHistory.map((record) => (
                 <TableRow key={record.id}>
                   <TableCell className="font-medium">{record.erNumber}</TableCell>
                   <TableCell>{record.uhid}</TableCell>
@@ -1316,7 +1508,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">On Duty Now</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">
-                  {mockDutyRoster.filter(d => d.status === 'On Duty').length}
+                  {dutyRoster.filter(d => d.status === 'On Duty' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).length}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
@@ -1331,7 +1523,7 @@ export function EmergencyManagement() {
               <div>
                 <p className="text-sm text-gray-600">Scheduled</p>
                 <p className="text-3xl font-bold text-blue-600 mt-1">
-                  {mockDutyRoster.filter(d => d.status === 'Scheduled').length}
+                  {dutyRoster.filter(d => d.status === 'Scheduled' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).length}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -1345,7 +1537,9 @@ export function EmergencyManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Staff</p>
-                <p className="text-3xl font-bold text-purple-600 mt-1">{mockDutyRoster.length}</p>
+                <p className="text-3xl font-bold text-purple-600 mt-1">
+                  {dutyRoster.filter(d => rosterViewMode === 'week' || d.date === selectedRosterDate).length}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
                 <Users className="w-6 h-6 text-purple-600" />
@@ -1358,7 +1552,24 @@ export function EmergencyManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Shift Coverage</p>
-                <p className="text-3xl font-bold text-orange-600 mt-1">100%</p>
+                <p className="text-3xl font-bold text-orange-600 mt-1">
+                  {(() => {
+                    // Calculate shift coverage: (scheduled + on duty) / required slots * 100
+                    // Assuming 2 staff per shift minimum
+                    const requiredPerShift = 2;
+                    const totalRequired = requiredPerShift * 3; // 3 shifts
+                    const filteredRoster = rosterViewMode === 'week' 
+                      ? dutyRoster 
+                      : dutyRoster.filter(d => d.date === selectedRosterDate);
+                    const scheduledOrOnDuty = filteredRoster.filter(d => 
+                      d.status === 'Scheduled' || d.status === 'On Duty'
+                    ).length;
+                    const coverage = totalRequired > 0 
+                      ? Math.round((scheduledOrOnDuty / totalRequired) * 100) 
+                      : 0;
+                    return `${Math.min(coverage, 100)}%`;
+                  })()}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-orange-600" />
@@ -1373,12 +1584,29 @@ export function EmergencyManagement() {
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             <Label>Select Date:</Label>
-            <Input type="date" className="w-[200px]" defaultValue="2024-11-21" />
-            <Button variant="outline">
+            <Input 
+              type="date" 
+              className="w-[200px]" 
+              value={selectedRosterDate}
+              onChange={(e) => {
+                setSelectedRosterDate(e.target.value);
+                setRosterViewMode('day');
+              }}
+            />
+            <Button 
+              variant={rosterViewMode === 'week' ? 'default' : 'outline'}
+              onClick={() => {
+                setRosterViewMode(rosterViewMode === 'week' ? 'day' : 'week');
+              }}
+            >
               <CalendarClock className="w-4 h-4 mr-2" />
-              View Week
+              {rosterViewMode === 'week' ? 'View Day' : 'View Week'}
             </Button>
-            <Button variant="outline" className="ml-auto">
+            <Button 
+              variant="outline" 
+              className="ml-auto"
+              onClick={() => setShowAddDutyDialog(true)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Duty
             </Button>
@@ -1410,28 +1638,53 @@ export function EmergencyManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockDutyRoster.filter(d => d.shiftType === 'Morning').map((duty) => (
-                  <TableRow key={duty.id}>
-                    <TableCell className="font-medium">{duty.doctorName}</TableCell>
-                    <TableCell>{duty.specialization}</TableCell>
-                    <TableCell>{duty.contact}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusBadgeColor(duty.status)}>
-                        {duty.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Phone className="w-4 h-4" />
-                        </Button>
-                      </div>
+                {dutyRoster.filter(d => d.shiftType === 'Morning' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      No staff scheduled for Morning shift
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  dutyRoster.filter(d => d.shiftType === 'Morning' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).map((duty) => (
+                    <TableRow key={duty.id}>
+                      <TableCell className="font-medium">{duty.doctorName}</TableCell>
+                      <TableCell>{duty.specialization}</TableCell>
+                      <TableCell>{duty.contact}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadgeColor(duty.status)}>
+                          {duty.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedDuty(duty);
+                              setShowEditDutyDialog(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              if (duty.contact) {
+                                window.open(`tel:${duty.contact}`, '_self');
+                              } else {
+                                toast.error('Contact number not available');
+                              }
+                            }}
+                          >
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -1459,28 +1712,53 @@ export function EmergencyManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockDutyRoster.filter(d => d.shiftType === 'Evening').map((duty) => (
-                  <TableRow key={duty.id}>
-                    <TableCell className="font-medium">{duty.doctorName}</TableCell>
-                    <TableCell>{duty.specialization}</TableCell>
-                    <TableCell>{duty.contact}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusBadgeColor(duty.status)}>
-                        {duty.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Phone className="w-4 h-4" />
-                        </Button>
-                      </div>
+                {dutyRoster.filter(d => d.shiftType === 'Evening' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      No staff scheduled for Evening shift
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  dutyRoster.filter(d => d.shiftType === 'Evening' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).map((duty) => (
+                    <TableRow key={duty.id}>
+                      <TableCell className="font-medium">{duty.doctorName}</TableCell>
+                      <TableCell>{duty.specialization}</TableCell>
+                      <TableCell>{duty.contact}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadgeColor(duty.status)}>
+                          {duty.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedDuty(duty);
+                              setShowEditDutyDialog(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              if (duty.contact) {
+                                window.open(`tel:${duty.contact}`, '_self');
+                              } else {
+                                toast.error('Contact number not available');
+                              }
+                            }}
+                          >
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -1508,28 +1786,53 @@ export function EmergencyManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockDutyRoster.filter(d => d.shiftType === 'Night').map((duty) => (
-                  <TableRow key={duty.id}>
-                    <TableCell className="font-medium">{duty.doctorName}</TableCell>
-                    <TableCell>{duty.specialization}</TableCell>
-                    <TableCell>{duty.contact}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusBadgeColor(duty.status)}>
-                        {duty.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Phone className="w-4 h-4" />
-                        </Button>
-                      </div>
+                {dutyRoster.filter(d => d.shiftType === 'Night' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      No staff scheduled for Night shift
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  dutyRoster.filter(d => d.shiftType === 'Night' && (rosterViewMode === 'week' || d.date === selectedRosterDate)).map((duty) => (
+                    <TableRow key={duty.id}>
+                      <TableCell className="font-medium">{duty.doctorName}</TableCell>
+                      <TableCell>{duty.specialization}</TableCell>
+                      <TableCell>{duty.contact}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadgeColor(duty.status)}>
+                          {duty.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedDuty(duty);
+                              setShowEditDutyDialog(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              if (duty.contact) {
+                                window.open(`tel:${duty.contact}`, '_self');
+                              } else {
+                                toast.error('Contact number not available');
+                              }
+                            }}
+                          >
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -1617,13 +1920,132 @@ export function EmergencyManagement() {
       )}
 
       {/* Update Vitals Dialog */}
-      {showUpdateVitals && selectedPatient && (
-        <UpdateVitalsDialog
+      {showUpdateVitals && selectedPatient && (() => {
+        // Get visit ID - check multiple possible fields
+        const vid = selectedPatient.id || selectedPatient.visitId || selectedPatient.emergency_visit_id;
+        const visitId = vid ? (typeof vid === 'string' ? parseInt(vid, 10) : vid) : null;
+        
+        if (!visitId) {
+          toast.error('Visit ID not found. Cannot update vitals.');
+          return null;
+        }
+        
+        return (
+          <UpdateVitalsDialog
+            patient={selectedPatient}
+            visitId={visitId}
+            onClose={() => setShowUpdateVitals(false)}
+            onSave={() => {
+              setShowUpdateVitals(false);
+              toast.success('Vitals updated successfully!');
+              loadAdmittedPatients();
+            }}
+          />
+        );
+      })()}
+
+      {/* Transfer Patient Dialog */}
+      {showTransferDialog && selectedPatient && (
+        <>
+          {console.log('Rendering TransferPatientDialog - showTransferDialog:', showTransferDialog, 'selectedPatient:', selectedPatient)}
+          <TransferPatientDialog
+            onClose={() => {
+              setShowTransferDialog(false);
+            }}
+            patient={selectedPatient}
+            onTransfer={() => {
+              console.log('Dialog onTransfer called');
+              setShowTransferDialog(false);
+              toast.success('Patient transferred successfully!');
+              loadAdmittedPatients();
+            }}
+          />
+        </>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && selectedPatient && (
+        <DeleteConfirmationDialog
+          onClose={() => setShowDeleteDialog(false)}
           patient={selectedPatient}
-          onClose={() => setShowUpdateVitals(false)}
+          onDelete={() => {
+            setShowDeleteDialog(false);
+            toast.success('Patient record deleted successfully!');
+            loadAdmittedPatients();
+          }}
+        />
+      )}
+
+      {/* Ambulance Request Dialog */}
+      {showAmbulanceDialog && selectedPatient && (
+        <AmbulanceRequestDialog
+          onClose={() => setShowAmbulanceDialog(false)}
+          patient={selectedPatient}
+          onRequest={() => {
+            setShowAmbulanceDialog(false);
+            toast.success('Ambulance requested successfully!');
+          }}
+        />
+      )}
+
+      {/* Add Bed Dialog */}
+      {showAddBedDialog && (
+        <AddEmergencyBedDialog
+          onClose={() => setShowAddBedDialog(false)}
           onSave={() => {
-            setShowUpdateVitals(false);
-            toast.success('Vitals updated successfully!');
+            setShowAddBedDialog(false);
+            loadBedDetails();
+            toast.success('Bed added successfully!');
+          }}
+        />
+      )}
+
+      {/* Edit Bed Dialog */}
+      {showEditBedDialog && selectedBed && (
+        <EditEmergencyBedDialog
+          bed={selectedBed}
+          onClose={() => {
+            setShowEditBedDialog(false);
+            setSelectedBed(null);
+          }}
+          onSave={() => {
+            setShowEditBedDialog(false);
+            setSelectedBed(null);
+            loadBedDetails();
+            toast.success('Bed updated successfully!');
+          }}
+        />
+      )}
+
+      {/* Add Duty Dialog */}
+      {showAddDutyDialog && (
+        <AddDutyDialog
+          onClose={() => setShowAddDutyDialog(false)}
+          onSave={() => {
+            setShowAddDutyDialog(false);
+            loadDutyRoster();
+          }}
+          defaultDate={selectedRosterDate}
+        />
+      )}
+
+      {/* Edit Duty Dialog */}
+      {showEditDutyDialog && selectedDuty && (
+        <EditDutyDialog
+          duty={selectedDuty}
+          onClose={() => {
+            setShowEditDutyDialog(false);
+            setSelectedDuty(null);
+          }}
+          onSave={() => {
+            setShowEditDutyDialog(false);
+            setSelectedDuty(null);
+            loadDutyRoster();
+          }}
+          onDelete={() => {
+            setShowEditDutyDialog(false);
+            setSelectedDuty(null);
+            loadDutyRoster();
           }}
         />
       )}

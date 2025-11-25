@@ -3,7 +3,8 @@
  * Request ambulance service for patient
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Input } from '../ui/input';
@@ -35,6 +36,15 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
   const [destination, setDestination] = useState('');
   const [priority, setPriority] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   const handleRequest = () => {
     if (!serviceType || !destination || !priority) {
@@ -46,9 +56,25 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
     toast.success('Ambulance requested successfully! ETA: 15 minutes');
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+  if (!mounted) return null;
+
+  const dialogContent = (
+    <>
+      {/* Overlay */}
+      <div 
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
+        onClick={onClose}
+        style={{ zIndex: 9998 }}
+      />
+      {/* Dialog */}
+      <div 
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
+        style={{ zIndex: 9999 }}
+      >
+        <Card 
+          className="w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
         <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -288,6 +314,9 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
+
+  return createPortal(dialogContent, document.body);
 }

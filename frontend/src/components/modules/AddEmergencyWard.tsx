@@ -4,7 +4,7 @@
  * Form to add a new ward to the emergency department with comprehensive fields.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -21,9 +21,11 @@ import {
   User,
   Phone,
   Mail,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 interface AddEmergencyWardProps {
   onClose: () => void;
@@ -35,25 +37,96 @@ export function AddEmergencyWard({ onClose, onSave }: AddEmergencyWardProps) {
     name: '',
     type: '',
     totalBeds: '',
-    floor: '',
+    floorId: '',
     building: '',
-    incharge: '',
+    inchargeUserId: '',
     contact: '',
     email: '',
     status: 'Active',
-    description: ''
+    description: '',
+    facilities: [] as string[]
   });
 
-  const handleSave = () => {
+  const [floors, setFloors] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedFacilities, setSelectedFacilities] = useState<string[]>([]);
+
+  const facilityOptions = [
+    'Central Oxygen Supply',
+    'Cardiac Monitors',
+    'Ventilators',
+    'Defibrillators',
+    'Emergency Call System',
+    'Nurse Station',
+    'Isolation Capability',
+    'Wi-Fi',
+    'Dialysis Machines',
+    'ECMO',
+    'Pediatric Monitors',
+    'Incubators',
+    'Trauma Bays',
+    'Surgical Equipment',
+    'X-Ray',
+    'Negative Pressure',
+    'Isolation Equipment'
+  ];
+
+  useEffect(() => {
+    loadFloors();
+    loadUsers();
+  }, []);
+
+  const loadFloors = async () => {
+    try {
+      const data = await api.getFloors();
+      setFloors(data || []);
+    } catch (error: any) {
+      console.warn('Could not load floors:', error);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const data = await api.getUsers({ status: 'active' });
+      setUsers(data || []);
+    } catch (error: any) {
+      console.warn('Could not load users:', error);
+    }
+  };
+
+  const handleSave = async () => {
     // Validation
-    if (!newWard.name || !newWard.type || !newWard.totalBeds || !newWard.incharge || !newWard.contact) {
+    if (!newWard.name || !newWard.type || !newWard.totalBeds) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    // Success
-    toast.success(`Ward "${newWard.name}" added successfully!`);
-    onSave();
+    try {
+      setLoading(true);
+
+      const wardData = {
+        name: newWard.name,
+        type: newWard.type,
+        total_beds: parseInt(newWard.totalBeds),
+        floor_id: newWard.floorId ? parseInt(newWard.floorId) : null,
+        building: newWard.building || null,
+        incharge_user_id: newWard.inchargeUserId ? parseInt(newWard.inchargeUserId) : null,
+        contact: newWard.contact || null,
+        email: newWard.email || null,
+        facilities: selectedFacilities.length > 0 ? selectedFacilities : null,
+        description: newWard.description || null,
+        status: newWard.status
+      };
+
+      await api.createEmergencyWard(wardData);
+      toast.success(`Ward "${newWard.name}" added successfully!`);
+      onSave();
+    } catch (error: any) {
+      toast.error('Failed to create ward: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -184,13 +257,25 @@ export function AddEmergencyWard({ onClose, onSave }: AddEmergencyWardProps) {
 
                 <div>
                   <Label htmlFor="floor">Floor</Label>
-                  <Input
-                    id="floor"
-                    placeholder="e.g., Ground Floor, 1st Floor"
-                    value={newWard.floor}
-                    onChange={(e) => setNewWard({ ...newWard, floor: e.target.value })}
-                    className="mt-2"
-                  />
+                  <Select
+                    value={newWard.floorId}
+                    onValueChange={(value) => setNewWard({ ...newWard, floorId: value })}
+                  >
+                    <SelectTrigger className="mt-2" id="floor">
+                      <SelectValue placeholder="Select floor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {floors.length > 0 ? (
+                        floors.map((floor) => (
+                          <SelectItem key={floor.id} value={floor.id?.toString() || '0'}>
+                            {floor.floor_name || `Floor ${floor.floor_number}`} {floor.building_name ? `- ${floor.building_name}` : ''}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No floors available</div>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -204,18 +289,27 @@ export function AddEmergencyWard({ onClose, onSave }: AddEmergencyWardProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="incharge">
-                    Ward Incharge <span className="text-red-500">*</span>
+                    Ward Incharge
                   </Label>
-                  <div className="relative mt-2">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="incharge"
-                      placeholder="e.g., Nurse Alice Thompson"
-                      value={newWard.incharge}
-                      onChange={(e) => setNewWard({ ...newWard, incharge: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
+                  <Select
+                    value={newWard.inchargeUserId}
+                    onValueChange={(value) => setNewWard({ ...newWard, inchargeUserId: value })}
+                  >
+                    <SelectTrigger className="mt-2" id="incharge">
+                      <SelectValue placeholder="Select incharge" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.length > 0 ? (
+                        users.map((user) => (
+                          <SelectItem key={user.id} value={user.id?.toString() || '0'}>
+                            {user.name} ({user.role})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No users available</div>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
@@ -258,6 +352,32 @@ export function AddEmergencyWard({ onClose, onSave }: AddEmergencyWardProps) {
               <h3 className="font-medium text-gray-900">Additional Information</h3>
               
               <div>
+                <Label>Facilities</Label>
+                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {facilityOptions.map((facility) => (
+                    <div key={facility} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`facility-${facility}`}
+                        checked={selectedFacilities.includes(facility)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedFacilities([...selectedFacilities, facility]);
+                          } else {
+                            setSelectedFacilities(selectedFacilities.filter(f => f !== facility));
+                          }
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor={`facility-${facility}`} className="text-sm font-normal cursor-pointer">
+                        {facility}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <Label htmlFor="description">Description</Label>
                 <div className="relative mt-2">
                   <FileText className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -282,9 +402,19 @@ export function AddEmergencyWard({ onClose, onSave }: AddEmergencyWardProps) {
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
                 onClick={handleSave}
+                disabled={loading}
               >
-                <Save className="w-4 h-4 mr-2" />
-                Save Ward
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Ward
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>

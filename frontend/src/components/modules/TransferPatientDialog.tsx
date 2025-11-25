@@ -3,9 +3,9 @@
  * Transfer patient to another ward or facility
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -24,11 +24,13 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
+import { Loader2 } from 'lucide-react';
 
 interface TransferPatientDialogProps {
   patient: any;
   onClose: () => void;
-  onTransfer: () => void;
+  onTransfer?: () => void;
 }
 
 export function TransferPatientDialog({ patient, onClose, onTransfer }: TransferPatientDialogProps) {
@@ -38,8 +40,80 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
   const [reason, setReason] = useState('');
   const [externalFacility, setExternalFacility] = useState('');
   const [transportMode, setTransportMode] = useState('');
+  const [externalFacilityContact, setExternalFacilityContact] = useState('');
+  const [doctorNotes, setDoctorNotes] = useState('');
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transferTime, setTransferTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [loading, setLoading] = useState(false);
+  const [wards, setWards] = useState<any[]>([]);
+  const [beds, setBeds] = useState<any[]>([]);
+  const [loadingWards, setLoadingWards] = useState(false);
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
-  const handleTransfer = () => {
+  // Load wards when transfer type is internal
+  useEffect(() => {
+    if (transferType === 'internal') {
+      if (wards.length === 0) {
+        loadWards();
+      }
+      // Reset bed selection when transfer type changes
+      setTargetBed('');
+      setBeds([]);
+    } else if (transferType === 'external') {
+      // Reset selections for external transfer
+      setTargetWard('');
+      setTargetBed('');
+      setBeds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferType]);
+
+  // Load beds when ward is selected
+  useEffect(() => {
+    if (transferType === 'internal' && targetWard) {
+      loadBedsForWard(targetWard);
+    } else if (!targetWard) {
+      setBeds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetWard, transferType]);
+
+  const loadWards = async () => {
+    setLoadingWards(true);
+    try {
+      const wardsData = await api.getEmergencyWards();
+      setWards(wardsData || []);
+    } catch (error: any) {
+      console.error('Error loading wards:', error);
+      toast.error('Failed to load wards');
+    } finally {
+      setLoadingWards(false);
+    }
+  };
+
+  const loadBedsForWard = async (wardId: string) => {
+    try {
+      const wardIdNum = parseInt(wardId, 10);
+      if (isNaN(wardIdNum)) {
+        setBeds([]);
+        return;
+      }
+      const bedsData = await api.getEmergencyWardBeds({ ward_id: wardIdNum, status: 'available' });
+      setBeds(bedsData || []);
+    } catch (error: any) {
+      console.error('Error loading beds:', error);
+      toast.error('Failed to load beds for selected ward');
+      setBeds([]);
+    }
+  };
+
+  const handleTransfer = async () => {
+    // Validation
     if (transferType === 'internal' && (!targetWard || !targetBed)) {
       toast.error('Please select target ward and bed');
       return;
@@ -53,31 +127,209 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
       return;
     }
 
-    onTransfer();
-    toast.success('Patient transfer initiated successfully!');
+    // Get visit ID from patient
+    const visitId = patient.id || patient.visitId || patient.emergency_visit_id;
+    if (!visitId) {
+      toast.error('Visit ID not found. Cannot create transfer.');
+      return;
+    }
+
+    const visitIdNum = typeof visitId === 'string' ? parseInt(visitId, 10) : visitId;
+    if (isNaN(visitIdNum)) {
+      toast.error('Invalid visit ID. Cannot create transfer.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Prepare transfer data
+      const transferData: any = {
+        emergency_visit_id: visitIdNum,
+        transfer_type: transferType,
+        reason: reason,
+        doctor_notes: doctorNotes || null,
+        transfer_date: transferDate,
+        transfer_time: transferTime,
+        status: 'Pending'
+      };
+
+      if (transferType === 'internal') {
+        // For internal transfers, we need valid ward and bed IDs
+        const toWardId = targetWard ? parseInt(targetWard, 10) : null;
+        const toBedId = targetBed ? parseInt(targetBed, 10) : null;
+        
+        if (!toWardId || isNaN(toWardId) || toWardId <= 0) {
+          toast.error('Please select a valid target ward');
+          setLoading(false);
+          return;
+        }
+        
+        if (!toBedId || isNaN(toBedId) || toBedId <= 0) {
+          toast.error('Please select a valid target bed');
+          setLoading(false);
+          return;
+        }
+        
+        transferData.to_ward_id = toWardId;
+        transferData.to_bed_id = toBedId;
+        
+        // If patient has current ward/bed IDs, set from_ward_id and from_bed_id
+        if (patient.assignedWardId || patient.wardId) {
+          const fromWardId = typeof (patient.assignedWardId || patient.wardId) === 'string' 
+            ? parseInt(patient.assignedWardId || patient.wardId, 10) 
+            : (patient.assignedWardId || patient.wardId);
+          if (!isNaN(fromWardId) && fromWardId > 0) {
+            transferData.from_ward_id = fromWardId;
+          }
+        }
+        if (patient.bedId || patient.assignedBedId) {
+          const fromBedId = typeof (patient.bedId || patient.assignedBedId) === 'string'
+            ? parseInt(patient.bedId || patient.assignedBedId, 10)
+            : (patient.bedId || patient.assignedBedId);
+          if (!isNaN(fromBedId) && fromBedId > 0) {
+            transferData.from_bed_id = fromBedId;
+          }
+        }
+      } else {
+        // External transfer
+        transferData.external_facility_name = externalFacility;
+        transferData.transport_mode = transportMode;
+        if (externalFacilityContact) {
+          transferData.external_facility_contact = externalFacilityContact;
+        }
+      }
+
+      console.log('Sending transfer data to API:', transferData);
+      
+      // Make API call
+      const result = await api.createEmergencyTransfer(transferData);
+      
+      console.log('Transfer API response:', result);
+      
+      toast.success('Patient transfer created successfully!');
+      onTransfer?.();
+      onClose();
+    } catch (error: any) {
+      console.error('Error creating transfer:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      toast.error('Failed to create transfer: ' + errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
-                <ArrowLeftRight className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <CardTitle>Transfer Patient</CardTitle>
-                <CardDescription>Transfer {patient.name} to another location</CardDescription>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardHeader>
+  console.log('TransferPatientDialog render - patient:', patient);
+  
+  if (!patient) {
+    console.log('TransferPatientDialog: No patient, returning null');
+    return null;
+  }
 
-        <CardContent className="pt-6 space-y-6">
+  console.log('Creating dialogContent, document.body exists:', !!document.body);
+  
+  const dialogContent = (
+    <>
+      {/* Overlay */}
+      <div 
+        onClick={(e) => {
+          // Only close if clicking directly on the overlay, not on child elements
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          zIndex: 99998
+        }}
+      />
+      {/* Dialog */}
+      <div 
+        onClick={(e) => {
+          // Stop all clicks inside dialog container from reaching overlay
+          e.stopPropagation();
+          // Only allow clicks on the dialog content itself
+          if (e.target === e.currentTarget) {
+            // Clicked on padding area - don't close, just stop propagation
+            e.preventDefault();
+          }
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+          pointerEvents: 'auto'
+        }}
+      >
+        <div 
+          className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          style={{
+            width: '100%',
+            maxWidth: '42rem',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            pointerEvents: 'auto'
+          }}
+        >
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+              <ArrowLeftRight className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">Transfer Patient</h2>
+              <p className="text-sm text-gray-600 mt-1">Transfer {patient.name} to another location</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Content */}
+        <div 
+          className="flex-1 overflow-y-auto p-6 space-y-6"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           {/* Current Patient Info */}
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="font-semibold mb-3">Current Patient Information</h3>
@@ -150,37 +402,69 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
 
           {/* Internal Transfer Fields */}
           {transferType === 'internal' && (
-            <div className="space-y-4">
+            <div 
+              className="space-y-4"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <div className="space-y-2">
                 <Label htmlFor="targetWard">Target Ward *</Label>
-                <Select value={targetWard} onValueChange={setTargetWard}>
+                <Select 
+                  value={targetWard} 
+                  onValueChange={setTargetWard}
+                  disabled={loadingWards}
+                >
                   <SelectTrigger id="targetWard">
-                    <SelectValue placeholder="Select ward" />
+                    <SelectValue placeholder={loadingWards ? "Loading wards..." : "Select ward"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general-ward-a">General Ward A</SelectItem>
-                    <SelectItem value="general-ward-b">General Ward B</SelectItem>
-                    <SelectItem value="icu">Intensive Care Unit (ICU)</SelectItem>
-                    <SelectItem value="cardiac-ward">Cardiac Care Ward</SelectItem>
-                    <SelectItem value="surgical-ward">Surgical Ward</SelectItem>
-                    <SelectItem value="private-room-1">Private Room 1</SelectItem>
-                    <SelectItem value="private-room-2">Private Room 2</SelectItem>
+                    {wards.length === 0 && !loadingWards ? (
+                      <div className="px-2 py-1.5 text-sm text-gray-500">No wards available</div>
+                    ) : (
+                      wards
+                        .filter((ward) => ward.id != null && ward.id !== '' && ward.id !== 0)
+                        .map((ward) => {
+                          const wardId = ward.id?.toString();
+                          if (!wardId || wardId === '0' || wardId === '') return null;
+                          return (
+                            <SelectItem key={ward.id} value={wardId}>
+                              {ward.name} {ward.available_beds ? `(${ward.available_beds} beds available)` : ''}
+                            </SelectItem>
+                          );
+                        })
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="targetBed">Target Bed Number *</Label>
-                <Select value={targetBed} onValueChange={setTargetBed}>
+                <Select 
+                  value={targetBed} 
+                  onValueChange={setTargetBed}
+                  disabled={!targetWard || beds.length === 0}
+                >
                   <SelectTrigger id="targetBed">
-                    <SelectValue placeholder="Select bed" />
+                    <SelectValue placeholder={!targetWard ? "Select ward first" : beds.length === 0 ? "No beds available" : "Select bed"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bed-01">Bed 01 (Available)</SelectItem>
-                    <SelectItem value="bed-02">Bed 02 (Available)</SelectItem>
-                    <SelectItem value="bed-03">Bed 03 (Available)</SelectItem>
-                    <SelectItem value="bed-04">Bed 04 (Available)</SelectItem>
-                    <SelectItem value="bed-05">Bed 05 (Available)</SelectItem>
+                    {beds.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-gray-500">
+                        {!targetWard ? "Please select a ward first" : "No available beds in this ward"}
+                      </div>
+                    ) : (
+                      beds
+                        .filter((bed) => bed.id != null && bed.id !== '' && bed.id !== 0)
+                        .map((bed) => {
+                          const bedId = bed.id?.toString();
+                          if (!bedId || bedId === '0' || bedId === '') return null;
+                          return (
+                            <SelectItem key={bed.id} value={bedId}>
+                              {bed.bed_number || bed.bedNumber} {bed.status ? `(${bed.status})` : ''}
+                            </SelectItem>
+                          );
+                        })
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -231,7 +515,14 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
 
               <div className="space-y-2">
                 <Label htmlFor="contactPerson">Receiving Facility Contact</Label>
-                <Input id="contactPerson" placeholder="Contact person name and number" />
+                <Input 
+                  id="contactPerson" 
+                  placeholder="Contact person name and number"
+                  value={externalFacilityContact}
+                  onChange={(e) => setExternalFacilityContact(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                />
               </div>
 
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
@@ -247,7 +538,11 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
           <Separator />
 
           {/* Common Fields */}
-          <div className="space-y-4">
+          <div 
+            className="space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <div className="space-y-2">
               <Label htmlFor="reason">Reason for Transfer *</Label>
               <Textarea
@@ -255,6 +550,8 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
                 placeholder="Enter detailed reason for transfer (e.g., requires specialized care, step-down from ICU, patient request, etc.)"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 rows={4}
               />
             </div>
@@ -264,6 +561,10 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
               <Textarea
                 id="doctorNotes"
                 placeholder="Additional medical notes or special instructions"
+                value={doctorNotes}
+                onChange={(e) => setDoctorNotes(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 rows={3}
               />
             </div>
@@ -274,7 +575,10 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
                 <Input
                   id="transferDate"
                   type="date"
-                  defaultValue={new Date().toISOString().split('T')[0]}
+                  value={transferDate}
+                  onChange={(e) => setTransferDate(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 />
               </div>
               <div className="space-y-2">
@@ -282,7 +586,10 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
                 <Input
                   id="transferTime"
                   type="time"
-                  defaultValue={new Date().toTimeString().slice(0, 5)}
+                  value={transferTime}
+                  onChange={(e) => setTransferTime(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 />
               </div>
             </div>
@@ -295,13 +602,39 @@ export function TransferPatientDialog({ patient, onClose, onTransfer }: Transfer
             <Button variant="outline" className="flex-1" onClick={onClose}>
               Cancel
             </Button>
-            <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={handleTransfer}>
-              <ArrowLeftRight className="w-4 h-4 mr-2" />
-              Confirm Transfer
+            <Button 
+              className="flex-1 bg-blue-600 hover:bg-blue-700" 
+              onClick={handleTransfer}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating Transfer...
+                </>
+              ) : (
+                <>
+                  <ArrowLeftRight className="w-4 h-4 mr-2" />
+                  Confirm Transfer
+                </>
+              )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        </div>
+      </div>
+    </>
   );
+
+  console.log('About to create portal, document.body:', document.body);
+  
+  // Try rendering directly first to debug
+  if (typeof window !== 'undefined' && document.body) {
+    const portal = createPortal(dialogContent, document.body);
+    console.log('Portal created and returning');
+    return portal;
+  } else {
+    console.error('Cannot create portal - window or document.body not available');
+    return null;
+  }
 }

@@ -9,7 +9,7 @@
  * - Assign emergency consultant
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -26,9 +26,11 @@ import {
   User,
   Save,
   X,
-  UserPlus
+  UserPlus,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 interface AdmitEmergencyPatientProps {
   onClose: () => void;
@@ -67,83 +69,174 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
     bloodGroup: ''
   });
 
-  // Mock patient search results
-  const searchResults = [
-    {
-      id: 'UHID-78945',
-      name: 'Yasir Ahmed',
-      age: 35,
-      gender: 'Male',
-      phone: '+1-555-0123',
-      lastVisit: '2024-10-15'
-    },
-    {
-      id: 'UHID-78946',
-      name: 'Yasir Khan',
-      age: 42,
-      gender: 'Male',
-      phone: '+1-555-0124',
-      lastVisit: '2024-09-20'
-    }
-  ];
+  // State for dynamic data
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [wards, setWards] = useState<any[]>([]);
+  const [availableBeds, setAvailableBeds] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [nurses, setNurses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [chiefComplaint, setChiefComplaint] = useState('');
 
-  const filteredResults = searchQuery
-    ? searchResults.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.id.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : [];
+  // Load wards and staff on component mount
+  useEffect(() => {
+    loadWards();
+    loadDoctors();
+    loadNurses();
+  }, []);
+
+  // Load available beds when ward is selected
+  useEffect(() => {
+    if (wardType) {
+      loadAvailableBeds(wardType);
+    } else {
+      setAvailableBeds([]);
+      setBedNumber('');
+    }
+  }, [wardType]);
+
+  // Search patients with debounce
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      searchPatients();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadWards = async () => {
+    try {
+      const data = await api.getEmergencyWards({ status: 'Active' });
+      setWards(data);
+    } catch (error: any) {
+      toast.error('Failed to load wards: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const loadAvailableBeds = async (wardId: string) => {
+    try {
+      const data = await api.getAvailableWardBeds(parseInt(wardId));
+      setAvailableBeds(data || []);
+    } catch (error: any) {
+      toast.error('Failed to load beds: ' + (error.message || 'Unknown error'));
+      setAvailableBeds([]);
+    }
+  };
+
+  const loadDoctors = async () => {
+    try {
+      const data = await api.getDoctors();
+      setDoctors(data);
+    } catch (error: any) {
+      toast.error('Failed to load doctors: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const loadNurses = async () => {
+    try {
+      // Get users with nurse role
+      const data = await api.getUsers({ role: 'nurse', status: 'active' });
+      setNurses(data || []);
+    } catch (error: any) {
+      console.warn('Could not load nurses:', error);
+      setNurses([]);
+    }
+  };
+
+  const searchPatients = async () => {
+    try {
+      setSearching(true);
+      const data = await api.getPatients({ search: searchQuery });
+      setSearchResults(data || []);
+    } catch (error: any) {
+      toast.error('Failed to search patients: ' + (error.message || 'Unknown error'));
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const handleSelectPatient = (patient: any) => {
     setSelectedPatient(patient);
     setSearchQuery(patient.name);
   };
 
-  const handleAddNewPatient = () => {
+  const handleAddNewPatient = async () => {
     // Validate new patient form
     if (!newPatient.firstName || !newPatient.lastName || !newPatient.age || !newPatient.gender) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    // Create new patient
-    const patient = {
-      id: `UHID-${Math.floor(Math.random() * 100000)}`,
-      name: `${newPatient.firstName} ${newPatient.lastName}`,
-      age: parseInt(newPatient.age),
-      gender: newPatient.gender,
-      phone: newPatient.phone
-    };
+    try {
+      setLoading(true);
+      // Create new patient via API
+      const patientData = {
+        name: `${newPatient.firstName} ${newPatient.lastName}`,
+        age: parseInt(newPatient.age),
+        gender: newPatient.gender as 'Male' | 'Female' | 'Other',
+        phone: newPatient.phone,
+        email: newPatient.email || undefined,
+        address: newPatient.address || undefined,
+        blood_group: newPatient.bloodGroup || undefined
+      };
 
-    setSelectedPatient(patient);
-    setSearchQuery(patient.name);
-    setShowAddPatientDialog(false);
-    toast.success('New patient added successfully!');
+      const createdPatient = await api.createPatient(patientData);
+      
+      const patient = {
+        id: createdPatient.id?.toString() || '',
+        patient_id: createdPatient.patient_id || createdPatient.uhid || '',
+        name: createdPatient.name || `${newPatient.firstName} ${newPatient.lastName}`,
+        age: createdPatient.age || parseInt(newPatient.age),
+        gender: createdPatient.gender || newPatient.gender,
+        phone: createdPatient.phone || newPatient.phone
+      };
 
-    // Reset form
-    setNewPatient({
-      firstName: '',
-      lastName: '',
-      age: '',
-      gender: '',
-      phone: '',
-      email: '',
-      address: '',
-      emergencyContact: '',
-      emergencyContactPhone: '',
-      bloodGroup: ''
-    });
+      setSelectedPatient(patient);
+      setSearchQuery(patient.name);
+      setShowAddPatientDialog(false);
+      toast.success('New patient added successfully!');
+
+      // Reset form
+      setNewPatient({
+        firstName: '',
+        lastName: '',
+        age: '',
+        gender: '',
+        phone: '',
+        email: '',
+        address: '',
+        emergencyContact: '',
+        emergencyContactPhone: '',
+        bloodGroup: ''
+      });
+    } catch (error: any) {
+      toast.error('Failed to create patient: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     // Validation
     if (!selectedPatient) {
       toast.error('Please select or add a patient');
       return;
     }
 
-    if (!wardType || !bedNumber || !urgencyLevel) {
-      toast.error('Please fill in all bed assignment details');
+    if (!chiefComplaint) {
+      toast.error('Please enter chief complaint');
+      return;
+    }
+
+    if (!urgencyLevel) {
+      toast.error('Please select urgency level');
       return;
     }
 
@@ -152,9 +245,43 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
       return;
     }
 
-    // Success
-    toast.success(`Patient ${admissionType === 'admit' ? 'admitted' : 'registered as DOA'} successfully!`);
-    onAdmit();
+    try {
+      setLoading(true);
+
+      // Map urgency level to triage level (ESI 1-5)
+      const triageMap: { [key: string]: number } = {
+        'emergency': 1,
+        'urgent': 2,
+        'semi-urgent': 3,
+        'non-urgent': 4
+      };
+      const triageLevel = triageMap[urgencyLevel] || 3;
+
+      // Create emergency visit
+      const visitData = {
+        patient_id: parseInt(selectedPatient.id),
+        triage_level: triageLevel as 1 | 2 | 3 | 4 | 5,
+        chief_complaint: chiefComplaint,
+        assigned_doctor_id: parseInt(emergencyConsultant),
+        assigned_nurse_id: (nurseAssigned && nurseAssigned !== '0') ? parseInt(nurseAssigned) : undefined,
+        arrival_mode: 'walk-in' as const,
+        current_status: 'registered' as const
+      };
+
+      const visit = await api.createEmergencyVisit(visitData);
+
+      // If ward and bed are selected, assign them
+      if (wardType && bedNumber) {
+        await api.updateWardAssignment(visit.id, parseInt(wardType), parseInt(bedNumber));
+      }
+
+      toast.success(`Patient ${admissionType === 'admit' ? 'admitted' : 'registered as DOA'} successfully!`);
+      onAdmit();
+    } catch (error: any) {
+      toast.error('Failed to admit patient: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -188,25 +315,45 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
                   />
                   
                   {/* Search Results Dropdown */}
-                  {searchQuery && filteredResults.length > 0 && (
+                  {searching && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-blue-200 rounded-lg shadow-lg z-10 p-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-gray-600">Searching...</span>
+                      </div>
+                    </div>
+                  )}
+                  {!searching && searchQuery && searchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-blue-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                      {filteredResults.map((patient) => (
+                      {searchResults.map((patient) => (
                         <button
                           key={patient.id}
-                          onClick={() => handleSelectPatient(patient)}
+                          onClick={() => handleSelectPatient({
+                            id: patient.id?.toString() || '',
+                            patient_id: patient.patient_id || patient.uhid || '',
+                            name: patient.name || '',
+                            age: patient.age || 0,
+                            gender: patient.gender || 'Other',
+                            phone: patient.phone || ''
+                          })}
                           className="w-full text-left p-3 hover:bg-blue-50 border-b last:border-b-0 transition-colors"
                         >
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-semibold">{patient.name}</p>
                               <p className="text-xs text-gray-600">
-                                {patient.id} • {patient.age}Y, {patient.gender}
+                                {patient.patient_id || patient.uhid || ''} • {patient.age || 0}Y, {patient.gender || ''}
                               </p>
                             </div>
-                            <Badge variant="outline">{patient.phone}</Badge>
+                            {patient.phone && <Badge variant="outline">{patient.phone}</Badge>}
                           </div>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {!searching && searchQuery && searchResults.length === 0 && searchQuery.length >= 2 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-blue-200 rounded-lg shadow-lg z-10 p-4 text-center text-sm text-gray-600">
+                      No patients found
                     </div>
                   )}
                 </div>
@@ -383,7 +530,7 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
                       <div>
                         <p className="font-semibold text-lg">{selectedPatient.name}</p>
                         <p className="text-sm text-gray-600">
-                          {selectedPatient.id} • {selectedPatient.age}Y, {selectedPatient.gender} • {selectedPatient.phone}
+                          {selectedPatient.patient_id || selectedPatient.id} • {selectedPatient.age}Y, {selectedPatient.gender} • {selectedPatient.phone}
                         </p>
                       </div>
                     </div>
@@ -424,37 +571,61 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
               </RadioGroup>
             </div>
 
+            {/* Chief Complaint */}
+            <div className="mb-6">
+              <Label htmlFor="chiefComplaint" className="text-base mb-3 block">
+                Chief Complaint <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="chiefComplaint"
+                placeholder="Enter chief complaint..."
+                value={chiefComplaint}
+                onChange={(e) => setChiefComplaint(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+
+            <Separator className="my-6" />
+
             {/* Bed Assignment Section */}
             <div className="space-y-4 mb-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="wardType">Ward Type</Label>
-                  <Select value={wardType} onValueChange={setWardType}>
+                  <Label htmlFor="wardType">Ward</Label>
+                  <Select value={wardType} onValueChange={setWardType} disabled={loading}>
                     <SelectTrigger className="mt-2 h-12" id="wardType">
-                      <SelectValue placeholder="Select ward type" />
+                      <SelectValue placeholder="Select ward" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="emergency">Emergency</SelectItem>
-                      <SelectItem value="general">General Ward</SelectItem>
-                      <SelectItem value="icu">ICU</SelectItem>
-                      <SelectItem value="private">Private Room</SelectItem>
-                      <SelectItem value="semi-private">Semi-Private</SelectItem>
+                      {wards.map((ward) => (
+                        <SelectItem key={ward.id} value={ward.id?.toString() || ''}>
+                          {ward.name} ({ward.type})
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
                   <Label htmlFor="bedNumber">Bed #</Label>
-                  <Select value={bedNumber} onValueChange={setBedNumber}>
+                  <Select 
+                    value={bedNumber} 
+                    onValueChange={setBedNumber} 
+                    disabled={!wardType || loading}
+                  >
                     <SelectTrigger className="mt-2 h-12" id="bedNumber">
-                      <SelectValue placeholder="Select bed" />
+                      <SelectValue placeholder={wardType ? "Select bed" : "Select ward first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                        <SelectItem key={num} value={num.toString()}>
-                          Bed {num}
-                        </SelectItem>
-                      ))}
+                      {availableBeds.length > 0 ? (
+                        availableBeds.map((bed) => (
+                          <SelectItem key={bed.id} value={bed.id?.toString() || '0'}>
+                            {bed.bed_number} ({bed.bed_type})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No available beds</div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -497,25 +668,43 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="emergencyConsultant">Emergency Consultant</Label>
-                  <Input
-                    id="emergencyConsultant"
-                    placeholder="Enter doctor name"
-                    value={emergencyConsultant}
-                    onChange={(e) => setEmergencyConsultant(e.target.value)}
-                    className="mt-2 h-12"
-                  />
+                  <Label htmlFor="emergencyConsultant">Emergency Consultant <span className="text-red-500">*</span></Label>
+                  <Select value={emergencyConsultant} onValueChange={setEmergencyConsultant} disabled={loading}>
+                    <SelectTrigger className="mt-2 h-12" id="emergencyConsultant">
+                      <SelectValue placeholder="Select doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doctors.length > 0 ? (
+                        doctors.map((doctor) => (
+                          <SelectItem key={doctor.id} value={doctor.id?.toString() || '0'}>
+                            {doctor.name} {doctor.specialization ? `- ${doctor.specialization}` : ''}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No doctors available</div>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <Label htmlFor="nurseAssigned">Nurse Assigned</Label>
-                  <Input
-                    id="nurseAssigned"
-                    placeholder="Enter nurse name"
-                    value={nurseAssigned}
-                    onChange={(e) => setNurseAssigned(e.target.value)}
-                    className="mt-2 h-12"
-                  />
+                  <Select value={nurseAssigned} onValueChange={setNurseAssigned} disabled={loading}>
+                    <SelectTrigger className="mt-2 h-12" id="nurseAssigned">
+                      <SelectValue placeholder="Select nurse (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {nurses.length > 0 ? (
+                        nurses.map((nurse) => (
+                          <SelectItem key={nurse.id} value={nurse.id?.toString() || '0'}>
+                            {nurse.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No nurses available</div>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -525,9 +714,19 @@ export function AdmitEmergencyPatient({ onClose, onAdmit }: AdmitEmergencyPatien
               <Button 
                 className="bg-blue-600 hover:bg-blue-700 h-12 px-8 text-base"
                 onClick={handleAssign}
+                disabled={loading}
               >
-                <Save className="w-5 h-5 mr-2" />
-                Assign
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5 mr-2" />
+                    Assign
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>

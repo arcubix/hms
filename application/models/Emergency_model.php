@@ -246,7 +246,19 @@ class Emergency_model extends CI_Model {
      * Update emergency visit
      */
     public function update($id, $data) {
-        $this->db->where('id', $id);
+        // First, get current values to compare
+        $current = $this->get_by_id($id);
+        if (!$current) {
+            log_message('error', 'Emergency_model->update: Visit with id ' . $id . ' not found');
+            return false;
+        }
+        
+        log_message('debug', 'Emergency_model->update current values for id ' . $id . ': ' . json_encode(array(
+            'chief_complaint' => $current['chief_complaint'] ?? null,
+            'triage_level' => $current['triage_level'] ?? null,
+            'bed_number' => $current['bed_number'] ?? null,
+            'current_status' => $current['current_status'] ?? null
+        )));
         
         // Handle JSON fields
         if (isset($data['investigations'])) {
@@ -256,7 +268,60 @@ class Emergency_model extends CI_Model {
             $data['medications'] = is_array($data['medications']) ? json_encode($data['medications']) : $data['medications'];
         }
         
-        return $this->db->update('emergency_visits', $data);
+        // Ensure data types match database schema
+        if (isset($data['triage_level'])) {
+            $data['triage_level'] = (int)$data['triage_level'];
+        }
+        
+        // Log the update data for debugging
+        log_message('debug', 'Emergency_model->update called with id: ' . $id . ', data: ' . json_encode($data));
+        
+        // Set WHERE clause and update
+        $this->db->where('id', (int)$id); // Ensure ID is integer
+        $result = $this->db->update('emergency_visits', $data);
+        
+        // Get the last query for debugging
+        $last_query = $this->db->last_query();
+        log_message('debug', 'Emergency_model->update last_query: ' . $last_query);
+        
+        // Check if update actually affected any rows
+        $affected_rows = $this->db->affected_rows();
+        log_message('debug', 'Emergency_model->update affected_rows: ' . $affected_rows);
+        
+        // Check for database errors
+        $db_error = $this->db->error();
+        if ($db_error['code'] != 0) {
+            log_message('error', 'Emergency_model->update database error: ' . json_encode($db_error));
+            return false;
+        }
+        
+        // If affected_rows is 0, check if values are actually different
+        if ($affected_rows === 0) {
+            $has_changes = false;
+            foreach ($data as $key => $value) {
+                $current_value = $current[$key] ?? null;
+                // Compare values (handle type differences)
+                if ($key === 'triage_level') {
+                    if ((int)$current_value !== (int)$value) {
+                        $has_changes = true;
+                        break;
+                    }
+                } else {
+                    if ((string)$current_value !== (string)$value) {
+                        $has_changes = true;
+                        break;
+                    }
+                }
+            }
+            
+            if ($has_changes) {
+                log_message('warning', 'Emergency_model->update: Values are different but affected_rows is 0. This may indicate a WHERE clause issue.');
+            } else {
+                log_message('debug', 'Emergency_model->update: No rows affected - values are unchanged');
+            }
+        }
+        
+        return $result !== false; // Return true if query executed successfully
     }
 
     /**
@@ -421,13 +486,21 @@ class Emergency_model extends CI_Model {
      */
     public function record_vital_signs($visit_id, $data) {
         if (!$this->db->table_exists('emergency_vital_signs')) {
-            return false;
+            log_message('error', 'emergency_vital_signs table does not exist');
+            return array('success' => false, 'message' => 'emergency_vital_signs table does not exist. Please run the database migration.');
+        }
+
+        // Validate visit exists
+        $visit = $this->get_by_id($visit_id);
+        if (!$visit) {
+            log_message('error', 'Emergency visit ' . $visit_id . ' not found');
+            return array('success' => false, 'message' => 'Emergency visit ' . $visit_id . ' not found');
         }
 
         $insert_data = array(
             'emergency_visit_id' => intval($visit_id),
             'recorded_at' => isset($data['recorded_at']) ? $data['recorded_at'] : date('Y-m-d H:i:s'),
-            'recorded_by' => isset($data['recorded_by']) ? intval($data['recorded_by']) : null,
+            'recorded_by' => (isset($data['recorded_by']) && !empty($data['recorded_by'])) ? intval($data['recorded_by']) : null,
             'bp' => isset($data['bp']) && !empty($data['bp']) ? $data['bp'] : null,
             'pulse' => isset($data['pulse']) && !empty($data['pulse']) ? intval($data['pulse']) : null,
             'temp' => isset($data['temp']) && !empty($data['temp']) ? floatval($data['temp']) : null,
@@ -438,7 +511,96 @@ class Emergency_model extends CI_Model {
             'notes' => isset($data['notes']) ? $data['notes'] : null
         );
 
-        if ($this->db->insert('emergency_vital_signs', $insert_data)) {
+        // Log insert data for debugging
+        log_message('debug', 'Inserting vital signs: ' . json_encode($insert_data));
+        log_message('debug', 'Visit ID: ' . $visit_id);
+        log_message('debug', 'Table exists: ' . ($this->db->table_exists('emergency_vital_signs') ? 'YES' : 'NO'));
+
+        // Try the insert using direct SQL to capture actual MySQL error
+        // Build SQL with proper escaping
+        $sql = "INSERT INTO `emergency_vital_signs` (
+            `emergency_visit_id`, 
+            `recorded_at`, 
+            `recorded_by`, 
+            `bp`, 
+            `pulse`, 
+            `temp`, 
+            `spo2`, 
+            `resp`, 
+            `pain_score`, 
+            `consciousness_level`, 
+            `notes`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        $params = array(
+            intval($visit_id),
+            $insert_data['recorded_at'],
+            $insert_data['recorded_by'],
+            $insert_data['bp'],
+            $insert_data['pulse'],
+            $insert_data['temp'],
+            $insert_data['spo2'],
+            $insert_data['resp'],
+            $insert_data['pain_score'],
+            $insert_data['consciousness_level'],
+            $insert_data['notes']
+        );
+        
+        // Execute query and capture errors immediately
+        $query = $this->db->query($sql, $params);
+        
+        // Get error immediately after query
+        $error = $this->db->error();
+        $insert_id = $this->db->insert_id();
+        $affected_rows = $this->db->affected_rows();
+        $last_query = $this->db->last_query();
+        
+        // Get actual MySQL error directly from connection
+        $mysql_error = '';
+        $mysql_errno = 0;
+        $conn = $this->db->conn_id;
+        
+        if ($conn) {
+            if (is_resource($conn)) {
+                // mysqli resource
+                $mysql_errno = mysqli_errno($conn);
+                $mysql_error = mysqli_error($conn);
+            } elseif (is_object($conn)) {
+                // mysqli object
+                if (property_exists($conn, 'errno')) {
+                    $mysql_errno = $conn->errno;
+                    $mysql_error = $conn->error;
+                }
+            }
+        }
+        
+        log_message('debug', 'Query result: ' . ($query ? 'true' : 'false'));
+        log_message('debug', 'Insert ID: ' . $insert_id);
+        log_message('debug', 'Affected rows: ' . $affected_rows);
+        log_message('debug', 'CodeIgniter error: ' . json_encode($error));
+        log_message('debug', 'MySQL error code: ' . $mysql_errno);
+        log_message('debug', 'MySQL error message: ' . $mysql_error);
+        
+        // Check if insert was successful
+        $insert_result = ($query !== false && $insert_id > 0 && $affected_rows > 0);
+        
+        // If no insert ID or affected rows, it failed
+        if (!$insert_result) {
+            // Use MySQL error if CodeIgniter error is empty
+            if ((empty($error['message']) || $error['code'] == 0) && !empty($mysql_error)) {
+                $error['code'] = $mysql_errno;
+                $error['message'] = $mysql_error;
+                log_message('error', 'Captured MySQL error directly: ' . $mysql_errno . ' - ' . $mysql_error);
+            } elseif (empty($error['message']) && $mysql_errno == 0) {
+                // No error but insert failed - might be a constraint or trigger issue
+                log_message('error', 'Insert failed with no error reported. This might indicate a constraint violation or trigger issue.');
+            }
+        }
+        
+        if ($insert_result) {
+            // Save insert_id BEFORE doing any other queries (update resets insert_id)
+            $saved_insert_id = $insert_id;
+            
             // Update latest vitals in emergency_visits table
             $this->db->where('id', $visit_id);
             $update_vitals = array();
@@ -452,9 +614,77 @@ class Emergency_model extends CI_Model {
                 $this->db->update('emergency_visits', $update_vitals);
             }
             
-            return $this->db->insert_id();
+            // Return the saved insert_id (not $this->db->insert_id() which gets reset after update)
+            log_message('debug', 'Returning insert_id: ' . $saved_insert_id);
+            return $saved_insert_id;
+        } else {
+            $error = $this->db->error();
+            $last_query = $this->db->last_query();
+            
+            log_message('error', '=== VITAL SIGNS INSERT FAILED ===');
+            log_message('error', 'Insert data: ' . json_encode($insert_data));
+            log_message('error', 'Visit ID: ' . $visit_id);
+            log_message('error', 'Last query: ' . $last_query);
+            log_message('error', 'CodeIgniter error: ' . json_encode($error));
+            log_message('error', 'MySQL error code: ' . $mysql_errno);
+            log_message('error', 'MySQL error message: ' . $mysql_error);
+            log_message('error', 'Affected rows: ' . $affected_rows);
+            log_message('error', 'Insert ID: ' . $insert_id);
+            log_message('error', 'Insert success (bool): ' . ($insert_success ? 'true' : 'false'));
+            
+            // Use MySQL error if available
+            if (!empty($mysql_error)) {
+                $error['code'] = $mysql_errno;
+                $error['message'] = $mysql_error;
+            }
+            
+            $error_message = 'Failed to record vital signs';
+            
+            // Get detailed error information
+            if (isset($error['code']) && $error['code'] != 0) {
+                // Common MySQL error codes with user-friendly messages
+                switch ($error['code']) {
+                    case 1452:
+                        // Foreign key constraint failed
+                        $error_detail = isset($error['message']) ? $error['message'] : '';
+                        if (strpos($error_detail, 'emergency_visit_id') !== false || strpos($error_detail, 'emergency_visits') !== false) {
+                            $error_message = 'Foreign key constraint failed: Emergency visit ID ' . $visit_id . ' does not exist in emergency_visits table.';
+                        } elseif (strpos($error_detail, 'recorded_by') !== false || strpos($error_detail, 'users') !== false) {
+                            $user_id = $insert_data['recorded_by'] ?? 'null';
+                            $error_message = 'Foreign key constraint failed: User ID ' . $user_id . ' does not exist in users table.';
+                        } else {
+                            $error_message = 'Foreign key constraint failed. ' . ($error_detail ?: 'Please check if visit ID and user ID exist.');
+                        }
+                        break;
+                    case 1062:
+                        $error_message = 'Duplicate entry. This vital sign record may already exist.';
+                        break;
+                    case 1054:
+                        $error_message = 'Unknown column. The emergency_vital_signs table structure may be incorrect. Please check the table schema.';
+                        break;
+                    case 1146:
+                        $error_message = 'Table does not exist. Please run the database migration to create emergency_vital_signs table.';
+                        break;
+                    default:
+                        $error_message = 'Database error code: ' . $error['code'];
+                        if (isset($error['message']) && !empty($error['message'])) {
+                            $error_message .= ' - ' . $error['message'];
+                        }
+                }
+            } elseif (isset($error['message']) && !empty($error['message'])) {
+                $error_message = $error['message'];
+            } else {
+                // Check if it's a silent failure (no error but no insert)
+                if ($this->db->affected_rows() == 0 && $this->db->insert_id() == 0) {
+                    $error_message = 'Insert failed silently. No rows affected. Please check database constraints and table structure.';
+                } else {
+                    $error_message = 'Unknown database error occurred. Check logs for details.';
+                }
+            }
+            
+            // Return error message as array for better error handling
+            return array('success' => false, 'message' => $error_message, 'error' => $error, 'query' => $last_query);
         }
-        return false;
     }
 
     /**
@@ -497,8 +727,11 @@ class Emergency_model extends CI_Model {
 
         if ($this->db->insert('emergency_treatment_notes', $insert_data)) {
             return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert treatment note: ' . json_encode($error));
+            return false;
         }
-        return false;
     }
 
     /**
@@ -569,8 +802,11 @@ class Emergency_model extends CI_Model {
 
         if ($this->db->insert('emergency_investigation_orders', $insert_data)) {
             return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert investigation order: ' . json_encode($error));
+            return false;
         }
-        return false;
     }
 
     /**
@@ -639,8 +875,11 @@ class Emergency_model extends CI_Model {
 
         if ($this->db->insert('emergency_medication_administration', $insert_data)) {
             return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert medication: ' . json_encode($error));
+            return false;
         }
-        return false;
     }
 
     /**
@@ -718,8 +957,11 @@ class Emergency_model extends CI_Model {
             // Update total charges in emergency_visits
             $this->calculate_total_charges($visit_id);
             return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert charge: ' . json_encode($error));
+            return false;
         }
-        return false;
     }
 
     /**
@@ -802,8 +1044,11 @@ class Emergency_model extends CI_Model {
 
         if ($this->db->insert('emergency_status_history', $insert_data)) {
             return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert status history: ' . json_encode($error));
+            return false;
         }
-        return false;
     }
 
     /**
@@ -920,5 +1165,511 @@ class Emergency_model extends CI_Model {
         $this->db->where('emergency_visit_id', $visit_id);
         $query = $this->db->get('emergency_ipd_admissions');
         return $query->row_array();
+    }
+
+    // ============================================
+    // NEW METHODS FOR EMERGENCY MODULE
+    // ============================================
+
+    /**
+     * Get admitted patients (disposition = 'admit-ward' or 'admit-private')
+     */
+    public function get_admitted_patients($filters = []) {
+        $this->db->select('
+            ev.*,
+            p.id as patient_db_id,
+            p.patient_id as patient_uhid,
+            p.name as patient_name,
+            p.age as patient_age,
+            p.gender as patient_gender,
+            p.phone as patient_phone,
+            p.email as patient_email,
+            p.blood_group as patient_blood_group,
+            d.name as doctor_name,
+            n.name as nurse_name,
+            ew.name as assigned_ward_name,
+            ewb.bed_number as assigned_bed_number
+        ');
+        $this->db->from('emergency_visits ev');
+        $this->db->join('patients p', 'p.id = ev.patient_id', 'left');
+        $this->db->join('users d', 'd.id = ev.assigned_doctor_id', 'left');
+        $this->db->join('users n', 'n.id = ev.assigned_nurse_id', 'left');
+        $this->db->join('emergency_wards ew', 'ew.id = ev.assigned_ward_id', 'left');
+        $this->db->join('emergency_ward_beds ewb', 'ewb.id = ev.assigned_ward_bed_id', 'left');
+        
+        // Filter for admitted patients - show patients who:
+        // 1. Have a ward/bed assigned (assigned_ward_id or assigned_ward_bed_id is not null), OR
+        // 2. Have disposition set to admit-ward or admit-private, OR
+        // 3. Are currently in treatment (not discharged/transferred/deceased)
+        $this->db->group_start();
+        $this->db->where('ev.assigned_ward_id IS NOT NULL');
+        $this->db->or_where('ev.assigned_ward_bed_id IS NOT NULL');
+        $this->db->or_where_in('ev.disposition', ['admit-ward', 'admit-private']);
+        $this->db->or_where_in('ev.current_status', ['registered', 'in-treatment', 'awaiting-disposition', 'admitted', 'in-ward']);
+        $this->db->group_end();
+        
+        // Exclude discharged/transferred/deceased patients (only if disposition is set)
+        $this->db->group_start();
+        $this->db->where('ev.disposition IS NULL');
+        $this->db->or_where_not_in('ev.disposition', ['discharged', 'transferred', 'deceased']);
+        $this->db->group_end();
+        
+        // Apply additional filters
+        if (!empty($filters['status'])) {
+            $this->db->where('ev.current_status', $filters['status']);
+        }
+        
+        if (!empty($filters['triage_level'])) {
+            $this->db->where('ev.triage_level', $filters['triage_level']);
+        }
+        
+        if (!empty($filters['ward_id'])) {
+            $this->db->where('ev.assigned_ward_id', $filters['ward_id']);
+        }
+        
+        if (!empty($filters['search'])) {
+            $search = $this->db->escape_like_str($filters['search']);
+            $this->db->group_start();
+            $this->db->like('ev.er_number', $search);
+            $this->db->or_like('p.name', $search);
+            $this->db->or_like('p.patient_id', $search);
+            $this->db->or_like('ew.name', $search);
+            $this->db->group_end();
+        }
+        
+        if (!empty($filters['date_from'])) {
+            $this->db->where('ev.arrival_time >=', $filters['date_from']);
+        }
+        
+        if (!empty($filters['date_to'])) {
+            $this->db->where('ev.arrival_time <=', $filters['date_to']);
+        }
+        
+        $this->db->order_by('ev.arrival_time', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Get patient history (completed visits)
+     */
+    public function get_patient_history($filters = []) {
+        $this->db->select('
+            ev.*,
+            p.id as patient_db_id,
+            p.patient_id as patient_uhid,
+            p.name as patient_name,
+            p.age as patient_age,
+            p.gender as patient_gender,
+            d.name as doctor_name,
+            n.name as nurse_name
+        ');
+        $this->db->from('emergency_visits ev');
+        $this->db->join('patients p', 'p.id = ev.patient_id', 'left');
+        $this->db->join('users d', 'd.id = ev.assigned_doctor_id', 'left');
+        $this->db->join('users n', 'n.id = ev.assigned_nurse_id', 'left');
+        
+        // Filter for completed visits
+        $this->db->where('ev.current_status', 'completed');
+        
+        // Apply additional filters
+        if (!empty($filters['patient_id'])) {
+            $this->db->where('ev.patient_id', $filters['patient_id']);
+        }
+        
+        if (!empty($filters['search'])) {
+            $search = $this->db->escape_like_str($filters['search']);
+            $this->db->group_start();
+            $this->db->like('ev.er_number', $search);
+            $this->db->or_like('p.name', $search);
+            $this->db->or_like('p.patient_id', $search);
+            $this->db->or_like('ev.chief_complaint', $search);
+            $this->db->or_like('ev.primary_diagnosis', $search);
+            $this->db->group_end();
+        }
+        
+        if (!empty($filters['date_from'])) {
+            $this->db->where('ev.arrival_time >=', $filters['date_from']);
+        }
+        
+        if (!empty($filters['date_to'])) {
+            $this->db->where('ev.arrival_time <=', $filters['date_to']);
+        }
+        
+        if (!empty($filters['disposition'])) {
+            $this->db->where('ev.disposition', $filters['disposition']);
+        }
+        
+        $this->db->order_by('ev.arrival_time', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Update ward assignment for emergency visit
+     */
+    public function update_ward_assignment($visit_id, $ward_id, $bed_id) {
+        $visit = $this->get_by_id($visit_id);
+        if (!$visit) {
+            return ['success' => false, 'message' => 'Emergency visit not found'];
+        }
+        
+        $update_data = [];
+        
+        if ($ward_id !== null) {
+            $update_data['assigned_ward_id'] = $ward_id;
+        }
+        
+        if ($bed_id !== null) {
+            $update_data['assigned_ward_bed_id'] = $bed_id;
+            
+            // Update bed status if bed_id is provided
+            if ($this->db->table_exists('emergency_ward_beds')) {
+                $this->load->model('Emergency_ward_bed_model');
+                $this->Emergency_ward_bed_model->assign_patient($bed_id, $visit_id);
+            }
+        }
+        
+        if (!empty($update_data)) {
+            $this->db->where('id', $visit_id);
+            $this->db->update('emergency_visits', $update_data);
+        }
+        
+        return ['success' => true, 'message' => 'Ward assignment updated'];
+    }
+
+    /**
+     * Transfer patient (creates transfer record and updates assignments)
+     */
+    public function transfer_patient($visit_id, $transfer_data) {
+        // Validate visit exists
+        $visit = $this->get_by_id($visit_id);
+        if (!$visit) {
+            log_message('error', 'Transfer failed: Emergency visit ' . $visit_id . ' not found');
+            return ['success' => false, 'message' => 'Emergency visit not found'];
+        }
+        
+        // Ensure emergency_visit_id is set in transfer_data
+        $transfer_data['emergency_visit_id'] = intval($visit_id);
+        
+        // Create transfer record
+        $this->load->model('Emergency_transfer_model');
+        $transfer_id = $this->Emergency_transfer_model->create($transfer_data);
+        
+        if (!$transfer_id) {
+            $error = $this->db->error();
+            log_message('error', 'Failed to create transfer record: ' . json_encode($error));
+            return ['success' => false, 'message' => 'Failed to create transfer record. Please check database table exists and required fields are provided.'];
+        }
+        
+        // Update visit with new ward/bed assignment if internal transfer
+        if (isset($transfer_data['transfer_type']) && $transfer_data['transfer_type'] === 'internal' && isset($transfer_data['to_ward_id'])) {
+            $this->update_ward_assignment(
+                $visit_id,
+                $transfer_data['to_ward_id'],
+                $transfer_data['to_bed_id'] ?? null
+            );
+        }
+        
+        log_message('info', 'Patient transfer created successfully: Visit ID ' . $visit_id . ', Transfer ID ' . $transfer_id);
+        return ['success' => true, 'transfer_id' => $transfer_id, 'message' => 'Patient transferred successfully'];
+    }
+
+    // ============================================
+    // PATIENT FILES METHODS
+    // ============================================
+
+    /**
+     * Get all patient files for an emergency visit
+     */
+    public function get_patient_files($visit_id) {
+        if (!$this->db->table_exists('emergency_patient_files')) {
+            return array();
+        }
+
+        $this->db->select('epf.*, u.name as uploaded_by_name');
+        $this->db->from('emergency_patient_files epf');
+        $this->db->join('users u', 'u.id = epf.uploaded_by', 'left');
+        $this->db->where('epf.emergency_visit_id', $visit_id);
+        $this->db->order_by('epf.uploaded_at', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Upload a patient file
+     */
+    public function upload_patient_file($visit_id, $file_data) {
+        if (!$this->db->table_exists('emergency_patient_files')) {
+            return false;
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'file_name' => $file_data['file_name'],
+            'file_type' => $file_data['file_type'] ?? null,
+            'file_path' => $file_data['file_path'],
+            'file_size' => isset($file_data['file_size']) ? intval($file_data['file_size']) : null,
+            'category' => $file_data['category'] ?? 'Other',
+            'description' => $file_data['description'] ?? null,
+            'uploaded_by' => isset($file_data['uploaded_by']) ? intval($file_data['uploaded_by']) : null,
+            'uploaded_at' => date('Y-m-d H:i:s')
+        );
+
+        if ($this->db->insert('emergency_patient_files', $insert_data)) {
+            return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert patient file: ' . json_encode($error));
+            return false;
+        }
+    }
+
+    /**
+     * Delete a patient file
+     */
+    public function delete_patient_file($file_id) {
+        if (!$this->db->table_exists('emergency_patient_files')) {
+            return false;
+        }
+
+        $this->db->where('id', $file_id);
+        return $this->db->delete('emergency_patient_files');
+    }
+
+    // ============================================
+    // INTAKE & OUTPUT METHODS
+    // ============================================
+
+    /**
+     * Get intake/output records for an emergency visit
+     */
+    public function get_intake_output($visit_id, $filters = array()) {
+        if (!$this->db->table_exists('emergency_intake_output')) {
+            return array();
+        }
+
+        $this->db->select('eio.*, u.name as recorded_by_name');
+        $this->db->from('emergency_intake_output eio');
+        $this->db->join('users u', 'u.id = eio.recorded_by', 'left');
+        $this->db->where('eio.emergency_visit_id', $visit_id);
+
+        if (!empty($filters['date_from'])) {
+            $this->db->where('eio.record_time >=', $filters['date_from']);
+        }
+        if (!empty($filters['date_to'])) {
+            $this->db->where('eio.record_time <=', $filters['date_to']);
+        }
+
+        $this->db->order_by('eio.record_time', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Add intake/output record
+     */
+    public function add_intake_output($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_intake_output')) {
+            return false;
+        }
+
+        $intake_amount = isset($data['intake_amount_ml']) ? floatval($data['intake_amount_ml']) : 0.00;
+        $output_amount = isset($data['output_amount_ml']) ? floatval($data['output_amount_ml']) : 0.00;
+        $balance = $intake_amount - $output_amount;
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'record_time' => isset($data['record_time']) ? $data['record_time'] : date('Y-m-d H:i:s'),
+            'intake_type' => $data['intake_type'] ?? null,
+            'intake_amount_ml' => $intake_amount,
+            'output_type' => $data['output_type'] ?? null,
+            'output_amount_ml' => $output_amount,
+            'balance_ml' => $balance,
+            'recorded_by' => isset($data['recorded_by']) ? intval($data['recorded_by']) : null,
+            'notes' => $data['notes'] ?? null
+        );
+
+        if ($this->db->insert('emergency_intake_output', $insert_data)) {
+            return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert intake/output: ' . json_encode($error));
+            return false;
+        }
+    }
+
+    // ============================================
+    // BLOOD BANK METHODS
+    // ============================================
+
+    /**
+     * Get blood bank requests for an emergency visit
+     */
+    public function get_blood_bank_requests($visit_id) {
+        if (!$this->db->table_exists('emergency_blood_bank_requests')) {
+            return array();
+        }
+
+        $this->db->select('ebbr.*, u1.name as requested_by_name, u2.name as issued_by_name');
+        $this->db->from('emergency_blood_bank_requests ebbr');
+        $this->db->join('users u1', 'u1.id = ebbr.requested_by', 'left');
+        $this->db->join('users u2', 'u2.id = ebbr.issued_by', 'left');
+        $this->db->where('ebbr.emergency_visit_id', $visit_id);
+        $this->db->order_by('ebbr.request_date', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Create blood bank request
+     */
+    public function create_blood_bank_request($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_blood_bank_requests')) {
+            return false;
+        }
+
+        // Generate request number if not provided
+        if (empty($data['request_number'])) {
+            $year = date('Y');
+            $this->db->select('request_number');
+            $this->db->like('request_number', 'BB-' . $year . '-', 'after');
+            $this->db->order_by('id', 'DESC');
+            $this->db->limit(1);
+            $query = $this->db->get('emergency_blood_bank_requests');
+            $last_request = $query->row_array();
+            
+            if ($last_request && preg_match('/BB-' . $year . '-(\d+)/', $last_request['request_number'], $matches)) {
+                $next_number = intval($matches[1]) + 1;
+            } else {
+                $next_number = 1;
+            }
+            $data['request_number'] = 'BB-' . $year . '-' . str_pad($next_number, 3, '0', STR_PAD_LEFT);
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'request_number' => $data['request_number'],
+            'product_type' => $data['product_type'],
+            'units' => isset($data['units']) ? intval($data['units']) : 1,
+            'request_date' => isset($data['request_date']) ? $data['request_date'] : date('Y-m-d H:i:s'),
+            'urgency' => $data['urgency'] ?? 'Routine',
+            'status' => $data['status'] ?? 'Requested',
+            'requested_by' => isset($data['requested_by']) ? intval($data['requested_by']) : null,
+            'cross_match_status' => $data['cross_match_status'] ?? 'Pending',
+            'notes' => $data['notes'] ?? null
+        );
+
+        if ($this->db->insert('emergency_blood_bank_requests', $insert_data)) {
+            return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert blood bank request: ' . json_encode($error));
+            return false;
+        }
+    }
+
+    /**
+     * Update blood bank request status
+     */
+    public function update_blood_request_status($request_id, $status, $additional_data = array()) {
+        if (!$this->db->table_exists('emergency_blood_bank_requests')) {
+            return false;
+        }
+
+        $update_data = array('status' => $status);
+        
+        if ($status === 'Issued' && !isset($additional_data['issued_at'])) {
+            $update_data['issued_at'] = date('Y-m-d H:i:s');
+        }
+        if (isset($additional_data['issued_by'])) {
+            $update_data['issued_by'] = intval($additional_data['issued_by']);
+        }
+        if (isset($additional_data['transfusion_date'])) {
+            $update_data['transfusion_date'] = $additional_data['transfusion_date'];
+        }
+        if (isset($additional_data['transfusion_start_time'])) {
+            $update_data['transfusion_start_time'] = $additional_data['transfusion_start_time'];
+        }
+        if (isset($additional_data['transfusion_end_time'])) {
+            $update_data['transfusion_end_time'] = $additional_data['transfusion_end_time'];
+        }
+        if (isset($additional_data['reaction_notes'])) {
+            $update_data['reaction_notes'] = $additional_data['reaction_notes'];
+        }
+        if (isset($additional_data['notes'])) {
+            $update_data['notes'] = $additional_data['notes'];
+        }
+
+        $this->db->where('id', $request_id);
+        return $this->db->update('emergency_blood_bank_requests', $update_data);
+    }
+
+    // ============================================
+    // HEALTH & PHYSICAL METHODS
+    // ============================================
+
+    /**
+     * Get health & physical records for an emergency visit
+     */
+    public function get_health_physical($visit_id) {
+        if (!$this->db->table_exists('emergency_health_physical')) {
+            return array();
+        }
+
+        $this->db->select('ehp.*, u.name as provider_name');
+        $this->db->from('emergency_health_physical ehp');
+        $this->db->join('users u', 'u.id = ehp.provider_id', 'left');
+        $this->db->where('ehp.emergency_visit_id', $visit_id);
+        $this->db->order_by('ehp.examination_date', 'DESC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+
+    /**
+     * Create health & physical record
+     */
+    public function create_health_physical($visit_id, $data) {
+        if (!$this->db->table_exists('emergency_health_physical')) {
+            return false;
+        }
+
+        // Get provider name if provider_id is provided
+        $provider_name = null;
+        if (!empty($data['provider_id'])) {
+            $this->db->select('name');
+            $this->db->where('id', $data['provider_id']);
+            $query = $this->db->get('users');
+            $user = $query->row_array();
+            if ($user) {
+                $provider_name = $user['name'];
+            }
+        }
+
+        $insert_data = array(
+            'emergency_visit_id' => intval($visit_id),
+            'examination_date' => isset($data['examination_date']) ? $data['examination_date'] : date('Y-m-d H:i:s'),
+            'chief_complaint' => $data['chief_complaint'] ?? null,
+            'history_of_present_illness' => $data['history_of_present_illness'] ?? null,
+            'past_medical_history' => $data['past_medical_history'] ?? null,
+            'allergies' => $data['allergies'] ?? null,
+            'medications' => $data['medications'] ?? null,
+            'social_history' => $data['social_history'] ?? null,
+            'family_history' => $data['family_history'] ?? null,
+            'review_of_systems' => $data['review_of_systems'] ?? null,
+            'physical_examination' => $data['physical_examination'] ?? '',
+            'assessment' => $data['assessment'] ?? null,
+            'plan' => $data['plan'] ?? null,
+            'provider_id' => isset($data['provider_id']) ? intval($data['provider_id']) : null,
+            'provider_name' => $provider_name
+        );
+
+        if ($this->db->insert('emergency_health_physical', $insert_data)) {
+            return $this->db->insert_id();
+        } else {
+            $error = $this->db->error();
+            log_message('error', 'Failed to insert health & physical: ' . json_encode($error));
+            return false;
+        }
     }
 }

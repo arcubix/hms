@@ -46,7 +46,7 @@ import {
   Eye,
   Trash2
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface EmergencyPatientDetailProps {
@@ -347,6 +347,55 @@ export function EmergencyPatientDetail({ visit, onClose, onUpdate }: EmergencyPa
                 </CardContent>
               </Card>
             </div>
+
+            {/* Current Vital Signs */}
+            <Card>
+              <CardHeader className="bg-gradient-to-r from-green-50 to-teal-50">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-green-600" />
+                  Current Vital Signs
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-3">
+                {(() => {
+                  // Get the latest vital sign record - sort by recorded_at descending to get most recent
+                  const vitalsArray = Array.isArray(vitalsHistory) ? vitalsHistory : [];
+                  const sortedVitals = [...vitalsArray].sort((a, b) => {
+                    const dateA = new Date(a.recorded_at || a.created_at || 0).getTime();
+                    const dateB = new Date(b.recorded_at || b.created_at || 0).getTime();
+                    return dateB - dateA; // Descending order (newest first)
+                  });
+                  const latestVital = sortedVitals.length > 0 ? sortedVitals[0] : null;
+                  
+                  return (
+                    <>
+                      <div className="flex items-center justify-between p-2 bg-red-50 rounded">
+                        <span className="text-sm text-gray-600">Blood Pressure</span>
+                        <span className="font-bold text-red-700">{latestVital?.bp || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <span className="text-sm text-gray-600">Pulse Rate</span>
+                        <span className="font-bold text-blue-700">{latestVital?.pulse !== undefined && latestVital.pulse !== null ? `${latestVital.pulse} bpm` : 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-orange-50 rounded">
+                        <span className="text-sm text-gray-600">Temperature</span>
+                        <span className="font-bold text-orange-700">{latestVital?.temp !== undefined && latestVital.temp !== null ? `${latestVital.temp}°F` : 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-green-50 rounded">
+                        <span className="text-sm text-gray-600">SpO2</span>
+                        <span className="font-bold text-green-700">{latestVital?.spo2 !== undefined && latestVital.spo2 !== null ? `${latestVital.spo2}%` : 'N/A'}</span>
+                      </div>
+                      {latestVital?.resp !== undefined && latestVital.resp !== null && (
+                        <div className="flex items-center justify-between p-2 bg-purple-50 rounded">
+                          <span className="text-sm text-gray-600">Respiratory Rate</span>
+                          <span className="font-bold text-purple-700">{latestVital.resp} /min</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
 
             {/* Status Transitions */}
             <Card>

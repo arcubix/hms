@@ -209,34 +209,58 @@ export function ViewEmergencyPatientDetails({ patient, onClose, onEdit }: ViewEm
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-red-600" />
-                      <span className="text-sm">Blood Pressure</span>
-                    </div>
-                    <span className="font-bold text-red-700">{patient.vitalSigns.bp}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Heart className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm">Pulse Rate</span>
-                    </div>
-                    <span className="font-bold text-blue-700">{patient.vitalSigns.pulse} bpm</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Thermometer className="w-4 h-4 text-orange-600" />
-                      <span className="text-sm">Temperature</span>
-                    </div>
-                    <span className="font-bold text-orange-700">{patient.vitalSigns.temp}°F</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Droplet className="w-4 h-4 text-green-600" />
-                      <span className="text-sm">SpO2</span>
-                    </div>
-                    <span className="font-bold text-green-700">{patient.vitalSigns.spo2}%</span>
-                  </div>
+                  {(() => {
+                    // Get the latest vital sign from the vitals array
+                    const vitalsArray = Array.isArray(patient.vitals) ? patient.vitals : [];
+                    const sortedVitals = [...vitalsArray].sort((a, b) => {
+                      const dateA = new Date(a.recorded_at || a.created_at || 0).getTime();
+                      const dateB = new Date(b.recorded_at || b.created_at || 0).getTime();
+                      return dateB - dateA; // Descending order (newest first)
+                    });
+                    const latestVital = sortedVitals.length > 0 ? sortedVitals[0] : null;
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-red-600" />
+                            <span className="text-sm">Blood Pressure</span>
+                          </div>
+                          <span className="font-bold text-red-700">{latestVital?.bp || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Heart className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm">Pulse Rate</span>
+                          </div>
+                          <span className="font-bold text-blue-700">{latestVital?.pulse !== undefined && latestVital.pulse !== null ? `${latestVital.pulse} bpm` : 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Thermometer className="w-4 h-4 text-orange-600" />
+                            <span className="text-sm">Temperature</span>
+                          </div>
+                          <span className="font-bold text-orange-700">{latestVital?.temp !== undefined && latestVital.temp !== null ? `${latestVital.temp}°F` : 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Droplet className="w-4 h-4 text-green-600" />
+                            <span className="text-sm">SpO2</span>
+                          </div>
+                          <span className="font-bold text-green-700">{latestVital?.spo2 !== undefined && latestVital.spo2 !== null ? `${latestVital.spo2}%` : 'N/A'}</span>
+                        </div>
+                        {latestVital?.resp !== undefined && latestVital.resp !== null && (
+                          <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <Activity className="w-4 h-4 text-purple-600" />
+                              <span className="text-sm">Respiratory Rate</span>
+                            </div>
+                            <span className="font-bold text-purple-700">{latestVital.resp} /min</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>

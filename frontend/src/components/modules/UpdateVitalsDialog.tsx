@@ -3,7 +3,8 @@
  * Modal for updating patient vital signs
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -16,17 +17,28 @@ import {
   Thermometer,
   Droplets,
   Wind,
-  Save
+  Save,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 interface UpdateVitalsDialogProps {
   patient: any;
+  visitId: number;
   onClose: () => void;
   onSave?: () => void;
 }
 
-export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDialogProps) {
+export function UpdateVitalsDialog({ patient, visitId, onClose, onSave }: UpdateVitalsDialogProps) {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
   const [formData, setFormData] = useState({
     bloodPressureSystolic: '120',
     bloodPressureDiastolic: '80',
@@ -40,16 +52,119 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
     notes: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success('Vitals updated successfully!');
-    onSave?.();
-    onClose();
+    
+    if (!visitId) {
+      toast.error('Visit ID is required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Format BP as "systolic/diastolic"
+      const bp = `${formData.bloodPressureSystolic}/${formData.bloodPressureDiastolic}`;
+      
+      const vitalsData = {
+        bp: bp,
+        pulse: parseInt(formData.heartRate) || null,
+        temp: parseFloat(formData.temperature) || null,
+        spo2: parseInt(formData.spo2) || null,
+        resp: parseInt(formData.respiratoryRate) || null,
+        pain_score: parseInt(formData.painScale) || null,
+        notes: formData.notes || null
+      };
+
+      const result = await api.recordEmergencyVitals(visitId, vitalsData);
+      console.log('Vitals recorded successfully, API result:', result);
+      toast.success('Vitals updated successfully!');
+      onSave?.();
+      onClose();
+    } catch (error: any) {
+      console.error('Error recording vitals:', error);
+      toast.error('Failed to update vitals: ' + (error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+  if (!document.body) return null;
+
+  const dialogContent = (
+    <>
+      {/* Overlay */}
+      <div 
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          zIndex: 99998
+        }}
+      />
+      {/* Dialog */}
+      <div 
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+          pointerEvents: 'auto'
+        }}
+      >
+        <div 
+          className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          style={{
+            width: '100%',
+            maxWidth: '56rem',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            pointerEvents: 'auto'
+          }}
+        >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-teal-50">
           <div>
@@ -67,7 +182,12 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
+        <form 
+          onSubmit={handleSubmit} 
+          className="flex-1 overflow-y-auto p-6"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="space-y-6">
             {/* Primary Vital Signs */}
             <Card>
@@ -88,6 +208,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                         placeholder="Systolic"
                         value={formData.bloodPressureSystolic}
                         onChange={(e) => setFormData({ ...formData, bloodPressureSystolic: e.target.value })}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className="w-1/2"
                         required
                       />
@@ -97,6 +219,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                         placeholder="Diastolic"
                         value={formData.bloodPressureDiastolic}
                         onChange={(e) => setFormData({ ...formData, bloodPressureDiastolic: e.target.value })}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className="w-1/2"
                         required
                       />
@@ -114,6 +238,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="72"
                       value={formData.heartRate}
                       onChange={(e) => setFormData({ ...formData, heartRate: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       required
                     />
                   </div>
@@ -130,6 +256,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="98.6"
                       value={formData.temperature}
                       onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       required
                     />
                   </div>
@@ -145,6 +273,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="98"
                       value={formData.spo2}
                       onChange={(e) => setFormData({ ...formData, spo2: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       required
                     />
                   </div>
@@ -160,6 +290,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="16"
                       value={formData.respiratoryRate}
                       onChange={(e) => setFormData({ ...formData, respiratoryRate: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       required
                     />
                   </div>
@@ -174,6 +306,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="0"
                       value={formData.painScale}
                       onChange={(e) => setFormData({ ...formData, painScale: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       required
                     />
                   </div>
@@ -197,6 +331,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="70"
                       value={formData.weight}
                       onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                     />
                   </div>
 
@@ -208,6 +344,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                       placeholder="175"
                       value={formData.height}
                       onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                     />
                   </div>
                 </div>
@@ -225,6 +363,8 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
                   rows={4}
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 />
               </CardContent>
             </Card>
@@ -232,19 +372,41 @@ export function UpdateVitalsDialog({ patient, onClose, onSave }: UpdateVitalsDia
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
-          <Button variant="outline" onClick={onClose}>
+        <div 
+          className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            type="button"
+          >
             Cancel
           </Button>
           <Button 
             className="bg-green-600 hover:bg-green-700"
             onClick={handleSubmit}
+            disabled={loading}
+            type="submit"
           >
-            <Save className="w-4 h-4 mr-2" />
-            Save Vitals
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Vitals
+              </>
+            )}
           </Button>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
+
+  return createPortal(dialogContent, document.body);
 }

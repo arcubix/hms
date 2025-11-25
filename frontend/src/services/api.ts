@@ -857,6 +857,135 @@ class ApiService {
     return data.data || [];
   }
 
+  async getEmergencyVisit(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+    }>(`/api/emergency/visits/${visitId}`);
+    return data.data;
+  }
+
+  async getEmergencyPatientFiles(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyPatientFile[];
+    }>(`/api/emergency/visits/${visitId}/files`);
+    return data.data || [];
+  }
+
+  async uploadEmergencyPatientFile(visitId: number, fileData: CreateEmergencyPatientFileData) {
+    const formData = new FormData();
+    Object.keys(fileData).forEach(key => {
+      if (fileData[key as keyof CreateEmergencyPatientFileData] !== undefined) {
+        formData.append(key, fileData[key as keyof CreateEmergencyPatientFileData] as string | Blob);
+      }
+    });
+
+    const data = await this.request<{
+      success: boolean;
+      data: { id: number };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/files`, {
+      method: 'POST',
+      body: formData,
+    });
+    return data.data;
+  }
+
+  async deleteEmergencyPatientFile(visitId: number, fileId: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/files/${fileId}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getEmergencyIntakeOutput(visitId: number, filters?: { date_from?: string; date_to?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyIntakeOutput[];
+    }>(`/api/emergency/visits/${visitId}/intake-output${query}`);
+    return data.data || [];
+  }
+
+  async addEmergencyIntakeOutput(visitId: number, ioData: CreateEmergencyIntakeOutputData) {
+    const data = await this.request<{
+      success: boolean;
+      data: { id: number };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/intake-output`, {
+      method: 'POST',
+      body: JSON.stringify(ioData),
+    });
+    return data.data;
+  }
+
+  async getEmergencyBloodBankRequests(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyBloodBankRequest[];
+    }>(`/api/emergency/visits/${visitId}/blood-bank`);
+    return data.data || [];
+  }
+
+  async createEmergencyBloodBankRequest(visitId: number, requestData: CreateEmergencyBloodBankRequestData) {
+    const data = await this.request<{
+      success: boolean;
+      data: { id: number };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/blood-bank`, {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyBloodBankRequest(visitId: number, requestId: number, updateData: UpdateEmergencyBloodBankRequestData) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/blood-bank/${requestId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    });
+    return data;
+  }
+
+  async getEmergencyHealthPhysical(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyHealthPhysical[];
+    }>(`/api/emergency/visits/${visitId}/health-physical`);
+    return data.data || [];
+  }
+
+  async createEmergencyHealthPhysical(visitId: number, hpData: CreateEmergencyHealthPhysicalData) {
+    const data = await this.request<{
+      success: boolean;
+      data: { id: number };
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/health-physical`, {
+      method: 'POST',
+      body: JSON.stringify(hpData),
+    });
+    return data.data;
+  }
+
+  async getEmergencyTimeline(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyStatusHistory[];
+    }>(`/api/emergency/visits/${visitId}/timeline`);
+    return data.data || [];
+  }
+
   async createIPDAdmissionFromER(visitId: number, admissionData: CreateIPDAdmissionData) {
     const data = await this.request<{
       success: boolean;
@@ -865,6 +994,402 @@ class ApiService {
     }>(`/api/emergency/visits/${visitId}/admit-ipd`, {
       method: 'POST',
       body: JSON.stringify(admissionData),
+    });
+    return data.data;
+  }
+
+  // ============================================
+  // EMERGENCY MODULE NEW API METHODS
+  // ============================================
+
+  // Admitted Patients
+  async getAdmittedEmergencyPatients(filters?: {
+    search?: string;
+    status?: string;
+    triage_level?: number;
+    ward_id?: number;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.triage_level) params.append('triage_level', filters.triage_level.toString());
+    if (filters?.ward_id) params.append('ward_id', filters.ward_id.toString());
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/admitted-patients${query}`);
+    return data.data || [];
+  }
+
+  // Emergency History
+  async getEmergencyHistory(filters?: {
+    search?: string;
+    patient_id?: number;
+    disposition?: string;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.patient_id) params.append('patient_id', filters.patient_id.toString());
+    if (filters?.disposition) params.append('disposition', filters.disposition);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/history${query}`);
+    return data.data || [];
+  }
+
+  // Wards Management
+  async getEmergencyWards(filters?: {
+    search?: string;
+    status?: string;
+    type?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.type) params.append('type', filters.type);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/wards${query}`);
+    return data.data || [];
+  }
+
+  async getEmergencyWard(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/emergency/wards/${id}`);
+    return data.data;
+  }
+
+  async createEmergencyWard(wardData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/emergency/wards', {
+      method: 'POST',
+      body: JSON.stringify(wardData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyWard(id: number, wardData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/wards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(wardData),
+    });
+    return data.data;
+  }
+
+  async deleteEmergencyWard(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/emergency/wards/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getEmergencyWardStats(wardId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/emergency/wards/${wardId}/stats`);
+    return data.data;
+  }
+
+  // Ward Beds Management
+  async getEmergencyWardBeds(filters?: {
+    ward_id?: number;
+    status?: string;
+    bed_type?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.ward_id) params.append('ward_id', filters.ward_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.bed_type) params.append('bed_type', filters.bed_type);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/ward-beds${query}`);
+    return data.data || [];
+  }
+
+  async getEmergencyWardBed(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/emergency/ward-beds/${id}`);
+    return data.data;
+  }
+
+  async createEmergencyWardBed(bedData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/emergency/ward-beds', {
+      method: 'POST',
+      body: JSON.stringify(bedData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyWardBed(id: number, bedData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/ward-beds/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(bedData),
+    });
+    return data.data;
+  }
+
+  async assignWardBed(bedId: number, visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/ward-beds/${bedId}/assign`, {
+      method: 'PUT',
+      body: JSON.stringify({ visit_id: visitId }),
+    });
+    return data.data;
+  }
+
+  async releaseWardBed(bedId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/ward-beds/${bedId}/release`, {
+      method: 'PUT',
+    });
+    return data.data;
+  }
+
+  async getAvailableWardBeds(wardId?: number) {
+    const params = wardId ? `?ward_id=${wardId}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/ward-beds/available${params}`);
+    return data.data || [];
+  }
+
+  // Duty Roster
+  async getEmergencyDutyRoster(filters?: {
+    user_id?: number;
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    shift_type?: string;
+    status?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.user_id) params.append('user_id', filters.user_id.toString());
+    if (filters?.date) params.append('date', filters.date);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.shift_type) params.append('shift_type', filters.shift_type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/duty-roster${query}`);
+    return data.data || [];
+  }
+
+  async createEmergencyDutyRoster(rosterData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/emergency/duty-roster', {
+      method: 'POST',
+      body: JSON.stringify(rosterData),
+    });
+    return data.data;
+  }
+
+  async updateEmergencyDutyRoster(id: number, rosterData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/duty-roster/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(rosterData),
+    });
+    return data.data;
+  }
+
+  async deleteEmergencyDutyRoster(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/emergency/duty-roster/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getEmergencyDutyRosterByDate(date: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/duty-roster/date/${date}`);
+    return data.data || [];
+  }
+
+  async getCurrentDutyStaff() {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>('/api/emergency/duty-roster/current');
+    return data.data || [];
+  }
+
+  // Patient Transfers
+  async createEmergencyTransfer(transferData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/emergency/transfers', {
+      method: 'POST',
+      body: JSON.stringify(transferData),
+    });
+    return data.data;
+  }
+
+  async getEmergencyTransfers(filters?: {
+    transfer_type?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.transfer_type) params.append('transfer_type', filters.transfer_type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/transfers${query}`);
+    return data.data || [];
+  }
+
+  async getEmergencyTransfersByVisit(visitId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/transfers/visit/${visitId}`);
+    return data.data || [];
+  }
+
+  // Ambulance Requests
+  async createAmbulanceRequest(requestData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/emergency/ambulance-requests', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async getAmbulanceRequests(filters?: {
+    status?: string;
+    service_type?: string;
+    priority?: string;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.service_type) params.append('service_type', filters.service_type);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/emergency/ambulance-requests${query}`);
+    return data.data || [];
+  }
+
+  async updateAmbulanceRequestStatus(id: number, status: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/emergency/ambulance-requests/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return data.data;
+  }
+
+  async getEmergencyAmbulanceAvailability() {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>('/api/emergency/ambulance-requests/available');
+    return data.data || [];
+  }
+
+  // Ward Assignment
+  async updateWardAssignment(visitId: number, wardId: number | null, bedId: number | null) {
+    const data = await this.request<{
+      success: boolean;
+      data: EmergencyVisit;
+      message: string;
+    }>(`/api/emergency/visits/${visitId}/ward-assignment`, {
+      method: 'PUT',
+      body: JSON.stringify({ ward_id: wardId, bed_id: bedId }),
     });
     return data.data;
   }
@@ -3193,6 +3718,136 @@ export interface EmergencyStatusHistory {
   changed_by_name?: string;
   changed_at: string;
   notes?: string;
+}
+
+export interface EmergencyPatientFile {
+  id: number;
+  emergency_visit_id: number;
+  file_name: string;
+  file_type?: string;
+  file_path: string;
+  file_size?: number;
+  category: 'Lab Results' | 'Radiology' | 'Forms' | 'Consent' | 'ECG' | 'Medical History' | 'Other';
+  description?: string;
+  uploaded_by?: number;
+  uploaded_by_name?: string;
+  uploaded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyPatientFileData {
+  file_name: string;
+  file_type?: string;
+  file_path: string;
+  file_size?: number;
+  category?: 'Lab Results' | 'Radiology' | 'Forms' | 'Consent' | 'ECG' | 'Medical History' | 'Other';
+  description?: string;
+}
+
+export interface EmergencyIntakeOutput {
+  id: number;
+  emergency_visit_id: number;
+  record_time: string;
+  intake_type?: 'IV Fluids' | 'Oral (Water)' | 'Oral (Food)' | 'NG Tube' | 'PEG Tube' | 'TPN' | 'Blood Products' | 'Other';
+  intake_amount_ml: number;
+  output_type?: 'Urine' | 'Drainage' | 'NG Aspirate' | 'Vomitus' | 'Stool' | 'Blood Loss' | 'Other';
+  output_amount_ml: number;
+  balance_ml: number;
+  recorded_by?: number;
+  recorded_by_name?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyIntakeOutputData {
+  record_time?: string;
+  intake_type?: 'IV Fluids' | 'Oral (Water)' | 'Oral (Food)' | 'NG Tube' | 'PEG Tube' | 'TPN' | 'Blood Products' | 'Other';
+  intake_amount_ml?: number;
+  output_type?: 'Urine' | 'Drainage' | 'NG Aspirate' | 'Vomitus' | 'Stool' | 'Blood Loss' | 'Other';
+  output_amount_ml?: number;
+  notes?: string;
+}
+
+export interface EmergencyBloodBankRequest {
+  id: number;
+  emergency_visit_id: number;
+  request_number?: string;
+  product_type: 'Packed Red Blood Cells' | 'Fresh Frozen Plasma' | 'Platelets' | 'Cryoprecipitate' | 'Whole Blood' | 'Albumin' | 'Other';
+  units: number;
+  request_date: string;
+  urgency: 'Routine' | 'Urgent' | 'Emergency';
+  status: 'Requested' | 'Processing' | 'Ready' | 'Issued' | 'Transfused' | 'Cancelled';
+  requested_by?: number;
+  requested_by_name?: string;
+  issued_at?: string;
+  issued_by?: number;
+  issued_by_name?: string;
+  transfusion_date?: string;
+  transfusion_start_time?: string;
+  transfusion_end_time?: string;
+  reaction_notes?: string;
+  cross_match_status?: 'Pending' | 'Compatible' | 'Incompatible' | 'Not Required';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyBloodBankRequestData {
+  product_type: 'Packed Red Blood Cells' | 'Fresh Frozen Plasma' | 'Platelets' | 'Cryoprecipitate' | 'Whole Blood' | 'Albumin' | 'Other';
+  units: number;
+  request_date?: string;
+  urgency?: 'Routine' | 'Urgent' | 'Emergency';
+  cross_match_status?: 'Pending' | 'Compatible' | 'Incompatible' | 'Not Required';
+  notes?: string;
+}
+
+export interface UpdateEmergencyBloodBankRequestData {
+  status?: 'Requested' | 'Processing' | 'Ready' | 'Issued' | 'Transfused' | 'Cancelled';
+  issued_by?: number;
+  transfusion_date?: string;
+  transfusion_start_time?: string;
+  transfusion_end_time?: string;
+  reaction_notes?: string;
+  notes?: string;
+}
+
+export interface EmergencyHealthPhysical {
+  id: number;
+  emergency_visit_id: number;
+  examination_date: string;
+  chief_complaint?: string;
+  history_of_present_illness?: string;
+  past_medical_history?: string;
+  allergies?: string;
+  medications?: string;
+  social_history?: string;
+  family_history?: string;
+  review_of_systems?: string;
+  physical_examination: string;
+  assessment?: string;
+  plan?: string;
+  provider_id?: number;
+  provider_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmergencyHealthPhysicalData {
+  examination_date?: string;
+  chief_complaint?: string;
+  history_of_present_illness?: string;
+  past_medical_history?: string;
+  allergies?: string;
+  medications?: string;
+  social_history?: string;
+  family_history?: string;
+  review_of_systems?: string;
+  physical_examination: string;
+  assessment?: string;
+  plan?: string;
+  provider_id?: number;
 }
 
 export interface CreateIPDAdmissionData {
