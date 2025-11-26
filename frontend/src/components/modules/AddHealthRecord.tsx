@@ -51,6 +51,8 @@ interface AddHealthRecordProps {
   onBack: () => void;
   onEdit?: () => void; // Callback for edit button in view mode
   isFromAdmin?: boolean; // Indicates if called from admin dashboard
+  doctorId?: string | number; // Preload doctor ID when coming from appointment
+  onPrescriptionSaved?: () => void; // Callback when prescription is successfully saved
 }
 
 interface Medication {
@@ -77,14 +79,14 @@ interface VitalsData {
   bodySurfaceArea: string;
 }
 
-export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescriptionId, mode = 'add', onBack, onEdit, isFromAdmin = false }: AddHealthRecordProps) {
+export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescriptionId, mode = 'add', onBack, onEdit, isFromAdmin = false, doctorId, onPrescriptionSaved }: AddHealthRecordProps) {
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
   
-  // Debug: Log when component receives isFromAdmin prop
+  // Debug: Log when component receives props
   useEffect(() => {
-    console.log('AddHealthRecord - isFromAdmin:', isFromAdmin, 'mode:', mode, 'prescriptionId:', prescriptionId);
-  }, [isFromAdmin, mode, prescriptionId]);
+    console.log('AddHealthRecord - isFromAdmin:', isFromAdmin, 'mode:', mode, 'prescriptionId:', prescriptionId, 'doctorId prop:', doctorId);
+  }, [isFromAdmin, mode, prescriptionId, doctorId]);
   
   const [activeTab, setActiveTab] = useState('prescription');
   const [expansionMode, setExpansionMode] = useState(false);
@@ -115,29 +117,6 @@ export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescrip
   useEffect(() => {
     loadRadiologyTests();
   }, []);
-
-  // Fetch doctors when from admin
-  useEffect(() => {
-    if (isFromAdmin) {
-      console.log('Loading doctors for admin...');
-      loadDoctors();
-    }
-  }, [isFromAdmin]);
-
-  const loadDoctors = async () => {
-    try {
-      setLoadingDoctors(true);
-      // Load all doctors, not just available ones, so admin can select any doctor
-      const doctorsData = await api.getDoctors();
-      console.log('Loaded doctors:', doctorsData);
-      setDoctors(doctorsData);
-    } catch (error) {
-      console.error('Error loading doctors:', error);
-      setSaveError('Failed to load doctors. Please try again.');
-    } finally {
-      setLoadingDoctors(false);
-    }
-  };
 
   const loadPatientData = async () => {
     if (!patientId) return;
@@ -391,8 +370,69 @@ export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescrip
   
   // Doctor selection (for admin)
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
+  // Initialize selectedDoctorId with doctorId prop if provided
+  const initialDoctorId = doctorId ? (typeof doctorId === 'string' ? parseInt(doctorId, 10) : doctorId) : null;
+  console.log('AddHealthRecord - Initializing with doctorId:', initialDoctorId, 'from prop:', doctorId);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(initialDoctorId);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
+  
+  // Define loadDoctors function
+  const loadDoctors = async () => {
+    try {
+      setLoadingDoctors(true);
+      // Load all doctors, not just available ones, so admin can select any doctor
+      const doctorsData = await api.getDoctors();
+      console.log('Loaded doctors:', doctorsData);
+      setDoctors(doctorsData);
+      
+      // Preload doctor if doctorId prop is provided
+      if (doctorId && doctorsData.length > 0) {
+        const doctorIdNum = typeof doctorId === 'string' ? parseInt(doctorId, 10) : doctorId;
+        const doctorExists = doctorsData.find(d => d.id === doctorIdNum);
+        if (doctorExists) {
+          console.log('Preloading doctor:', doctorIdNum, doctorExists.name);
+          setSelectedDoctorId(doctorIdNum);
+        } else {
+          console.warn('Doctor not found in list:', doctorIdNum, 'Available doctors:', doctorsData.map(d => d.id));
+        }
+      } else if (doctorId) {
+        // If doctorId is provided but doctors list is empty, still set it (will be validated later)
+        const doctorIdNum = typeof doctorId === 'string' ? parseInt(doctorId, 10) : doctorId;
+        console.log('Setting doctor ID before doctors loaded:', doctorIdNum);
+        setSelectedDoctorId(doctorIdNum);
+      }
+    } catch (error) {
+      console.error('Error loading doctors:', error);
+      setSaveError('Failed to load doctors. Please try again.');
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
+
+  // Fetch doctors when from admin
+  useEffect(() => {
+    if (isFromAdmin) {
+      console.log('Loading doctors for admin...');
+      loadDoctors();
+    }
+  }, [isFromAdmin]);
+  
+  // Debug: Log selectedDoctorId changes
+  useEffect(() => {
+    console.log('AddHealthRecord - selectedDoctorId changed to:', selectedDoctorId);
+  }, [selectedDoctorId]);
+
+  // Update selectedDoctorId when doctorId prop changes or doctors are loaded
+  useEffect(() => {
+    if (doctorId && doctors.length > 0) {
+      const doctorIdNum = typeof doctorId === 'string' ? parseInt(doctorId, 10) : doctorId;
+      const doctorExists = doctors.find(d => d.id === doctorIdNum);
+      if (doctorExists && selectedDoctorId !== doctorIdNum) {
+        console.log('Updating selected doctor from useEffect:', doctorIdNum, doctorExists.name);
+        setSelectedDoctorId(doctorIdNum);
+      }
+    }
+  }, [doctorId, doctors, selectedDoctorId]);
   
   // Medicine search states
   const [medicineSearchTerm, setMedicineSearchTerm] = useState<{ [key: string]: string }>({});
@@ -580,6 +620,10 @@ export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescrip
         // Update existing prescription
         await api.updatePrescription(prescriptionId, prescriptionData);
         setSaveSuccess(true);
+        // Call onPrescriptionSaved callback if provided (e.g., to mark appointment as checked)
+        if (onPrescriptionSaved) {
+          onPrescriptionSaved();
+        }
         setTimeout(() => {
           onBack();
         }, 1500);
@@ -587,6 +631,10 @@ export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescrip
         // Create new prescription
         const createdPrescription = await api.createPrescription(prescriptionData);
         setSaveSuccess(true);
+        // Call onPrescriptionSaved callback if provided (e.g., to mark appointment as checked)
+        if (onPrescriptionSaved) {
+          onPrescriptionSaved();
+        }
         setTimeout(() => {
           onBack();
         }, 1500);
@@ -699,8 +747,11 @@ export function AddHealthRecord({ patientId, patientName = 'Test Khan', prescrip
               <div className="w-64 min-w-[256px]">
                 <label className="text-xs text-gray-600 mb-1 block">Select Doctor *</label>
                 <Select
-                  value={selectedDoctorId?.toString() || ''}
-                  onValueChange={(value) => setSelectedDoctorId(parseInt(value))}
+                  value={selectedDoctorId ? selectedDoctorId.toString() : ''}
+                  onValueChange={(value) => {
+                    console.log('Doctor selected from dropdown:', value);
+                    setSelectedDoctorId(parseInt(value));
+                  }}
                   disabled={loadingDoctors || doctors.length === 0}
                 >
                   <SelectTrigger className="w-full">

@@ -76,6 +76,7 @@ import {
   Play
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PaymentReceipt } from './PaymentReceipt';
 
 interface Medicine {
   id: string;
@@ -214,6 +215,8 @@ export function AdvancedPOS() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [heldBills, setHeldBills] = useState<HeldBill[]>([]);
   const [isHeldBillsOpen, setIsHeldBillsOpen] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -413,14 +416,36 @@ export function AdvancedPOS() {
     }
 
     // Process the payment
-    const invoiceNo = `INV-${Date.now()}`;
+    const invoiceNo = `PH${Date.now()}`;
+    const currentDate = new Date();
+    
+    // Prepare receipt data
+    const receipt = {
+      receiptNumber: invoiceNo,
+      date: currentDate.toLocaleDateString(),
+      time: currentDate.toLocaleTimeString(),
+      cashier: 'Ahmed Khan',
+      customer: customer.name !== 'Walk-in Customer' ? customer : undefined,
+      items: cart,
+      subtotal: subtotal,
+      discount: discountAmount,
+      tax: tax,
+      total: total,
+      amountPaid: parseFloat(receivedAmount || total.toString()),
+      change: changeAmount > 0 ? changeAmount : 0,
+      paymentMethod: paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
+    };
+    
+    setReceiptData(receipt);
+    setShowReceipt(true);
+    setIsPaymentDialogOpen(false);
+    
     toast.success(`Payment processed successfully! Invoice: ${invoiceNo}`);
     
-    // Clear the cart after successful payment
+    // Clear the cart after showing receipt
     setTimeout(() => {
       clearCart();
-      setIsPaymentDialogOpen(false);
-    }, 1500);
+    }, 500);
   };
 
   // Quick add number buttons for cash
@@ -1186,6 +1211,15 @@ export function AdvancedPOS() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Payment Receipt */}
+      {receiptData && (
+        <PaymentReceipt
+          show={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          receiptData={receiptData}
+        />
+      )}
     </div>
   );
 }

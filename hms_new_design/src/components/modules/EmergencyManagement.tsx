@@ -36,6 +36,7 @@ import { PatientVitalsManagement } from './PatientVitalsManagement';
 import { EmergencyPatientProfile } from './EmergencyPatientProfile';
 import { EmergencyHistoryDetail } from './EmergencyHistoryDetail';
 import { UpdateVitalsDialog } from './UpdateVitalsDialog';
+import { EmergencyDutyRoster } from './EmergencyDutyRoster';
 import {
   Ambulance,
   Activity,
@@ -489,6 +490,7 @@ export function EmergencyManagement() {
   const [showPatientProfile, setShowPatientProfile] = useState(false);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<any>(null);
   const [showUpdateVitals, setShowUpdateVitals] = useState(false);
+  const [showDutyRosterFullScreen, setShowDutyRosterFullScreen] = useState(false);
 
   // Show Admit Patient page if requested
   if (showAdmitPatient) {
@@ -1368,21 +1370,18 @@ export function EmergencyManagement() {
         </Card>
       </div>
 
-      {/* Date Selector */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <Label>Select Date:</Label>
-            <Input type="date" className="w-[200px]" defaultValue="2024-11-21" />
-            <Button variant="outline">
-              <CalendarClock className="w-4 h-4 mr-2" />
-              View Week
-            </Button>
-            <Button variant="outline" className="ml-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Duty
-            </Button>
+      {/* Open Full Duty Roster */}
+      <Card className="border-2 border-dashed border-gray-300 hover:border-[#2F80ED] transition-colors cursor-pointer" onClick={() => setShowDutyRosterFullScreen(true)}>
+        <CardContent className="p-12 text-center">
+          <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+            <CalendarClock className="w-10 h-10 text-[#2F80ED]" />
           </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Open Full Duty Roster</h3>
+          <p className="text-gray-600 mb-6">View and manage duty schedules in Day, Week, or Month view</p>
+          <Button className="bg-[#2F80ED] hover:bg-[#2F80ED]/90">
+            <CalendarClock className="w-4 h-4 mr-2" />
+            Open Duty Roster Calendar
+          </Button>
         </CardContent>
       </Card>
 
@@ -1625,6 +1624,13 @@ export function EmergencyManagement() {
             setShowUpdateVitals(false);
             toast.success('Vitals updated successfully!');
           }}
+        />
+      )}
+
+      {/* Emergency Duty Roster Full Screen */}
+      {showDutyRosterFullScreen && (
+        <EmergencyDutyRoster
+          onClose={() => setShowDutyRosterFullScreen(false)}
         />
       )}
     </div>

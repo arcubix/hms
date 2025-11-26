@@ -218,10 +218,10 @@ export function AddMedicationDialog({ patient, visitId, onClose, onSave }: AddMe
                       <SelectValue placeholder={loadingMedicines ? "Loading medicines..." : "Select medication"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {medicines.length === 0 ? (
-                        <SelectItem value="" disabled>
-                          {loadingMedicines ? "Loading..." : "No medicines available"}
-                        </SelectItem>
+                      {loadingMedicines ? (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">Loading medicines...</div>
+                      ) : medicines.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">No medicines available</div>
                       ) : (
                         medicines.map((medicine) => (
                           <SelectItem 

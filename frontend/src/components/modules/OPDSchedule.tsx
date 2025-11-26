@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -39,11 +39,15 @@ import {
   Loader2
 } from 'lucide-react';
 import { api, Doctor as ApiDoctor, Appointment as ApiAppointment, Patient } from '../../services/api';
+import { AddHealthRecord } from './AddHealthRecord';
+import { HealthRecords } from './HealthRecords';
+import { toast } from 'sonner';
 
 interface Appointment {
   id: string;
   patientName: string;
   patientId: string;
+  patientIdNumeric?: number; // Numeric patient ID for API calls
   tokenNumber: string;
   time: string;
   timeSlot: number;
@@ -57,6 +61,7 @@ interface Appointment {
   floor_name?: string;
   reception_name?: string;
   token_number?: string;
+  token_id?: number; // Token ID for updating token status
 }
 
 interface Doctor {
@@ -111,6 +116,9 @@ export function OPDSchedule() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [roomMode, setRoomMode] = useState<'Fixed' | 'Dynamic'>('Fixed');
   const [creatingToken, setCreatingToken] = useState(false);
+  
+  // Health Records / Prescription states
+  const [checkingAppointment, setCheckingAppointment] = useState<Appointment | null>(null);
   
   // Patient search results - use numeric id for API, but display patient_id string
   const searchResults = patientSearchResults.map(p => {
@@ -286,29 +294,15 @@ export function OPDSchedule() {
         const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
           const timeSlot = getTimeSlotFromTime(apt.appointment_date);
           
-          // Debug: Log token_number from API
-          if (apt.id) {
-            console.log(`Appointment ${apt.id}: token_number from API =`, apt.token_number, 'type:', typeof apt.token_number);
-          }
-          
           // Extract token_number directly from API - don't modify it, just use it as-is
           // The API returns token_number: "F1-001", "F1-002" etc. - use it directly
-          const tokenNumberFromAPI = apt.token_number;
-          
-          // Debug: Log what we're getting from API
-          if (apt.id) {
-            console.log(`[APPOINTMENT MAPPING] Appointment ${apt.id}:`, {
-              'token_number from API': tokenNumberFromAPI,
-              'token_number type': typeof tokenNumberFromAPI,
-              'room_number': apt.room_number,
-              'floor_number': apt.floor_number
-            });
-          }
+          const tokenNumberFromAPI = (apt as any).token_number;
           
           return {
             id: apt.id.toString(),
             patientName: apt.patient_name || 'Unknown',
             patientId: apt.patient_id_string || apt.patient_id.toString(),
+            patientIdNumeric: typeof apt.patient_id === 'number' ? apt.patient_id : (typeof apt.patient_id === 'string' ? parseInt(apt.patient_id, 10) : undefined),
             // Use token_number directly from API - no validation, no fallback
             tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
             room_number: (apt as any).room_number,
@@ -318,6 +312,7 @@ export function OPDSchedule() {
             reception_name: (apt as any).reception_name,
             // Store token_number EXACTLY as it comes from API - no modification
             token_number: tokenNumberFromAPI || undefined,
+            token_id: (apt as any).token_id || undefined,
             time: formatTime(apt.appointment_date),
             timeSlot: timeSlot,
             doctorId: apt.doctor_doctor_id?.toString() || '',
@@ -507,29 +502,15 @@ export function OPDSchedule() {
       const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
         const timeSlot = getTimeSlotFromTime(apt.appointment_date);
         
-        // Debug: Log token_number from API after creation
-        if (apt.id) {
-          console.log(`Appointment ${apt.id} (after create): token_number =`, apt.token_number, 'full apt:', apt);
-        }
-        
         // Extract token_number directly from API - don't modify it, just use it as-is
         // The API returns token_number: "F1-001", "F1-002" etc. - use it directly
-        const tokenNumberFromAPI = apt.token_number;
-        
-        // Debug: Log what we're getting from API
-        if (apt.id) {
-          console.log(`[APPOINTMENT MAPPING - AFTER CREATE] Appointment ${apt.id}:`, {
-            'token_number from API': tokenNumberFromAPI,
-            'token_number type': typeof tokenNumberFromAPI,
-            'room_number': apt.room_number,
-            'floor_number': apt.floor_number
-          });
-        }
+        const tokenNumberFromAPI = (apt as any).token_number;
         
         return {
           id: apt.id.toString(),
           patientName: apt.patient_name || 'Unknown',
           patientId: apt.patient_id_string || apt.patient_id.toString(),
+          patientIdNumeric: typeof apt.patient_id === 'number' ? apt.patient_id : (typeof apt.patient_id === 'string' ? parseInt(apt.patient_id, 10) : undefined),
           // Use token_number directly from API - no validation, no fallback
           tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
           room_number: (apt as any).room_number,
@@ -539,6 +520,7 @@ export function OPDSchedule() {
           reception_name: (apt as any).reception_name,
           // Store token_number EXACTLY as it comes from API - no modification
           token_number: tokenNumberFromAPI || undefined,
+          token_id: (apt as any).token_id || undefined,
           time: formatTime(apt.appointment_date),
           timeSlot: timeSlot,
           doctorId: apt.doctor_doctor_id?.toString() || '',
@@ -569,10 +551,10 @@ export function OPDSchedule() {
 
       if (print) {
         // TODO: Implement print functionality
-        console.log('Print token:', appointment.token_number);
+        console.log('Print token:', (appointment as any).token_number);
       }
 
-      alert(`Token created successfully! Token: ${appointment.token_number || 'N/A'}`);
+      alert(`Token created successfully! Token: ${(appointment as any).token_number || 'N/A'}`);
     } catch (error: any) {
       console.error('Error creating token:', error);
       alert(error.message || 'Failed to create token');
@@ -678,6 +660,115 @@ export function OPDSchedule() {
   const goToToday = () => {
     setSelectedDate(new Date());
   };
+
+  // Handle checking an appointment - opens HealthRecords/AddHealthRecord
+  const handleCheckAppointment = (appointment: Appointment) => {
+    setCheckingAppointment(appointment);
+  };
+
+  // Handle marking appointment as checked after prescription is saved
+  const handlePrescriptionSaved = async () => {
+    if (checkingAppointment) {
+      try {
+        // Mark appointment as completed
+        await api.updateAppointmentStatus(checkingAppointment.id, 'Completed');
+        
+        // Update token status to Completed if token_id exists
+        if (checkingAppointment.token_id) {
+          try {
+            await api.updateTokenStatus(checkingAppointment.token_id, 'Completed');
+            console.log('Token status updated to Completed');
+          } catch (tokenError: any) {
+            console.error('Error updating token status:', tokenError);
+            // Don't fail the whole operation if token update fails
+          }
+        }
+        
+        toast.success('Appointment marked as checked!');
+        
+        // Reload appointments to reflect the status change
+        const dateStr = selectedDate.toISOString().split('T')[0];
+        const apiAppointments = await api.getAppointments({ date: dateStr });
+        const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
+          const timeSlot = getTimeSlotFromTime(apt.appointment_date);
+          const tokenNumberFromAPI = (apt as any).token_number;
+          
+          return {
+            id: apt.id.toString(),
+            patientName: apt.patient_name || 'Unknown',
+            patientId: apt.patient_id_string || apt.patient_id.toString(),
+            patientIdNumeric: typeof apt.patient_id === 'number' ? apt.patient_id : (typeof apt.patient_id === 'string' ? parseInt(apt.patient_id, 10) : undefined),
+            tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
+            room_number: (apt as any).room_number,
+            room_name: (apt as any).room_name,
+            floor_number: (apt as any).floor_number,
+            floor_name: (apt as any).floor_name,
+            reception_name: (apt as any).reception_name,
+            token_number: tokenNumberFromAPI || undefined,
+            token_id: (apt as any).token_id || undefined,
+            time: formatTime(apt.appointment_date),
+            timeSlot: timeSlot,
+            doctorId: apt.doctor_doctor_id?.toString() || '',
+            status: mapAppointmentStatus(apt.status),
+            phoneNumber: apt.patient_phone,
+            reason: apt.reason
+          };
+        });
+        setAppointments(mappedAppointments);
+
+        // Update appointment counts for doctors
+        setDoctors(prevDoctors => 
+          prevDoctors.map(doc => ({
+            ...doc,
+            appointmentCount: mappedAppointments.filter(apt => apt.doctorId === doc.id).length
+          }))
+        );
+      } catch (error: any) {
+        console.error('Error updating appointment status:', error);
+        toast.error('Failed to mark appointment as checked: ' + (error.message || 'Unknown error'));
+      }
+    }
+  };
+
+  // Handle back from prescription - just close the view
+  const handleBackFromPrescription = () => {
+    setCheckingAppointment(null);
+  };
+
+  // Show HealthRecords when checking an appointment
+  if (checkingAppointment) {
+    // Use numeric patient ID if available, otherwise try to parse from patientId string
+    const patientIdNum = checkingAppointment.patientIdNumeric || 
+      (checkingAppointment.patientId ? 
+        (typeof checkingAppointment.patientId === 'string' ? 
+          parseInt(checkingAppointment.patientId, 10) : 
+          checkingAppointment.patientId) : null);
+    
+    if (patientIdNum && !isNaN(patientIdNum) && patientIdNum > 0) {
+      // Get doctor ID from appointment - convert to number if needed
+      const appointmentDoctorId = checkingAppointment.doctorId ? 
+        (typeof checkingAppointment.doctorId === 'string' ? 
+          parseInt(checkingAppointment.doctorId, 10) : 
+          checkingAppointment.doctorId) : undefined;
+      
+      return (
+        <HealthRecords
+          patientId={patientIdNum.toString()}
+          patientName={checkingAppointment.patientName}
+          patientMRN={checkingAppointment.patientId}
+          onBack={handleBackFromPrescription}
+          isFromAdmin={true}
+          autoAddRecord={true} // Auto-open Add Health Record form to record prescription
+          doctorId={appointmentDoctorId} // Pass doctor ID to preload in dropdown
+          onPrescriptionSaved={handlePrescriptionSaved} // Mark appointment as checked when prescription is saved
+        />
+      );
+    } else {
+      // If patient ID is invalid, show error and return to schedule
+      toast.error('Invalid patient ID. Cannot open health records.');
+      setCheckingAppointment(null);
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 relative">
@@ -1249,15 +1340,21 @@ export function OPDSchedule() {
                                           <Edit className="w-2.5 h-2.5 mr-0.5" />
                                           Edit
                                         </Button>
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm" 
-                                          className="h-6 px-1.5 text-[10px] hover:bg-green-100 hover:text-green-600 text-green-600 rounded transition-colors"
-                                          title="Mark as Checked"
-                                        >
-                                          <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                                          Check
-                                        </Button>
+                                        {appointment.status !== 'checked' && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-6 px-1.5 text-[10px] hover:bg-green-100 hover:text-green-600 text-green-600 rounded transition-colors"
+                                            title="Mark as Checked"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleCheckAppointment(appointment);
+                                            }}
+                                          >
+                                            <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                                            Check
+                                          </Button>
+                                        )}
                                       </div>
                                     </div>
                                     
@@ -1376,7 +1473,7 @@ export function OPDSchedule() {
                 .filter(a => a.status === 'waiting' || a.status === 'scheduled' || a.status === 'checked')
                 .map((appointment) => {
                   // Extract token number (e.g., "F1-001" -> "001")
-                  const tokenNumber = (appointment as any).token_number || appointment.tokenNumber || '';
+                  const tokenNumber = appointment.token_number || appointment.tokenNumber || '';
                   const tokenDisplay = tokenNumber.includes('-') ? tokenNumber.split('-').pop() : tokenNumber;
                   
                   // Format time (e.g., "18:00" -> "6:00 PM")

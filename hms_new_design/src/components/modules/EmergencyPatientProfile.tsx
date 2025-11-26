@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Textarea } from '../ui/textarea';
 import { ScrollArea } from '../ui/scroll-area';
+import { RequestBloodProductDialog } from '../RequestBloodProductDialog';
 import {
   ArrowLeft,
   User,
@@ -1409,15 +1410,37 @@ function IntakeOutputTab({ patient }: { patient: any }) {
 
 // ============= BLOOD BANK TAB =============
 function BloodBankTab({ patient }: { patient: any }) {
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
+
+  const patientData = {
+    id: patient.id,
+    name: patient.name,
+    mrn: patient.mrn,
+    bloodGroup: patient.bloodGroup || 'O+',
+    age: patient.age,
+    gender: patient.gender,
+    department: 'Emergency'
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Blood Bank Management</h2>
-        <Button className="bg-red-600 hover:bg-red-700 text-white">
+        <Button 
+          className="bg-red-600 hover:bg-red-700 text-white"
+          onClick={() => setShowRequestDialog(true)}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Request Blood Products
         </Button>
       </div>
+
+      {/* Request Blood Product Dialog */}
+      <RequestBloodProductDialog
+        open={showRequestDialog}
+        onOpenChange={setShowRequestDialog}
+        patientData={patientData}
+      />
 
       {/* Blood Type Card */}
       <Card className="bg-gradient-to-r from-red-50 to-pink-50 border-red-200">

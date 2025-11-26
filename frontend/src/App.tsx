@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { LoginPage } from './components/auth/LoginPage';
 import { AdminDashboard } from './components/dashboards/AdminDashboard';
+import { DoctorDashboard } from './components/dashboards/DoctorDashboard';
+import { PatientDashboard } from './components/dashboards/PatientDashboard';
+import { NurseDashboard } from './components/dashboards/NurseDashboard';
+import { LabDashboard } from './components/dashboards/LabDashboard';
+import { PharmacyDashboard } from './components/dashboards/PharmacyDashboard';
+import { FinanceDashboard } from './components/dashboards/FinanceDashboard';
 import { Toaster } from './components/ui/sonner';
 
 export type UserRole = 'admin' | 'doctor' | 'patient' | 'nurse' | 'lab' | 'pharmacy' | 'finance';

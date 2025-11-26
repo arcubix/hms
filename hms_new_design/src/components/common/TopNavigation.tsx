@@ -1,6 +1,13 @@
 import { ReactNode } from 'react';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
+import { ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 export interface NavigationItem {
   icon: ReactNode;
@@ -13,9 +20,17 @@ interface TopNavigationProps {
   items: NavigationItem[];
   activeItem: string;
   onItemClick: (id: string) => void;
+  allItems?: NavigationItem[]; // All available items for "More" dropdown
 }
 
-export function TopNavigation({ items, activeItem, onItemClick }: TopNavigationProps) {
+export function TopNavigation({ items, activeItem, onItemClick, allItems }: TopNavigationProps) {
+  // Get items that are not in the priority list
+  const moreItems = allItems 
+    ? allItems.filter(item => !items.some(priorityItem => priorityItem.id === item.id))
+    : [];
+
+  const hasMoreItems = moreItems.length > 0;
+
   return (
     <nav className="flex items-center gap-1 overflow-x-auto">
       {items.map((item) => (
@@ -39,6 +54,46 @@ export function TopNavigation({ items, activeItem, onItemClick }: TopNavigationP
           )}
         </Button>
       ))}
+      
+      {/* More Dropdown */}
+      {hasMoreItems && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              className={cn(
+                "relative flex items-center gap-2 px-4 h-12 rounded-none border-b-2 transition-colors whitespace-nowrap",
+                moreItems.some(item => item.id === activeItem)
+                  ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                  : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              )}
+            >
+              <span>More</span>
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {moreItems.map((item) => (
+              <DropdownMenuItem
+                key={item.id}
+                onClick={() => onItemClick(item.id)}
+                className={cn(
+                  "flex items-center gap-3 cursor-pointer",
+                  activeItem === item.id && "bg-blue-50 text-blue-700"
+                )}
+              >
+                {item.icon}
+                <span className="flex-1">{item.label}</span>
+                {item.badge && (
+                  <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </nav>
   );
 }

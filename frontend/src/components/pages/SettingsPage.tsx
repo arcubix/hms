@@ -27,6 +27,10 @@ import { ReferralHospitalForm } from '../modules/ReferralHospitalForm';
 import { SystemSettings } from '../modules/SystemSettings';
 import { DoctorRoomAssignment } from '../modules/DoctorRoomAssignment';
 import { DoctorSlotRoomAssignment } from '../modules/DoctorSlotRoomAssignment';
+import { DonationDonors } from '../modules/DonationDonors';
+import { InsuranceCompanies } from '../modules/InsuranceCompanies';
+import { CorporateOrganizations } from '../modules/CorporateOrganizations';
+import { MessageSettings } from '../modules/MessageSettings';
 
 interface SettingsPageProps {
   initialSection?: string;
@@ -227,61 +231,13 @@ export function SettingsPage({ initialSection = 'departments' }: SettingsPagePro
           </div>
         );
       case 'insurance':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Insurance</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage insurance providers and policies</p>
-              </div>
-            </div>
-            <div className="text-center py-12 text-gray-500">
-              Insurance management coming soon...
-            </div>
-          </div>
-        );
+        return <InsuranceCompanies />;
       case 'organizations':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Organizations</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage partner organizations</p>
-              </div>
-            </div>
-            <div className="text-center py-12 text-gray-500">
-              Organizations management coming soon...
-            </div>
-          </div>
-        );
+        return <CorporateOrganizations />;
       case 'donation-donors':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Donation Donors</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage donation donors and records</p>
-              </div>
-            </div>
-            <div className="text-center py-12 text-gray-500">
-              Donation donors management coming soon...
-            </div>
-          </div>
-        );
+        return <DonationDonors />;
       case 'message-settings':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Message Settings</h1>
-                <p className="text-sm text-gray-600 mt-1">Configure messaging and notification settings</p>
-              </div>
-            </div>
-            <div className="text-center py-12 text-gray-500">
-              Message settings coming soon...
-            </div>
-          </div>
-        );
+        return <MessageSettings />;
       case 'referral-hospitals':
         if (hospitalView === 'add') {
           return <ReferralHospitalForm onBack={handleBackToHospitalList} onSuccess={handleBackToHospitalList} />;

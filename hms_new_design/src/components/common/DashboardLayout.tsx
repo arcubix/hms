@@ -15,7 +15,9 @@ import {
   Sliders,
   Megaphone,
   ChevronDown,
-  Lightbulb
+  Lightbulb,
+  ClipboardList,
+  Calendar
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { User } from '../../App';
@@ -27,6 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { AdminSettings } from '../modules/AdminSettings';
+import { PriorityModules } from '../modules/PriorityModules';
+import { Contacts } from '../modules/Contacts';
+import { SupportTickets } from '../modules/SupportTickets';
+import { AuditLog } from '../modules/AuditLog';
+import { FeaturesAndUpdates } from '../modules/FeaturesAndUpdates';
+import { BilledInvoices } from '../modules/BilledInvoices';
 
 interface DashboardLayoutProps {
   user: User;
@@ -36,6 +45,49 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ user, children, navigationItems, onLogout }: DashboardLayoutProps) {
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [showPriorityModules, setShowPriorityModules] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
+  const [showAuditLog, setShowAuditLog] = useState(false);
+  const [showFeaturesUpdates, setShowFeaturesUpdates] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
+
+  // If Billing is open, show that fullscreen
+  if (showBilling) {
+    return <BilledInvoices onClose={() => setShowBilling(false)} />;
+  }
+
+  // If Features and Updates is open, show that fullscreen
+  if (showFeaturesUpdates) {
+    return <FeaturesAndUpdates onClose={() => setShowFeaturesUpdates(false)} />;
+  }
+
+  // If Audit Log is open, show that fullscreen
+  if (showAuditLog) {
+    return <AuditLog onClose={() => setShowAuditLog(false)} />;
+  }
+
+  // If Support is open, show that fullscreen
+  if (showSupport) {
+    return <SupportTickets onClose={() => setShowSupport(false)} />;
+  }
+
+  // If Contacts is open, show that fullscreen
+  if (showContacts) {
+    return <Contacts onClose={() => setShowContacts(false)} />;
+  }
+
+  // If Priority Modules is open, show that fullscreen
+  if (showPriorityModules) {
+    return <PriorityModules onClose={() => setShowPriorityModules(false)} userRole={user.role} />;
+  }
+
+  // If Admin Settings is open, show that fullscreen
+  if (showAdminSettings) {
+    return <AdminSettings onClose={() => setShowAdminSettings(false)} />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Top Header */}
@@ -107,31 +159,31 @@ export function DashboardLayout({ user, children, navigationItems, onLogout }: D
                     <Settings className="w-4 h-4 mr-3" />
                     <span>User Settings</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <FileText className="w-4 h-4 mr-3" />
+                  <DropdownMenuItem onClick={() => setShowPriorityModules(true)}>
+                    <ClipboardList className="w-4 h-4 mr-3" />
                     <span>Priority Modules</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowContacts(true)}>
                     <Users className="w-4 h-4 mr-3" />
                     <span>Contacts</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowBilling(true)}>
                     <Calculator className="w-4 h-4 mr-3" />
                     <span>Billing</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSupport(true)}>
                     <Headphones className="w-4 h-4 mr-3" />
                     <span>Support</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowAuditLog(true)}>
                     <List className="w-4 h-4 mr-3" />
                     <span>Audit Log</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowAdminSettings(true)}>
                     <Sliders className="w-4 h-4 mr-3" />
                     <span>Admin Settings</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowFeaturesUpdates(true)}>
                     <Megaphone className="w-4 h-4 mr-3" />
                     <span>What's New</span>
                   </DropdownMenuItem>
@@ -148,8 +200,48 @@ export function DashboardLayout({ user, children, navigationItems, onLogout }: D
 
         {/* Bottom Row - Navigation Menu */}
         {navigationItems && (
-          <div className="px-6 py-0">
-            {navigationItems}
+          <div className="px-6 py-0 flex items-center justify-between">
+            <div className="flex-1">
+              {navigationItems}
+            </div>
+            
+            {/* Create Button and Actions */}
+            <div className="flex items-center gap-2 ml-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                    Create
+                    <ChevronDown className="w-4 h-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem>
+                    <Users className="w-4 h-4 mr-3" />
+                    <span>New Patient</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Calendar className="w-4 h-4 mr-3" />
+                    <span>New Appointment</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <FileText className="w-4 h-4 mr-3" />
+                    <span>New Prescription</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Calculator className="w-4 h-4 mr-3" />
+                    <span>New Invoice</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              <Button variant="ghost" size="sm" className="p-2">
+                <Search className="w-5 h-5" />
+              </Button>
+              
+              <Button variant="ghost" size="sm" className="p-2">
+                <Bell className="w-5 h-5" />
+              </Button>
+            </div>
           </div>
         )}
       </header>

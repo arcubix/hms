@@ -51,6 +51,7 @@ import {
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
 import { AddSupplier } from '../pharmacy/AddSupplier';
+import { PaymentReceipt } from '../pharmacy/PaymentReceipt';
 
 interface Medicine {
   id: string;
@@ -299,26 +300,122 @@ const mockSuppliers: Supplier[] = [
 const mockSales: Sale[] = [
   {
     id: '1',
-    invoiceNo: 'INV-2024-001',
-    date: '2024-11-10',
+    invoiceNo: 'PH1731502800001',
+    date: '2024-11-24',
     time: '10:30 AM',
     customerName: 'Ahmed Khan',
     customerPhone: '+92-300-1111111',
     items: [
       {
         medicineId: '1',
-        medicineName: 'Paracetamol 500mg',
+        medicineName: 'Paracetamol 500mg Tablet',
         quantity: 20,
         unitPrice: 5.0,
         discount: 0,
         total: 100
+      },
+      {
+        medicineId: '2',
+        medicineName: 'Amoxicillin 250mg Capsule',
+        quantity: 30,
+        unitPrice: 15.0,
+        discount: 22.5,
+        total: 427.5
       }
     ],
-    subtotal: 100,
-    discount: 5,
-    tax: 14,
-    total: 109,
+    subtotal: 527.5,
+    discount: 22.5,
+    tax: 70.7,
+    total: 575.7,
     paymentMethod: 'cash',
+    status: 'completed'
+  },
+  {
+    id: '2',
+    invoiceNo: 'PH1731502800002',
+    date: '2024-11-24',
+    time: '11:45 AM',
+    customerName: 'Sarah Wilson',
+    customerPhone: '+92-321-2222222',
+    items: [
+      {
+        medicineId: '3',
+        medicineName: 'Omeprazole 20mg Capsule',
+        quantity: 14,
+        unitPrice: 8.5,
+        discount: 0,
+        total: 119
+      },
+      {
+        medicineId: '5',
+        medicineName: 'Cetirizine 10mg Tablet',
+        quantity: 10,
+        unitPrice: 6.0,
+        discount: 0,
+        total: 60
+      }
+    ],
+    subtotal: 179,
+    discount: 0,
+    tax: 25.06,
+    total: 204.06,
+    paymentMethod: 'card',
+    status: 'completed'
+  },
+  {
+    id: '3',
+    invoiceNo: 'PH1731502800003',
+    date: '2024-11-24',
+    time: '02:15 PM',
+    customerName: 'Walk-in Customer',
+    customerPhone: '',
+    items: [
+      {
+        medicineId: '4',
+        medicineName: 'Metformin 500mg Tablet',
+        quantity: 60,
+        unitPrice: 12.0,
+        discount: 36,
+        total: 684
+      }
+    ],
+    subtotal: 720,
+    discount: 36,
+    tax: 95.76,
+    total: 779.76,
+    paymentMethod: 'cash',
+    status: 'completed'
+  },
+  {
+    id: '4',
+    invoiceNo: 'PH1731502800004',
+    date: '2024-11-23',
+    time: '04:30 PM',
+    customerName: 'Michael Chen',
+    customerPhone: '+92-333-3333333',
+    items: [
+      {
+        medicineId: '6',
+        medicineName: 'Lisinopril 10mg Tablet',
+        quantity: 30,
+        unitPrice: 18.0,
+        discount: 27,
+        total: 513
+      },
+      {
+        medicineId: '1',
+        medicineName: 'Paracetamol 500mg Tablet',
+        quantity: 50,
+        unitPrice: 5.0,
+        discount: 0,
+        total: 250
+      }
+    ],
+    subtotal: 790,
+    discount: 27,
+    tax: 106.82,
+    total: 869.82,
+    paymentMethod: 'insurance',
     status: 'completed'
   }
 ];
@@ -389,6 +486,8 @@ export function PharmacyManagement() {
   const [isAddSaleOpen, setIsAddSaleOpen] = useState(false);
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isCreatePOOpen, setIsCreatePOOpen] = useState(false);
+  const [showSaleReceipt, setShowSaleReceipt] = useState(false);
+  const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
 
   const getStockStatusColor = (status: string) => {
     switch (status) {
@@ -414,6 +513,56 @@ export function PharmacyManagement() {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Function to prepare receipt data from sale
+  const prepareSaleReceipt = (sale: Sale) => {
+    // Convert sale items to receipt format
+    const receiptItems = sale.items.map(item => ({
+      medicine: {
+        id: item.medicineId,
+        name: item.medicineName,
+        genericName: item.medicineName, // Use same as name if generic not available
+        strength: '',
+        form: '',
+        category: '',
+        price: item.unitPrice,
+        stock: 0,
+        barcode: '',
+        requiresPrescription: false
+      },
+      quantity: item.quantity,
+      discount: item.discount,
+      subtotal: item.total
+    }));
+
+    const receiptData = {
+      receiptNumber: sale.invoiceNo,
+      date: sale.date,
+      time: sale.time,
+      cashier: 'Pharmacy Staff',
+      customer: sale.customerName !== 'Walk-in Customer' ? {
+        name: sale.customerName,
+        phone: sale.customerPhone,
+        email: undefined
+      } : undefined,
+      items: receiptItems,
+      subtotal: sale.subtotal,
+      discount: sale.discount,
+      tax: sale.tax,
+      total: sale.total,
+      amountPaid: sale.total,
+      change: 0,
+      paymentMethod: sale.paymentMethod.charAt(0).toUpperCase() + sale.paymentMethod.slice(1)
+    };
+
+    return receiptData;
+  };
+
+  // Handle print receipt
+  const handlePrintReceipt = (sale: Sale) => {
+    setSelectedSaleForReceipt(sale);
+    setShowSaleReceipt(true);
   };
 
   const renderDashboard = () => {
@@ -990,10 +1139,21 @@ export function PharmacyManagement() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 w-8 p-0"
+                        title="View Details"
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={() => handlePrintReceipt(sale)}
+                        title="Print Receipt"
+                      >
                         <Printer className="w-4 h-4" />
                       </Button>
                     </div>
@@ -2251,6 +2411,18 @@ export function PharmacyManagement() {
           {renderContent()}
         </div>
       </div>
+
+      {/* Payment Receipt Modal */}
+      {selectedSaleForReceipt && (
+        <PaymentReceipt
+          show={showSaleReceipt}
+          onClose={() => {
+            setShowSaleReceipt(false);
+            setSelectedSaleForReceipt(null);
+          }}
+          receiptData={prepareSaleReceipt(selectedSaleForReceipt)}
+        />
+      )}
     </div>
   );
 }

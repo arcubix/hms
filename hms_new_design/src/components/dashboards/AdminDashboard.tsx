@@ -19,7 +19,8 @@ import {
   Ambulance,
   Hospital,
   Scan,
-  MessageSquare
+  MessageSquare,
+  Package
 } from 'lucide-react';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
@@ -42,6 +43,7 @@ import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
 import { PreferenceSettings } from '../modules/PreferenceSettings';
 import { ManageMessage } from '../modules/ManageMessage';
+import { InventoryManagement } from '../inventory/InventoryManagement';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface AdminDashboardProps {
@@ -66,7 +68,8 @@ const navigationItems: NavigationItem[] = [
   { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
   { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
   { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
-  { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', id: 'messages' }
+  { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', id: 'messages' },
+  { icon: <Package className="w-5 h-5" />, label: 'Inventory', id: 'inventory' }
 ];
 
 // Mock data for charts
@@ -88,10 +91,32 @@ const revenueData = [
   { month: 'Jun', revenue: 67000 }
 ];
 
+// Helper function to get priority modules from localStorage
+const getPriorityModules = (): string[] => {
+  try {
+    const saved = localStorage.getItem('priority-modules');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.error('Failed to load priority modules:', error);
+  }
+  // Default priority modules
+  return ['dashboard', 'opd', 'emergency', 'patients'];
+};
+
 export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health'>('list');
+
+  // Get priority module IDs
+  const priorityModuleIds = getPriorityModules();
+  
+  // Filter navigation items to only show priority modules
+  const filteredNavigationItems = navigationItems.filter(item => 
+    priorityModuleIds.includes(item.id)
+  );
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -149,6 +174,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <PreferenceSettings />;
       case 'messages':
         return <ManageMessage />;
+      case 'inventory':
+        return <InventoryManagement />;
       default:
         return <EnhancedAdminDashboard />;
     }
@@ -160,7 +187,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
       onLogout={onLogout}
       navigationItems={
         <TopNavigation
-          items={navigationItems}
+          items={filteredNavigationItems}
+          allItems={navigationItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
         />

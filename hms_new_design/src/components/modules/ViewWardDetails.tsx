@@ -58,7 +58,7 @@ import {
   Bell,
   Settings
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from 'sonner@2.0.3';
 
 interface ViewWardDetailsProps {
   wardId?: string;

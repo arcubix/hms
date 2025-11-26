@@ -3558,6 +3558,392 @@ class ApiService {
     }>('/api/referral-hospitals/types');
     return data.data || [];
   }
+
+  // Insurance Organizations API
+  async getInsuranceOrganizations(filters?: { search?: string; type?: 'insurance' | 'organization'; status?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = `/api/insurance-organizations${queryString ? `?${queryString}` : ''}`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: InsuranceOrganization[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getInsuranceOrganization(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: InsuranceOrganization;
+    }>(`/api/insurance-organizations/${id}`);
+    return data.data;
+  }
+
+  async createInsuranceOrganization(organizationData: CreateInsuranceOrganizationData) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: InsuranceOrganization;
+    }>('/api/insurance-organizations', {
+      method: 'POST',
+      body: JSON.stringify(organizationData),
+    });
+    return data.data;
+  }
+
+  async updateInsuranceOrganization(id: number, organizationData: Partial<CreateInsuranceOrganizationData>) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: InsuranceOrganization;
+    }>(`/api/insurance-organizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(organizationData),
+    });
+    return data.data;
+  }
+
+  async deleteInsuranceOrganization(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/insurance-organizations/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getInsurancePricing(insuranceId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        procedure: InsurancePricingItem[];
+        laboratory: InsurancePricingItem[];
+        radiology: InsurancePricingItem[];
+        pharmacy: InsurancePricingItem[];
+      };
+    }>(`/api/insurance-organizations/${insuranceId}/pricing`);
+    return data.data;
+  }
+
+  async updateInsurancePricing(insuranceId: number, pricingData: { pricing: InsurancePricingItem[] }) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: InsurancePricingItem[];
+    }>(`/api/insurance-organizations/${insuranceId}/pricing`, {
+      method: 'PUT',
+      body: JSON.stringify(pricingData),
+    });
+    return data.data;
+  }
+
+  async getPricingItems(itemType: 'procedure' | 'laboratory' | 'radiology' | 'pharmacy') {
+    const data = await this.request<{
+      success: boolean;
+      data: PricingItem[];
+    }>(`/api/insurance-organizations/pricing-items?type=${itemType}`);
+    return data.data || [];
+  }
+
+  // Donation Donors API
+  async getDonationDonors(filters?: { search?: string; type?: 'individual' | 'corporate' }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.type) params.append('type', filters.type);
+    
+    const queryString = params.toString();
+    const endpoint = `/api/donation-donors${queryString ? `?${queryString}` : ''}`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: DonationDonor[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getDonationDonor(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: DonationDonor;
+    }>(`/api/donation-donors/${id}`);
+    return data.data;
+  }
+
+  async createDonationDonor(donorData: CreateDonationDonorData) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: DonationDonor;
+    }>('/api/donation-donors', {
+      method: 'POST',
+      body: JSON.stringify(donorData),
+    });
+    return data.data;
+  }
+
+  async updateDonationDonor(id: number, donorData: Partial<CreateDonationDonorData>) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: DonationDonor;
+    }>(`/api/donation-donors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(donorData),
+    });
+    return data.data;
+  }
+
+  async deleteDonationDonor(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/donation-donors/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getDonationPayments(donorId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: DonationPayment[];
+    }>(`/api/donation-donors/${donorId}/payments`);
+    return data.data || [];
+  }
+
+  async addDonationPayment(donorId: number, paymentData: CreateDonationPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: DonationPayment[];
+    }>(`/api/donation-donors/${donorId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    return data.data;
+  }
+
+  // Helper methods for pricing configuration
+  async getProceduresForPricing() {
+    return this.getPricingItems('procedure');
+  }
+
+  async getLabTestsForPricing() {
+    return this.getPricingItems('laboratory');
+  }
+
+  async getRadiologyTestsForPricing() {
+    return this.getPricingItems('radiology');
+  }
+
+  async getMedicinesForPricing() {
+    return this.getPricingItems('pharmacy');
+  }
+
+  // ============================================
+  // MESSAGE SETTINGS API
+  // ============================================
+
+  // Message Templates
+  async getMessageTemplates(filters?: {
+    type?: 'sms' | 'email' | 'whatsapp';
+    status?: 'active' | 'inactive';
+    trigger?: string;
+    category?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.trigger) params.append('trigger', filters.trigger);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate[];
+    }>(`/api/message-templates${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getMessageTemplate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate;
+    }>(`/api/message-templates/${id}`);
+    return data.data;
+  }
+
+  async createMessageTemplate(templateData: CreateMessageTemplateData) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate;
+      message: string;
+    }>('/api/message-templates', {
+      method: 'POST',
+      body: JSON.stringify(templateData),
+    });
+    return data.data;
+  }
+
+  async updateMessageTemplate(id: number, templateData: Partial<MessageTemplate>) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate;
+      message: string;
+    }>(`/api/message-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(templateData),
+    });
+    return data.data;
+  }
+
+  async deleteMessageTemplate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/message-templates/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async duplicateMessageTemplate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate;
+      message: string;
+    }>(`/api/message-templates/${id}/duplicate`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async toggleTemplateStatus(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessageTemplate;
+      message: string;
+    }>(`/api/message-templates/${id}/toggle-status`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async sendTestMessage(id: number, recipient: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        message: string;
+        template_id: number;
+        recipient: string;
+      };
+      message: string;
+    }>(`/api/message-templates/${id}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ recipient }),
+    });
+    return data.data;
+  }
+
+  // Message Platforms
+  async getMessagePlatforms() {
+    const data = await this.request<{
+      success: boolean;
+      data: MessagePlatform[];
+    }>('/api/message-platforms');
+    return data.data || [];
+  }
+
+  async getMessagePlatform(type: 'sms' | 'email' | 'whatsapp') {
+    const data = await this.request<{
+      success: boolean;
+      data: MessagePlatform;
+    }>(`/api/message-platforms/${type}`);
+    return data.data;
+  }
+
+  async updateMessagePlatform(type: 'sms' | 'email' | 'whatsapp', settings: Partial<MessagePlatform>) {
+    const data = await this.request<{
+      success: boolean;
+      data: MessagePlatform;
+      message: string;
+    }>(`/api/message-platforms/${type}`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    return data.data;
+  }
+
+  // Message Recipients
+  async getMessageRecipients(type?: 'doctor' | 'staff' | 'admin') {
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: MessageRecipient[];
+    }>(`/api/message-recipients${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async updateMessageRecipient(id: number, preferences: Partial<MessageRecipient>) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/message-recipients/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(preferences),
+    });
+    return data;
+  }
+
+  async bulkUpdateRecipients(updates: Array<{
+    user_id: number;
+    user_type: 'doctor' | 'staff' | 'admin';
+    appointment_sms?: boolean;
+    opd_sms?: boolean;
+    appointment_email?: boolean;
+    schedule_sms?: boolean;
+    schedule_email?: boolean;
+    courtesy_message?: boolean;
+    day_end_report?: boolean;
+  }>) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        updated: number;
+        created: number;
+        total: number;
+      };
+      message: string;
+    }>('/api/message-recipients/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ updates }),
+    });
+    return data.data;
+  }
+
+  // Message Statistics
+  async getMessageStatistics(period?: 'daily' | 'weekly' | 'monthly') {
+    const params = new URLSearchParams();
+    if (period) params.append('period', period);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: MessageStatistics;
+    }>(`/api/message-statistics${query ? '?' + query : ''}`);
+    return data.data;
+  }
 }
 
 export interface Patient {
@@ -5022,6 +5408,134 @@ export interface CreateReferralHospitalData {
   status?: 'Active' | 'Inactive';
 }
 
+// Insurance Organizations Interfaces
+export interface InsuranceOrganization {
+  id: number;
+  name: string;
+  type: 'insurance' | 'organization';
+  policy_prefix?: string;
+  account_prefix?: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  website?: string;
+  address?: string;
+  credit_allowance: number;
+  discount_rate: number;
+  status: 'active' | 'inactive';
+  contract_date?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateInsuranceOrganizationData {
+  name: string;
+  type?: 'insurance' | 'organization';
+  policy_prefix?: string;
+  account_prefix?: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  address?: string;
+  credit_allowance?: number;
+  discount_rate?: number;
+  status?: 'active' | 'inactive';
+  contract_date?: string;
+}
+
+export interface InsurancePricingItem {
+  id?: number;
+  insurance_organization_id: number;
+  item_type: 'procedure' | 'laboratory' | 'radiology' | 'pharmacy';
+  item_id: number;
+  item_name: string;
+  price: number;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PricingItem {
+  id: number;
+  name: string;
+  default_price: number;
+}
+
+// Donation Donors Interfaces
+export interface DonationDonor {
+  id: number;
+  donor_id: string;
+  name: string;
+  type: 'individual' | 'corporate';
+  cnic?: string;
+  phone: string;
+  email: string;
+  address?: string;
+  city?: string;
+  country: string;
+  total_donated: number;
+  last_donation?: string;
+  frequency: 'one-time' | 'monthly' | 'yearly';
+  tax_exempt: boolean;
+  notes?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDonationDonorData {
+  donor_id?: string;
+  name: string;
+  type?: 'individual' | 'corporate';
+  cnic?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  total_donated?: number;
+  last_donation?: string;
+  frequency?: 'one-time' | 'monthly' | 'yearly';
+  tax_exempt?: boolean;
+  notes?: string;
+}
+
+export interface DonationPayment {
+  id: number;
+  donor_id: number;
+  amount: number;
+  payment_date: string;
+  payment_method: 'cash' | 'card' | 'bank-transfer' | 'cheque' | 'online';
+  transaction_id?: string;
+  cheque_number?: string;
+  bank_name?: string;
+  purpose?: string;
+  receipt_number: string;
+  status: 'completed' | 'pending' | 'failed';
+  notes?: string;
+  processed_by?: number;
+  processed_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDonationPaymentData {
+  amount: number;
+  payment_date: string;
+  payment_method?: 'cash' | 'card' | 'bank-transfer' | 'cheque' | 'online';
+  transaction_id?: string;
+  cheque_number?: string;
+  bank_name?: string;
+  purpose?: string;
+  receipt_number?: string;
+  status?: 'completed' | 'pending' | 'failed';
+  notes?: string;
+}
+
 export interface RolePermissions {
   doctor?: string[];
   admin?: string[];
@@ -5163,6 +5677,93 @@ export interface BulkCreateDoctorSlotRoomData {
   reception_id: number;
   date_from: string;
   date_to: string;
+}
+
+// ============================================
+// MESSAGE SETTINGS INTERFACES
+// ============================================
+
+export interface MessageTemplate {
+  id: number;
+  name: string;
+  type: 'sms' | 'email' | 'whatsapp';
+  trigger_event: string;
+  category?: string;
+  content: string;
+  subject?: string;
+  status: 'active' | 'inactive';
+  sent_count?: number;
+  delivery_rate?: number;
+  last_used_at?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMessageTemplateData {
+  name: string;
+  type: 'sms' | 'email' | 'whatsapp';
+  trigger_event: string;
+  category?: string;
+  content: string;
+  subject?: string;
+  is_active?: boolean;
+}
+
+export interface MessagePlatform {
+  id: number;
+  platform: 'sms' | 'email' | 'whatsapp';
+  is_enabled: boolean;
+  provider_name?: string;
+  api_key?: string;
+  api_secret?: string;
+  api_url?: string;
+  sender_id?: string;
+  sender_email?: string;
+  settings?: Record<string, any>;
+  updated_by?: number;
+  updated_at: string;
+}
+
+export interface MessageRecipient {
+  id: number | null;
+  user_id: number;
+  user_name: string;
+  user_type: 'doctor' | 'staff' | 'admin';
+  appointment_sms: boolean;
+  opd_sms: boolean;
+  appointment_email: boolean;
+  schedule_sms: boolean;
+  schedule_email: boolean;
+  courtesy_message: boolean;
+  day_end_report: boolean;
+}
+
+export interface MessageStatistics {
+  sms: {
+    active_templates: number;
+    sent_today: number;
+    sent_period: number;
+    delivery_rate: number;
+  };
+  email: {
+    active_templates: number;
+    sent_today: number;
+    sent_period: number;
+    delivery_rate: number;
+  };
+  whatsapp: {
+    active_templates: number;
+    sent_today: number;
+    sent_period: number;
+    delivery_rate: number;
+  };
+  overall: {
+    total_sent: number;
+    total_delivered: number;
+    delivery_rate: number;
+  };
 }
 
 export interface Token {

@@ -296,6 +296,17 @@ $route['api/referral-hospitals/types'] = 'referralhospitals/types'; // Specific 
 $route['api/referral-hospitals'] = 'referralhospitals/index';
 $route['api/referral-hospitals/(:num)'] = 'referralhospitals/get/$1';
 
+// Setup Module Routes - Insurance Organizations
+$route['api/insurance-organizations/pricing-items'] = 'insuranceorganizations/pricing_items'; // Specific route first
+$route['api/insurance-organizations/(:num)/pricing'] = 'insuranceorganizations/pricing/$1'; // Specific route before generic
+$route['api/insurance-organizations'] = 'insuranceorganizations/index';
+$route['api/insurance-organizations/(:num)'] = 'insuranceorganizations/get/$1';
+
+// Setup Module Routes - Donation Donors
+$route['api/donation-donors/(:num)/payments'] = 'donationdonors/payments/$1'; // Specific route before generic
+$route['api/donation-donors'] = 'donationdonors/index';
+$route['api/donation-donors/(:num)'] = 'donationdonors/get/$1';
+
 // System Settings Routes (order matters - more specific routes first)
 $route['api/system-settings/room-mode'] = 'system_settings/room_mode';
 $route['api/system-settings/category/(:any)'] = 'system_settings/category/$1';
@@ -328,3 +339,29 @@ $route['api/pharmacy/reports/payment-method'] = 'pharmacy_reports/payment_method
 $route['api/pharmacy/reports/top-selling'] = 'pharmacy_reports/top_selling';
 $route['api/pharmacy/reports/cashier-performance'] = 'pharmacy_reports/cashier_performance';
 $route['api/pharmacy/reports/shift-summary'] = 'pharmacy_reports/shift_summary';
+
+// Message Settings Routes
+// Message Templates
+$route['api/message-templates'] = 'message_templates/index';
+$route['api/message-templates/(:num)'] = 'message_templates/get/$1';
+$route['api/message-templates/(:num)/duplicate'] = 'message_templates/duplicate/$1';
+$route['api/message-templates/(:num)/toggle-status'] = 'message_templates/toggle_status/$1';
+$route['api/message-templates/(:num)/test'] = 'message_templates/test/$1';
+
+// Message Platforms
+$route['api/message-platforms'] = 'message_platforms/index';
+$route['api/message-platforms/(:any)'] = 'message_platforms/get/$1';
+
+// Message Recipients
+$route['api/message-recipients'] = 'message_recipients/index';
+$route['api/message-recipients/doctors'] = 'message_recipients/doctors';
+$route['api/message-recipients/staff'] = 'message_recipients/staff';
+$route['api/message-recipients/admins'] = 'message_recipients/admins';
+$route['api/message-recipients/bulk'] = 'message_recipients/bulk';
+$route['api/message-recipients/(:num)'] = 'message_recipients/get/$1';
+
+// Message Statistics
+$route['api/message-statistics'] = 'message_statistics/index';
+$route['api/message-statistics/daily'] = 'message_statistics/daily';
+$route['api/message-statistics/weekly'] = 'message_statistics/weekly';
+$route['api/message-statistics/by-platform'] = 'message_statistics/by_platform';

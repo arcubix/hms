@@ -13,6 +13,8 @@
  */
 
 import { useState } from 'react';
+import { PriorityModules } from '../settings/PriorityModules';
+import { SoftwareTeamContacts } from '../settings/SoftwareTeamContacts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -63,6 +65,8 @@ import {
   DollarSign,
   TrendingUp,
   Activity,
+  ClipboardList,
+  UserCog,
   Shield,
   Key,
   Smartphone,
@@ -650,14 +654,14 @@ export function SystemSettings() {
     {
       id: 'priority-modules',
       name: 'Priority Modules',
-      icon: FileText,
+      icon: ClipboardList,
       description: 'Customize your dashboard modules'
     },
     {
       id: 'contacts',
       name: 'Contacts',
       icon: Users,
-      description: 'Hospital staff directory'
+      description: 'Software team contacts and support'
     },
     {
       id: 'billing',
@@ -782,7 +786,7 @@ export function SystemSettings() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Full Name</Label>
+                  <Label>User Settings</Label>
                   <Input value={userProfile.name} placeholder="Enter your name" />
                 </div>
                 <div>
@@ -1073,141 +1077,13 @@ export function SystemSettings() {
 
   // ============= RENDER PRIORITY MODULES =============
   
-  const renderPriorityModules = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Priority Modules</h2>
-          <p className="text-sm text-gray-600 mt-1">Customize your dashboard with frequently used modules</p>
-        </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Reset to Default
-        </Button>
-      </div>
-
-      {/* Statistics */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Star className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-600">Pinned Modules</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {priorityModules.filter(m => m.isPinned).length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <Activity className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-600">Active Modules</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {priorityModules.filter(m => m.status === 'active').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Target className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-600">Total Access</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {priorityModules.reduce((sum, m) => sum + m.accessCount, 0)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Modules Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {priorityModules.map((module) => (
-          <Card key={module.id} className="border-0 shadow-md hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                    <FileText className="w-7 h-7 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">{module.name}</h3>
-                    <p className="text-sm text-gray-600">{module.category}</p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant={module.isPinned ? "default" : "outline"}
-                  className={module.isPinned ? "bg-yellow-500 hover:bg-yellow-600" : ""}
-                  onClick={() => {
-                    setPriorityModules(priorityModules.map(m =>
-                      m.id === module.id ? { ...m, isPinned: !m.isPinned } : m
-                    ));
-                    toast.success(module.isPinned ? 'Module unpinned' : 'Module pinned');
-                  }}
-                >
-                  <Star className={`w-3 h-3 ${module.isPinned ? 'fill-current' : ''}`} />
-                </Button>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Priority Level</span>
-                  <Badge className="bg-blue-100 text-blue-800">
-                    #{module.priority}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Access Count</span>
-                  <span className="font-semibold">{module.accessCount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Last Accessed</span>
-                  <span className="font-medium">{module.lastAccessed}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Status</span>
-                  <Badge className={module.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                    {module.status}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="flex gap-2 mt-4 pt-4 border-t">
-                <Button size="sm" variant="outline" className="flex-1">
-                  <Eye className="w-3 h-3 mr-1" />
-                  View
-                </Button>
-                <Button size="sm" variant="outline" className="flex-1">
-                  <Edit className="w-3 h-3 mr-1" />
-                  Configure
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
+  const renderPriorityModules = () => <PriorityModules />;
 
   // ============= RENDER CONTACTS =============
   
-  const renderContacts = () => (
+  const renderContacts = () => <SoftwareTeamContacts />;
+  
+  const renderContactsOld = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>

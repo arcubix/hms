@@ -33,7 +33,7 @@ import {
   Scan,
   Pill
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from 'sonner@2.0.3';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {

@@ -35,6 +35,20 @@ interface VitalRecord {
   respiratoryRate: string;
   bloodSugar: string;
   weight: string;
+  height?: string;
+  bmi?: string;
+  oxygenSaturation?: string;
+  bodySurfaceArea?: string;
+}
+
+interface PrescriptionMedicine {
+  medicine_name: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  quantity?: number;
+  timing?: string;
+  instructions?: string;
 }
 
 interface HealthRecordEntry {
@@ -50,6 +64,11 @@ interface HealthRecordEntry {
   prescription?: string;
   prescriptionText?: string;
   labTests?: string[];
+  medicines?: PrescriptionMedicine[]; // Full medicines array for print view
+  advice?: string;
+  followUpDate?: string;
+  patientAddress?: string;
+  patientGender?: string;
 }
 
 const mockHealthRecords: HealthRecordEntry[] = [
@@ -118,14 +137,17 @@ interface HealthRecordsProps {
   patientMRN?: string;
   onBack?: () => void;
   isFromAdmin?: boolean; // Indicates if called from admin dashboard
+  autoAddRecord?: boolean; // Auto-open Add Health Record form when component mounts
+  doctorId?: string | number; // Preload doctor ID when coming from appointment
+  onPrescriptionSaved?: () => void; // Callback when prescription is successfully saved
 }
 
-export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFromAdmin = false }: HealthRecordsProps = {}) {
+export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFromAdmin = false, autoAddRecord = false, doctorId, onPrescriptionSaved }: HealthRecordsProps = {}) {
   const [searchQuery, setSearchQuery] = useState(patientName || '');
   const [dateRange, setDateRange] = useState('11/11/2025 - 11/11/2025');
   const [expandedRecords, setExpandedRecords] = useState<string[]>([]);
   const [records, setRecords] = useState<HealthRecordEntry[]>([]);
-  const [isAddingRecord, setIsAddingRecord] = useState(false);
+  const [isAddingRecord, setIsAddingRecord] = useState(autoAddRecord);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [viewingRecordId, setViewingRecordId] = useState<string | null>(null);
   const [printingRecordId, setPrintingRecordId] = useState<string | null>(null);
@@ -196,6 +218,17 @@ export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFr
     // Extract lab tests
     const labTestsList = prescription.lab_tests?.map(test => test.test_name) || [];
 
+    // Extract medicines array for print view with all fields
+    const medicinesArray: PrescriptionMedicine[] = prescription.medicines?.map(med => ({
+      medicine_name: med.medicine_name,
+      dosage: med.dosage,
+      frequency: med.frequency,
+      duration: med.duration,
+      quantity: med.quantity,
+      timing: med.timing,
+      instructions: med.instructions
+    })) || [];
+
     return {
       id: prescription.id.toString(),
       mrn: prescription.patient_id_string || prescription.patient_id?.toString() || '',
@@ -219,7 +252,12 @@ export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFr
       diagnosis: prescription.diagnosis || '',
       prescription: medicationsList,
       prescriptionText: medicationsList,
-      labTests: labTestsList
+      labTests: labTestsList,
+      medicines: medicinesArray, // Include full medicines array for print view
+      advice: prescription.advice,
+      followUpDate: prescription.follow_up_date,
+      patientAddress: (prescription as any).patient_address || '',
+      patientGender: (prescription as any).patient_gender || ''
     };
   };
 
@@ -283,6 +321,8 @@ export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFr
         patientName={patientName}
         onBack={handleBackFromAddRecord}
         isFromAdmin={isFromAdmin}
+        doctorId={doctorId} // Preload doctor from appointment
+        onPrescriptionSaved={onPrescriptionSaved} // Callback to mark appointment as checked
       />
     );
   }
@@ -313,6 +353,19 @@ export function HealthRecords({ patientId, patientName, patientMRN, onBack, isFr
         isFromAdmin={isFromAdmin}
       />
     );
+  }
+
+  // If printing a record, show HealthRecordPrintView component
+  if (printingRecordId) {
+    const recordToPrint = records.find(r => r.id === printingRecordId);
+    if (recordToPrint) {
+      return (
+        <HealthRecordPrintView
+          record={recordToPrint}
+          onBack={() => setPrintingRecordId(null)}
+        />
+      );
+    }
   }
 
   return (
