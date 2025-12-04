@@ -168,6 +168,11 @@ class Refunds extends Api {
             
             if ($result['success']) {
                 $refund = $this->Refund_model->get_by_id($result['refund_id']);
+                
+                // Log refund creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Pharmacy', 'Refund', $result['refund_id'], "Processed refund for sale ID: {$data['sale_id']}, Amount: {$total_refund}");
+                
                 $this->success($refund, 'Refund processed successfully', 201);
             } else {
                 $this->error($result['message'] ?? 'Failed to process refund', 400);

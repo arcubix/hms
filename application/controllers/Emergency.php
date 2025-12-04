@@ -111,6 +111,10 @@ class Emergency extends Api {
             if ($result['success']) {
                 $visit = $this->Emergency_model->get_by_id($result['id']);
                 if ($visit) {
+                    // Log emergency visit creation
+                    $this->load->library('audit_log');
+                    $this->audit_log->logCreate('Emergency Department', 'Emergency Visit', $result['id'], "Created emergency visit: {$visit['er_number']} - Patient ID: {$data['patient_id']}");
+                    
                     $this->success($this->format_visit($visit), 'Emergency visit registered successfully');
                 } else {
                     $this->error('Visit created but could not retrieve details', 500);
@@ -192,12 +196,19 @@ class Emergency extends Api {
             return;
         }
         
+        // Get old visit data for audit log
+        $old_visit = $this->Emergency_model->get_by_id($id);
+        
         $result = $this->Emergency_model->update($id, $data);
         
         if ($result !== false) {
             // Get updated visit data
             $visit = $this->Emergency_model->get_by_id($id);
             if ($visit) {
+                // Log emergency visit update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Emergency Department', 'Emergency Visit', $id, "Updated emergency visit: {$visit['er_number']}", $old_visit, $visit);
+                
                 log_message('debug', 'Emergency->update success, updated visit: ' . json_encode(array(
                     'chief_complaint' => $visit['chief_complaint'] ?? null,
                     'triage_level' => $visit['triage_level'] ?? null,
@@ -240,6 +251,10 @@ class Emergency extends Api {
         $result = $this->db->delete('emergency_visits');
         
         if ($result) {
+            // Log emergency visit deletion
+            $this->load->library('audit_log');
+            $this->audit_log->logDelete('Emergency Department', 'Emergency Visit', $id, "Deleted emergency visit: {$visit_data['er_number']}");
+            
             $this->success(null, 'Emergency visit deleted successfully');
         } else {
             $this->error('Failed to delete emergency visit', 400);
@@ -268,10 +283,17 @@ class Emergency extends Api {
             return;
         }
         
+        $old_visit = $this->Emergency_model->get_by_id($id);
         $result = $this->Emergency_model->update_triage($id, $data);
         
         if ($result) {
             $visit = $this->Emergency_model->get_by_id($id);
+            
+            // Log triage update
+            $this->load->library('audit_log');
+            $triage_level = $visit['triage_level'] ?? 'Unknown';
+            $this->audit_log->logUpdate('Emergency Department', 'Triage', $id, "Updated triage level to {$triage_level} for visit: {$visit['er_number']}", $old_visit, $visit);
+            
             $this->success($this->format_visit($visit), 'Triage information updated successfully');
         } else {
             $this->error('Failed to update triage information', 400);
@@ -301,10 +323,17 @@ class Emergency extends Api {
             return;
         }
         
+        $old_visit = $this->Emergency_model->get_by_id($id);
         $result = $this->Emergency_model->update_disposition($id, $data);
         
         if ($result) {
             $visit = $this->Emergency_model->get_by_id($id);
+            
+            // Log disposition update
+            $this->load->library('audit_log');
+            $disposition = $visit['disposition'] ?? 'Unknown';
+            $this->audit_log->logUpdate('Emergency Department', 'Disposition', $id, "Updated disposition to {$disposition} for visit: {$visit['er_number']}", $old_visit, $visit);
+            
             $this->success($this->format_visit($visit), 'Disposition updated successfully');
         } else {
             $this->error('Failed to update disposition', 400);
@@ -430,6 +459,21 @@ class Emergency extends Api {
                 // insert_id() returns an integer > 0 on success, or 0/false on failure
                 if ($result && (is_numeric($result) && intval($result) > 0)) {
                     log_message('debug', 'Vital signs recorded successfully with ID: ' . $result);
+                    
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log vital signs recording
+                    $this->load->library('audit_log');
+                    $vital_details = array();
+                    if (isset($data['bp'])) $vital_details[] = "BP: {$data['bp']}";
+                    if (isset($data['pulse'])) $vital_details[] = "Pulse: {$data['pulse']}";
+                    if (isset($data['temp'])) $vital_details[] = "Temp: {$data['temp']}";
+                    if (isset($data['spo2'])) $vital_details[] = "SpO2: {$data['spo2']}";
+                    $details_str = !empty($vital_details) ? implode(', ', $vital_details) : 'Vital signs recorded';
+                    $this->audit_log->logCreate('Emergency Department', 'Vital Signs', $result, "Recorded vital signs for patient ID: {$patient_id} (Visit ID: {$id}) - {$details_str}");
+                    
                     $vitals = $this->Emergency_model->get_vital_signs_history($id);
                     $this->success($vitals, 'Vital signs recorded successfully');
                 } else {
@@ -511,6 +555,15 @@ class Emergency extends Api {
                 $result = $this->Emergency_model->add_treatment_note($id, $data);
                 
                 if ($result) {
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log treatment note creation
+                    $this->load->library('audit_log');
+                    $note_preview = substr($data['note_text'], 0, 50);
+                    $this->audit_log->logCreate('Emergency Department', 'Treatment Note', $result, "Added treatment note for patient ID: {$patient_id} (Visit ID: {$id}) - {$note_preview}...");
+                    
                     $notes = $this->Emergency_model->get_treatment_notes($id);
                     $this->success($notes, 'Treatment note added successfully');
                 } else {
@@ -560,6 +613,15 @@ class Emergency extends Api {
                 $result = $this->Emergency_model->order_investigation($id, $data);
                 
                 if ($result) {
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log investigation order creation
+                    $this->load->library('audit_log');
+                    $test_name = $data['test_name'] ?? 'Unknown';
+                    $this->audit_log->logCreate('Emergency Department', 'Investigation Order', $result, "Ordered investigation: {$test_name} for patient ID: {$patient_id} (Visit ID: {$id})");
+                    
                     $orders = $this->Emergency_model->get_investigation_orders($id);
                     $this->success($orders, 'Investigation ordered successfully');
                 } else {
@@ -609,6 +671,14 @@ class Emergency extends Api {
                 $result = $this->Emergency_model->administer_medication($id, $data);
                 
                 if ($result) {
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log medication administration
+                    $this->load->library('audit_log');
+                    $this->audit_log->logCreate('Emergency Department', 'Medication', $result, "Administered medication: {$data['medication_name']} ({$data['dosage']}) for patient ID: {$patient_id} (Visit ID: {$id})");
+                    
                     $medications = $this->Emergency_model->get_medication_history($id);
                     $this->success($medications, 'Medication recorded successfully');
                 } else {
@@ -663,6 +733,14 @@ class Emergency extends Api {
                 $result = $this->Emergency_model->add_charge($id, $data);
                 
                 if ($result) {
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log charge creation
+                    $this->load->library('audit_log');
+                    $this->audit_log->logCreate('Emergency Department', 'Charge', $result, "Added charge: {$data['item_name']} ({$data['charge_type']}) - {$data['unit_price']} for patient ID: {$patient_id} (Visit ID: {$id})");
+                    
                     $charges = $this->Emergency_model->get_charges($id);
                     $total = $this->Emergency_model->calculate_total_charges($id);
                     $this->success(array(
@@ -673,9 +751,28 @@ class Emergency extends Api {
                     $this->error('Failed to add charge', 400);
                 }
             } elseif ($method === 'DELETE' && $charge_id) {
+                // Get charge info before deletion
+                $charges_before = $this->Emergency_model->get_charges($id);
+                $charge_to_delete = null;
+                foreach ($charges_before as $ch) {
+                    if ($ch['id'] == $charge_id) {
+                        $charge_to_delete = $ch;
+                        break;
+                    }
+                }
+                
                 $result = $this->Emergency_model->delete_charge($charge_id, $id);
                 
                 if ($result) {
+                    // Get visit info for audit log
+                    $visit = $this->Emergency_model->get_by_id($id);
+                    $patient_id = $visit ? $visit['patient_id'] : 'Unknown';
+                    
+                    // Log charge deletion
+                    $this->load->library('audit_log');
+                    $item_name = $charge_to_delete ? $charge_to_delete['item_name'] : 'Unknown';
+                    $this->audit_log->logDelete('Emergency Department', 'Charge', $charge_id, "Deleted charge: {$item_name} for patient ID: {$patient_id} (Visit ID: {$id})");
+                    
                     $charges = $this->Emergency_model->get_charges($id);
                     $total = $this->Emergency_model->calculate_total_charges($id);
                     $this->success(array(
@@ -981,6 +1078,12 @@ class Emergency extends Api {
                 $ward_id = $this->Emergency_ward_model->create($data);
                 if ($ward_id) {
                     $ward = $this->Emergency_ward_model->get_by_id($ward_id);
+                    
+                    // Log ward creation
+                    $this->load->library('audit_log');
+                    $ward_name = $ward['ward_name'] ?? 'Unknown';
+                    $this->audit_log->logCreate('Emergency Department', 'Ward', $ward_id, "Created ward: {$ward_name}");
+                    
                     $this->success($ward, 'Ward created successfully');
                 } else {
                     $this->error('Failed to create ward', 400);
@@ -992,15 +1095,29 @@ class Emergency extends Api {
                     $data = $this->input->put();
                 }
                 
+                $old_ward = $this->Emergency_ward_model->get_by_id($id);
+                
                 if ($this->Emergency_ward_model->update($id, $data)) {
                     $ward = $this->Emergency_ward_model->get_by_id($id);
+                    
+                    // Log ward update
+                    $this->load->library('audit_log');
+                    $this->audit_log->logUpdate('Emergency Department', 'Ward', $id, "Updated ward ID: {$id}", $old_ward, $ward);
+                    
                     $this->success($ward, 'Ward updated successfully');
                 } else {
                     $this->error('Failed to update ward', 400);
                 }
             } elseif ($method === 'DELETE') {
                 // Delete ward
+                $ward = $this->Emergency_ward_model->get_by_id($id);
+                
                 if ($this->Emergency_ward_model->delete($id)) {
+                    // Log ward deletion
+                    $this->load->library('audit_log');
+                    $ward_name = $ward ? ($ward['ward_name'] ?? 'Unknown') : 'Unknown';
+                    $this->audit_log->logDelete('Emergency Department', 'Ward', $id, "Deleted ward: {$ward_name}");
+                    
                     $this->success(null, 'Ward deleted successfully');
                 } else {
                     $this->error('Failed to delete ward', 400);
@@ -1103,6 +1220,13 @@ class Emergency extends Api {
                 $bed_id = $this->Emergency_ward_bed_model->create($data);
                 if ($bed_id) {
                     $bed = $this->Emergency_ward_bed_model->get_by_id($bed_id);
+                    
+                    // Log bed creation
+                    $this->load->library('audit_log');
+                    $bed_number = $bed['bed_number'] ?? 'Unknown';
+                    $ward_id = $bed['ward_id'] ?? 'Unknown';
+                    $this->audit_log->logCreate('Emergency Department', 'Bed', $bed_id, "Created bed: {$bed_number} in Ward {$ward_id}");
+                    
                     $this->success($bed, 'Bed created successfully');
                 } else {
                     $this->error('Failed to create bed', 400);
@@ -1114,8 +1238,15 @@ class Emergency extends Api {
                     $data = $this->input->put();
                 }
                 
+                $old_bed = $this->Emergency_ward_bed_model->get_by_id($id);
+                
                 if ($this->Emergency_ward_bed_model->update($id, $data)) {
                     $bed = $this->Emergency_ward_bed_model->get_by_id($id);
+                    
+                    // Log bed update
+                    $this->load->library('audit_log');
+                    $this->audit_log->logUpdate('Emergency Department', 'Bed', $id, "Updated bed ID: {$id}", $old_bed, $bed);
+                    
                     $this->success($bed, 'Bed updated successfully');
                 } else {
                     $this->error('Failed to update bed', 400);
@@ -1151,10 +1282,17 @@ class Emergency extends Api {
             }
             
             $this->load->model('Emergency_ward_bed_model');
+            $old_bed = $this->Emergency_ward_bed_model->get_by_id($id);
             $result = $this->Emergency_ward_bed_model->assign_patient($id, $data['visit_id']);
             
             if ($result) {
                 $bed = $this->Emergency_ward_bed_model->get_by_id($id);
+                
+                // Log bed assignment
+                $this->load->library('audit_log');
+                $bed_number = $bed['bed_number'] ?? 'Unknown';
+                $this->audit_log->logUpdate('Emergency Department', 'Bed Assignment', $id, "Assigned bed {$bed_number} to Visit ID: {$data['visit_id']}", $old_bed, $bed);
+                
                 $this->success($bed, 'Bed assigned successfully');
             } else {
                 $this->error('Failed to assign bed', 400);
@@ -1256,6 +1394,12 @@ class Emergency extends Api {
                 $roster_id = $this->Emergency_duty_roster_model->create($data);
                 if ($roster_id) {
                     $roster = $this->Emergency_duty_roster_model->get_all(['id' => $roster_id]);
+                    
+                    // Log duty roster creation
+                    $this->load->library('audit_log');
+                    $user_id = $data['user_id'] ?? 'Unknown';
+                    $this->audit_log->logCreate('Emergency Department', 'Duty Roster', $roster_id, "Created duty roster entry for User ID: {$user_id}");
+                    
                     $this->success($roster[0] ?? null, 'Roster entry created successfully');
                 } else {
                     $this->error('Failed to create roster entry', 400);
@@ -1267,15 +1411,30 @@ class Emergency extends Api {
                     $data = $this->input->put();
                 }
                 
+                $old_roster = $this->Emergency_duty_roster_model->get_all(['id' => $id]);
+                $old_roster = !empty($old_roster) ? $old_roster[0] : null;
+                
                 if ($this->Emergency_duty_roster_model->update($id, $data)) {
                     $roster = $this->Emergency_duty_roster_model->get_all(['id' => $id]);
+                    
+                    // Log duty roster update
+                    $this->load->library('audit_log');
+                    $this->audit_log->logUpdate('Emergency Department', 'Duty Roster', $id, "Updated duty roster entry ID: {$id}", $old_roster, $roster[0] ?? null);
+                    
                     $this->success($roster[0] ?? null, 'Roster entry updated successfully');
                 } else {
                     $this->error('Failed to update roster entry', 400);
                 }
             } elseif ($method === 'DELETE') {
                 // Delete roster entry
+                $roster = $this->Emergency_duty_roster_model->get_all(['id' => $id]);
+                $roster_data = !empty($roster) ? $roster[0] : null;
+                
                 if ($this->Emergency_duty_roster_model->delete($id)) {
+                    // Log duty roster deletion
+                    $this->load->library('audit_log');
+                    $this->audit_log->logDelete('Emergency Department', 'Duty Roster', $id, "Deleted duty roster entry ID: {$id}");
+                    
                     $this->success(null, 'Roster entry deleted successfully');
                 } else {
                     $this->error('Failed to delete roster entry', 400);

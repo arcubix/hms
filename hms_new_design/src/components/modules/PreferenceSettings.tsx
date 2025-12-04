@@ -67,7 +67,6 @@ import {
   DollarSign,
   CreditCard,
   User,
-  Briefcase,
   Tag,
   Hash,
   Type,
@@ -88,7 +87,15 @@ import {
   Target,
   FlaskConical,
   Pill,
-  BarChart3
+  BarChart3,
+  Percent,
+  Receipt,
+  Layers,
+  ClipboardList,
+  FileSpreadsheet,
+  MessageCircle,
+  Star,
+  ThumbsUp
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
@@ -830,6 +837,24 @@ export function PreferenceSettings() {
   const [paymentPurpose, setPaymentPurpose] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
 
+  // Add Charge dialog states
+  const [isAddChargeDialogOpen, setIsAddChargeDialogOpen] = useState(false);
+  const [chargeName, setChargeName] = useState('');
+  const [chargeCategory, setChargeCategory] = useState('');
+  const [chargeBaseAmount, setChargeBaseAmount] = useState('');
+  const [chargeTaxRate, setChargeTaxRate] = useState('');
+  const [chargeDepartment, setChargeDepartment] = useState('');
+  const [chargeServiceType, setChargeServiceType] = useState('');
+  const [chargeDescription, setChargeDescription] = useState('');
+  const [chargeStatus, setChargeStatus] = useState('active');
+  const [chargeApplicableTo, setChargeApplicableTo] = useState<string[]>([]);
+  const [chargeBillingFrequency, setChargeBillingFrequency] = useState('one-time');
+  const [chargeCode, setChargeCode] = useState('');
+  const [chargeMinAmount, setChargeMinAmount] = useState('');
+  const [chargeMaxAmount, setChargeMaxAmount] = useState('');
+  const [chargeIsEmergency, setChargeIsEmergency] = useState(false);
+  const [chargeRequiresApproval, setChargeRequiresApproval] = useState(false);
+
   // Standard hospital departments with codes
   const standardDepartments = [
     { name: 'Cardiology', code: 'CARD' },
@@ -943,6 +968,13 @@ export function PreferenceSettings() {
     { id: 'insurances', label: 'Insurance', icon: Shield },
     { id: 'organizations', label: 'Organizations', icon: Briefcase },
     { id: 'donors', label: 'Donation Donors', icon: Heart },
+    { id: 'discount', label: 'Discount', icon: Percent },
+    { id: 'charges', label: 'Charges List', icon: Receipt },
+    { id: 'expenses', label: 'Expense Categories', icon: Layers },
+    { id: 'message-templates', label: 'Message Templates', icon: MessageCircle },
+    { id: 'lab-trackings', label: 'Lab Trackings', icon: FlaskConical },
+    { id: 'templates', label: 'Templates', icon: FileSpreadsheet },
+    { id: 'patient-feedback', label: 'Patient Feedback', icon: Star },
     { id: 'messages', label: 'Message Settings', icon: MessageSquare },
     { id: 'referrals', label: 'Referral Hospitals', icon: Hospital }
   ];
@@ -3125,6 +3157,703 @@ export function PreferenceSettings() {
     </div>
   );
 
+  // ============= RENDER DISCOUNT =============
+
+  const renderDiscount = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Discount Management</h2>
+          <p className="text-sm text-gray-600 mt-1">Configure discount rules and policies</p>
+        </div>
+        <Button className="bg-[#2F80ED] hover:bg-blue-600">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Discount Rule
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[
+          { 
+            name: 'Senior Citizen Discount', 
+            type: 'Percentage', 
+            value: '10%', 
+            category: 'Patient Category',
+            status: 'active',
+            color: 'green'
+          },
+          { 
+            name: 'Emergency Discount', 
+            type: 'Percentage', 
+            value: '5%', 
+            category: 'Service Type',
+            status: 'active',
+            color: 'blue'
+          },
+          { 
+            name: 'Staff Discount', 
+            type: 'Percentage', 
+            value: '20%', 
+            category: 'User Type',
+            status: 'active',
+            color: 'purple'
+          },
+          { 
+            name: 'Bulk Lab Test Discount', 
+            type: 'Fixed Amount', 
+            value: 'PKR 500', 
+            category: 'Laboratory',
+            status: 'active',
+            color: 'orange'
+          },
+          { 
+            name: 'Insurance Co-pay', 
+            type: 'Percentage', 
+            value: '15%', 
+            category: 'Insurance',
+            status: 'inactive',
+            color: 'gray'
+          },
+          { 
+            name: 'Pharmacy Discount', 
+            type: 'Percentage', 
+            value: '8%', 
+            category: 'Pharmacy',
+            status: 'active',
+            color: 'teal'
+          }
+        ].map((discount, index) => (
+          <Card key={index} className="hover:shadow-lg transition-shadow border border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className={`p-3 rounded-lg bg-${discount.color}-50`}>
+                  <Percent className={`w-6 h-6 text-${discount.color}-600`} />
+                </div>
+                <Badge variant={discount.status === 'active' ? 'default' : 'secondary'} className={discount.status === 'active' ? 'bg-[#27AE60] hover:bg-green-700' : ''}>
+                  {discount.status === 'active' ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{discount.name}</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Type:</span>
+                  <span className="font-medium text-gray-900">{discount.type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Value:</span>
+                  <span className="font-semibold text-[#2F80ED]">{discount.value}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Category:</span>
+                  <span className="font-medium text-gray-900">{discount.category}</span>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4 pt-4 border-t">
+                <Button size="sm" variant="outline" className="flex-1">
+                  <Edit className="w-3 h-3 mr-1" />
+                  Edit
+                </Button>
+                <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ============= RENDER CHARGES LIST =============
+
+  const renderCharges = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Charges List</h2>
+          <p className="text-sm text-gray-600 mt-1">Manage hospital service charges and fees</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button className="bg-[#2F80ED] hover:bg-blue-600" onClick={() => setIsAddChargeDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Charge
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        <Card className="border border-gray-200">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="font-semibold">Service Name</TableHead>
+                    <TableHead className="font-semibold">Category</TableHead>
+                    <TableHead className="font-semibold">Base Charge</TableHead>
+                    <TableHead className="font-semibold">Tax</TableHead>
+                    <TableHead className="font-semibold">Total</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[
+                    { name: 'Consultation Fee', category: 'OPD', base: 'PKR 1,500', tax: '5%', total: 'PKR 1,575', status: 'active' },
+                    { name: 'Emergency Visit', category: 'Emergency', base: 'PKR 3,000', tax: '5%', total: 'PKR 3,150', status: 'active' },
+                    { name: 'ICU Per Day', category: 'IPD', base: 'PKR 15,000', tax: '5%', total: 'PKR 15,750', status: 'active' },
+                    { name: 'Private Room', category: 'IPD', base: 'PKR 5,000', tax: '5%', total: 'PKR 5,250', status: 'active' },
+                    { name: 'Operation Theatre', category: 'Surgery', base: 'PKR 25,000', tax: '8%', total: 'PKR 27,000', status: 'active' },
+                    { name: 'Ambulance Service', category: 'Transport', base: 'PKR 2,000', tax: '5%', total: 'PKR 2,100', status: 'active' }
+                  ].map((charge, index) => (
+                    <TableRow key={index} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">{charge.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{charge.category}</Badge>
+                      </TableCell>
+                      <TableCell className="font-semibold text-gray-900">{charge.base}</TableCell>
+                      <TableCell>{charge.tax}</TableCell>
+                      <TableCell className="font-semibold text-[#2F80ED]">{charge.total}</TableCell>
+                      <TableCell>
+                        <Badge className="bg-[#27AE60] hover:bg-green-700">Active</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  // ============= RENDER EXPENSE CATEGORIES =============
+
+  const renderExpenses = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Expense Categories</h2>
+          <p className="text-sm text-gray-600 mt-1">Organize and manage hospital expense categories</p>
+        </div>
+        <Button className="bg-[#2F80ED] hover:bg-blue-600">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Category
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[
+          { name: 'Salaries & Wages', icon: Users, count: 245, budget: 'PKR 5,000,000', spent: 'PKR 4,200,000', percentage: 84, color: 'blue' },
+          { name: 'Medical Supplies', icon: Pill, count: 89, budget: 'PKR 2,000,000', spent: 'PKR 1,650,000', percentage: 82.5, color: 'green' },
+          { name: 'Equipment Maintenance', icon: Settings, count: 34, budget: 'PKR 800,000', spent: 'PKR 520,000', percentage: 65, color: 'purple' },
+          { name: 'Utilities', icon: DollarSign, count: 12, budget: 'PKR 500,000', spent: 'PKR 410,000', percentage: 82, color: 'orange' },
+          { name: 'Laboratory Supplies', icon: FlaskConical, count: 67, budget: 'PKR 1,200,000', spent: 'PKR 980,000', percentage: 81.6, color: 'teal' },
+          { name: 'Administrative', icon: Briefcase, count: 156, budget: 'PKR 600,000', spent: 'PKR 450,000', percentage: 75, color: 'indigo' }
+        ].map((category, index) => {
+          const Icon = category.icon;
+          return (
+            <Card key={index} className="hover:shadow-lg transition-shadow border border-gray-200">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-3 rounded-lg bg-${category.color}-50`}>
+                    <Icon className={`w-6 h-6 text-${category.color}-600`} />
+                  </div>
+                  <Badge variant="secondary">{category.count} items</Badge>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{category.name}</h3>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Budget</span>
+                    <span className="font-semibold text-gray-900">{category.budget}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Spent</span>
+                    <span className="font-semibold text-[#2F80ED]">{category.spent}</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Utilization</span>
+                      <span className="font-semibold text-gray-900">{category.percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${category.percentage > 90 ? 'bg-red-500' : category.percentage > 80 ? 'bg-yellow-500' : 'bg-[#27AE60]'}`}
+                        style={{ width: `${category.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-4 pt-4 border-t">
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <Eye className="w-3 h-3 mr-1" />
+                    View
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <Edit className="w-3 h-3 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ============= RENDER MESSAGE TEMPLATES =============
+
+  const renderMessageTemplates = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Message Templates</h2>
+          <p className="text-sm text-gray-600 mt-1">Pre-defined templates for patient communication</p>
+        </div>
+        <Button className="bg-[#2F80ED] hover:bg-blue-600" onClick={() => setShowAddTemplatePage(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Create Template
+        </Button>
+      </div>
+
+      <div className="grid gap-4">
+        {[
+          { 
+            name: 'Appointment Confirmation', 
+            type: 'SMS', 
+            category: 'Appointments',
+            message: 'Dear [Patient Name], your appointment is confirmed for [Date] at [Time] with Dr. [Doctor Name].',
+            usage: 1245,
+            lastUsed: '2 hours ago'
+          },
+          { 
+            name: 'Lab Results Ready', 
+            type: 'Email', 
+            category: 'Laboratory',
+            message: 'Hello [Patient Name], your lab results are ready. Please visit the hospital or log in to view them online.',
+            usage: 892,
+            lastUsed: '5 hours ago'
+          },
+          { 
+            name: 'Payment Receipt', 
+            type: 'SMS', 
+            category: 'Billing',
+            message: 'Thank you for your payment of PKR [Amount]. Receipt #[Receipt No]. For queries, call [Phone].',
+            usage: 2156,
+            lastUsed: '1 hour ago'
+          },
+          { 
+            name: 'Prescription Reminder', 
+            type: 'WhatsApp', 
+            category: 'Pharmacy',
+            message: 'Hi [Patient Name], this is a reminder to take your medication [Medicine Name] as prescribed.',
+            usage: 654,
+            lastUsed: '3 hours ago'
+          }
+        ].map((template, index) => (
+          <Card key={index} className="hover:shadow-md transition-shadow border border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+                    <Badge variant="outline" className="text-[#2F80ED] border-[#2F80ED]">{template.type}</Badge>
+                    <Badge variant="secondary">{template.category}</Badge>
+                  </div>
+                  <p className="text-sm text-gray-600 max-w-3xl">{template.message}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="flex gap-6 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <Send className="w-4 h-4" />
+                    <span>{template.usage} sent</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    <span>Last used: {template.lastUsed}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline">
+                    <Copy className="w-3 h-3 mr-1" />
+                    Duplicate
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    <Edit className="w-3 h-3 mr-1" />
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ============= RENDER LAB TRACKINGS =============
+
+  const renderLabTrackings = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Lab Trackings</h2>
+          <p className="text-sm text-gray-600 mt-1">Monitor and track laboratory test workflows</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Filter className="w-4 h-4 mr-2" />
+            Filter
+          </Button>
+          <Button className="bg-[#2F80ED] hover:bg-blue-600">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Tracking
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        {[
+          { 
+            trackingId: 'LAB-2024-001', 
+            patientName: 'Ahmed Khan',
+            testName: 'Complete Blood Count (CBC)',
+            status: 'Sample Collected',
+            priority: 'Normal',
+            requestedBy: 'Dr. Sarah Ahmed',
+            requestedAt: '10:30 AM',
+            estimatedTime: '2 hours',
+            stage: 2
+          },
+          { 
+            trackingId: 'LAB-2024-002', 
+            patientName: 'Fatima Ali',
+            testName: 'Lipid Profile',
+            status: 'In Progress',
+            priority: 'Urgent',
+            requestedBy: 'Dr. Hassan Ali',
+            requestedAt: '09:15 AM',
+            estimatedTime: '1 hour',
+            stage: 3
+          },
+          { 
+            trackingId: 'LAB-2024-003', 
+            patientName: 'Usman Tariq',
+            testName: 'HbA1c Test',
+            status: 'Results Ready',
+            priority: 'Normal',
+            requestedBy: 'Dr. Maria Khan',
+            requestedAt: '08:00 AM',
+            estimatedTime: 'Completed',
+            stage: 5
+          }
+        ].map((tracking, index) => (
+          <Card key={index} className="hover:shadow-md transition-shadow border border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{tracking.trackingId}</h3>
+                    <Badge className={tracking.priority === 'Urgent' ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500'}>
+                      {tracking.priority}
+                    </Badge>
+                    <Badge variant="outline" className="text-[#2F80ED] border-[#2F80ED]">
+                      {tracking.status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-gray-600">Patient: </span>
+                      <span className="font-medium text-gray-900">{tracking.patientName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Test: </span>
+                      <span className="font-medium text-gray-900">{tracking.testName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Requested By: </span>
+                      <span className="font-medium text-gray-900">{tracking.requestedBy}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Time: </span>
+                      <span className="font-medium text-gray-900">{tracking.requestedAt}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Progress</span>
+                  <span className="font-medium text-gray-900">{tracking.estimatedTime}</span>
+                </div>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((stage) => (
+                    <div 
+                      key={stage}
+                      className={`h-2 flex-1 rounded-full ${stage <= tracking.stage ? 'bg-[#27AE60]' : 'bg-gray-200'}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Requested</span>
+                  <span>Collected</span>
+                  <span>Processing</span>
+                  <span>Analyzed</span>
+                  <span>Ready</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t">
+                <Button size="sm" variant="outline">
+                  <Eye className="w-3 h-3 mr-1" />
+                  View Details
+                </Button>
+                <Button size="sm" variant="outline">
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Update Status
+                </Button>
+                <Button size="sm" variant="outline">
+                  <Printer className="w-3 h-3 mr-1" />
+                  Print
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ============= RENDER TEMPLATES =============
+
+  const renderTemplates = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Document Templates</h2>
+          <p className="text-sm text-gray-600 mt-1">Manage hospital document and form templates</p>
+        </div>
+        <Button className="bg-[#2F80ED] hover:bg-blue-600">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Template
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[
+          { name: 'Discharge Summary', icon: FileCheck, category: 'IPD', count: 324, color: 'blue' },
+          { name: 'Prescription Form', icon: FileText, category: 'OPD', count: 1256, color: 'green' },
+          { name: 'Lab Report', icon: FlaskConical, category: 'Laboratory', count: 892, color: 'purple' },
+          { name: 'Consent Form', icon: FileSpreadsheet, category: 'Legal', count: 445, color: 'orange' },
+          { name: 'Medical Certificate', icon: FileCheck, category: 'OPD', count: 678, color: 'teal' },
+          { name: 'Referral Letter', icon: ExternalLink, category: 'OPD', count: 234, color: 'indigo' }
+        ].map((template, index) => {
+          const Icon = template.icon;
+          return (
+            <Card key={index} className="hover:shadow-lg transition-shadow border border-gray-200">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-3 rounded-lg bg-${template.color}-50`}>
+                    <Icon className={`w-6 h-6 text-${template.color}-600`} />
+                  </div>
+                  <Badge variant="secondary">{template.count} used</Badge>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">{template.name}</h3>
+                <p className="text-sm text-gray-600 mb-4">Category: {template.category}</p>
+                
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <Eye className="w-3 h-3 mr-1" />
+                    Preview
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1">
+                    <Edit className="w-3 h-3 mr-1" />
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ============= RENDER PATIENT FEEDBACK =============
+
+  const renderPatientFeedback = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Patient Feedback</h2>
+          <p className="text-sm text-gray-600 mt-1">Monitor patient satisfaction and feedback</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Export Report
+          </Button>
+          <Button variant="outline">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Analytics
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card className="border border-gray-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Average Rating</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">4.6</p>
+              </div>
+              <div className="p-3 rounded-lg bg-yellow-50">
+                <Star className="w-6 h-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Responses</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">1,247</p>
+              </div>
+              <div className="p-3 rounded-lg bg-blue-50">
+                <MessageCircle className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Positive</p>
+                <p className="text-3xl font-bold text-[#27AE60] mt-1">92%</p>
+              </div>
+              <div className="p-3 rounded-lg bg-green-50">
+                <ThumbsUp className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Response Rate</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">78%</p>
+              </div>
+              <div className="p-3 rounded-lg bg-purple-50">
+                <TrendingUp className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Feedback */}
+      <Card className="border border-gray-200">
+        <CardHeader>
+          <CardTitle>Recent Feedback</CardTitle>
+          <CardDescription>Latest patient reviews and comments</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[
+              { 
+                patient: 'Ahmed Khan', 
+                department: 'Cardiology',
+                rating: 5,
+                comment: 'Excellent service! Dr. Sarah was very professional and caring.',
+                date: '2 hours ago',
+                sentiment: 'positive'
+              },
+              { 
+                patient: 'Fatima Ali', 
+                department: 'Laboratory',
+                rating: 4,
+                comment: 'Quick service but waiting area could be improved.',
+                date: '5 hours ago',
+                sentiment: 'positive'
+              },
+              { 
+                patient: 'Usman Tariq', 
+                department: 'Emergency',
+                rating: 5,
+                comment: 'Staff was incredibly helpful during my emergency visit.',
+                date: '1 day ago',
+                sentiment: 'positive'
+              },
+              { 
+                patient: 'Ayesha Hassan', 
+                department: 'Pharmacy',
+                rating: 3,
+                comment: 'Long waiting times at the pharmacy counter.',
+                date: '2 days ago',
+                sentiment: 'neutral'
+              }
+            ].map((feedback, index) => (
+              <div key={index} className="p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h4 className="font-semibold text-gray-900">{feedback.patient}</h4>
+                      <Badge variant="outline">{feedback.department}</Badge>
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i}
+                            className={`w-4 h-4 ${i < feedback.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700">{feedback.comment}</p>
+                  </div>
+                  <span className="text-xs text-gray-500 ml-4">{feedback.date}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   // ============= MAIN RENDER =============
 
   const renderContent = () => {
@@ -3141,6 +3870,20 @@ export function PreferenceSettings() {
         return renderOrganizations();
       case 'donors':
         return renderDonors();
+      case 'discount':
+        return renderDiscount();
+      case 'charges':
+        return renderCharges();
+      case 'expenses':
+        return renderExpenses();
+      case 'message-templates':
+        return renderMessageTemplates();
+      case 'lab-trackings':
+        return renderLabTrackings();
+      case 'templates':
+        return renderTemplates();
+      case 'patient-feedback':
+        return renderPatientFeedback();
       case 'messages':
         return renderMessages();
       case 'referrals':
@@ -3249,6 +3992,410 @@ export function PreferenceSettings() {
           {renderContent()}
         </div>
       </div>
+
+      {/* Add Charge Dialog */}
+      <Dialog open={isAddChargeDialogOpen} onOpenChange={setIsAddChargeDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-50">
+                <Receipt className="w-6 h-6 text-[#2F80ED]" />
+              </div>
+              Add New Charge
+            </DialogTitle>
+            <DialogDescription>
+              Create a new service charge for hospital billing system
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 mt-4">
+            {/* Basic Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Info className="w-4 h-4 text-[#2F80ED]" />
+                <h3 className="font-semibold text-gray-900">Basic Information</h3>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="charge-name">Service Name *</Label>
+                  <Input 
+                    id="charge-name"
+                    value={chargeName}
+                    onChange={(e) => setChargeName(e.target.value)}
+                    placeholder="e.g., Consultation Fee"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="charge-code">Service Code *</Label>
+                  <Input 
+                    id="charge-code"
+                    value={chargeCode}
+                    onChange={(e) => setChargeCode(e.target.value)}
+                    placeholder="e.g., SVC-001"
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="charge-category">Category *</Label>
+                  <Select value={chargeCategory} onValueChange={setChargeCategory}>
+                    <SelectTrigger id="charge-category" className="mt-2">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="opd">OPD (Outpatient Department)</SelectItem>
+                      <SelectItem value="ipd">IPD (Inpatient Department)</SelectItem>
+                      <SelectItem value="emergency">Emergency</SelectItem>
+                      <SelectItem value="surgery">Surgery</SelectItem>
+                      <SelectItem value="laboratory">Laboratory</SelectItem>
+                      <SelectItem value="radiology">Radiology</SelectItem>
+                      <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                      <SelectItem value="physiotherapy">Physiotherapy</SelectItem>
+                      <SelectItem value="transport">Transport</SelectItem>
+                      <SelectItem value="accommodation">Accommodation</SelectItem>
+                      <SelectItem value="consultation">Consultation</SelectItem>
+                      <SelectItem value="miscellaneous">Miscellaneous</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="charge-department">Department</Label>
+                  <Select value={chargeDepartment} onValueChange={setChargeDepartment}>
+                    <SelectTrigger id="charge-department" className="mt-2">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cardiology">Cardiology</SelectItem>
+                      <SelectItem value="neurology">Neurology</SelectItem>
+                      <SelectItem value="pediatrics">Pediatrics</SelectItem>
+                      <SelectItem value="orthopedics">Orthopedics</SelectItem>
+                      <SelectItem value="emergency">Emergency</SelectItem>
+                      <SelectItem value="icu">ICU</SelectItem>
+                      <SelectItem value="obgyn">Obstetrics & Gynecology</SelectItem>
+                      <SelectItem value="surgery">General Surgery</SelectItem>
+                      <SelectItem value="internal">Internal Medicine</SelectItem>
+                      <SelectItem value="oncology">Oncology</SelectItem>
+                      <SelectItem value="radiology">Radiology</SelectItem>
+                      <SelectItem value="laboratory">Laboratory</SelectItem>
+                      <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="charge-description">Description</Label>
+                <Textarea 
+                  id="charge-description"
+                  value={chargeDescription}
+                  onChange={(e) => setChargeDescription(e.target.value)}
+                  placeholder="Brief description of the service..."
+                  className="mt-2 min-h-[80px]"
+                />
+              </div>
+            </div>
+
+            {/* Pricing Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <DollarSign className="w-4 h-4 text-[#27AE60]" />
+                <h3 className="font-semibold text-gray-900">Pricing Information</h3>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="charge-base">Base Amount (PKR) *</Label>
+                  <Input 
+                    id="charge-base"
+                    type="number"
+                    value={chargeBaseAmount}
+                    onChange={(e) => setChargeBaseAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="charge-tax">Tax Rate (%)</Label>
+                  <Input 
+                    id="charge-tax"
+                    type="number"
+                    value={chargeTaxRate}
+                    onChange={(e) => setChargeTaxRate(e.target.value)}
+                    placeholder="0"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label>Total Amount (PKR)</Label>
+                  <div className="mt-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md">
+                    <span className="font-semibold text-[#2F80ED]">
+                      {chargeBaseAmount && chargeTaxRate 
+                        ? (parseFloat(chargeBaseAmount) + (parseFloat(chargeBaseAmount) * parseFloat(chargeTaxRate) / 100)).toFixed(2)
+                        : chargeBaseAmount || '0.00'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="charge-min">Minimum Amount (PKR)</Label>
+                  <Input 
+                    id="charge-min"
+                    type="number"
+                    value={chargeMinAmount}
+                    onChange={(e) => setChargeMinAmount(e.target.value)}
+                    placeholder="Optional"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">For variable pricing</p>
+                </div>
+                <div>
+                  <Label htmlFor="charge-max">Maximum Amount (PKR)</Label>
+                  <Input 
+                    id="charge-max"
+                    type="number"
+                    value={chargeMaxAmount}
+                    onChange={(e) => setChargeMaxAmount(e.target.value)}
+                    placeholder="Optional"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">For variable pricing</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Service Configuration Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Settings className="w-4 h-4 text-purple-600" />
+                <h3 className="font-semibold text-gray-900">Service Configuration</h3>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="service-type">Service Type</Label>
+                  <Select value={chargeServiceType} onValueChange={setChargeServiceType}>
+                    <SelectTrigger id="service-type" className="mt-2">
+                      <SelectValue placeholder="Select service type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="medical">Medical Service</SelectItem>
+                      <SelectItem value="diagnostic">Diagnostic Test</SelectItem>
+                      <SelectItem value="procedure">Medical Procedure</SelectItem>
+                      <SelectItem value="treatment">Treatment</SelectItem>
+                      <SelectItem value="room">Room Charge</SelectItem>
+                      <SelectItem value="equipment">Equipment Usage</SelectItem>
+                      <SelectItem value="consumable">Consumable Item</SelectItem>
+                      <SelectItem value="administrative">Administrative Fee</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="billing-frequency">Billing Frequency</Label>
+                  <Select value={chargeBillingFrequency} onValueChange={setChargeBillingFrequency}>
+                    <SelectTrigger id="billing-frequency" className="mt-2">
+                      <SelectValue placeholder="Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="one-time">One Time</SelectItem>
+                      <SelectItem value="per-day">Per Day</SelectItem>
+                      <SelectItem value="per-visit">Per Visit</SelectItem>
+                      <SelectItem value="per-hour">Per Hour</SelectItem>
+                      <SelectItem value="per-session">Per Session</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Applicable To</Label>
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {['OPD Patients', 'IPD Patients', 'Emergency Patients', 'Insurance Patients', 'Corporate Patients', 'Walk-in Patients'].map((option) => (
+                    <div key={option} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`applicable-${option}`}
+                        checked={chargeApplicableTo.includes(option)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setChargeApplicableTo([...chargeApplicableTo, option]);
+                          } else {
+                            setChargeApplicableTo(chargeApplicableTo.filter(item => item !== option));
+                          }
+                        }}
+                        className="w-4 h-4 text-[#2F80ED] rounded border-gray-300 focus:ring-[#2F80ED]"
+                      />
+                      <label htmlFor={`applicable-${option}`} className="text-sm text-gray-700">
+                        {option}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Options Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <ToggleLeft className="w-4 h-4 text-orange-600" />
+                <h3 className="font-semibold text-gray-900">Additional Options</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50 border border-gray-200">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">Active Status</h4>
+                    <p className="text-sm text-gray-600 mt-1">Enable this charge for billing</p>
+                  </div>
+                  <Switch 
+                    checked={chargeStatus === 'active'}
+                    onCheckedChange={(checked) => setChargeStatus(checked ? 'active' : 'inactive')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50 border border-gray-200">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">Emergency Service</h4>
+                    <p className="text-sm text-gray-600 mt-1">Mark as emergency/urgent service</p>
+                  </div>
+                  <Switch 
+                    checked={chargeIsEmergency}
+                    onCheckedChange={setChargeIsEmergency}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-gray-50 border border-gray-200">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">Requires Approval</h4>
+                    <p className="text-sm text-gray-600 mt-1">Service requires admin/doctor approval before billing</p>
+                  </div>
+                  <Switch 
+                    checked={chargeRequiresApproval}
+                    onCheckedChange={setChargeRequiresApproval}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Summary Card */}
+            <Card className="border-2 border-[#2F80ED] bg-blue-50">
+              <CardContent className="p-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#27AE60]" />
+                  Charge Summary
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Service:</span>
+                    <span className="font-medium text-gray-900">{chargeName || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Code:</span>
+                    <span className="font-medium text-gray-900">{chargeCode || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Category:</span>
+                    <span className="font-medium text-gray-900">{chargeCategory || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Base Amount:</span>
+                    <span className="font-semibold text-gray-900">PKR {chargeBaseAmount || '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tax:</span>
+                    <span className="font-medium text-gray-900">{chargeTaxRate || '0'}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total:</span>
+                    <span className="font-bold text-[#2F80ED]">
+                      PKR {chargeBaseAmount && chargeTaxRate 
+                        ? (parseFloat(chargeBaseAmount) + (parseFloat(chargeBaseAmount) * parseFloat(chargeTaxRate) / 100)).toFixed(2)
+                        : chargeBaseAmount || '0.00'}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-between gap-3 mt-6 pt-6 border-t">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsAddChargeDialogOpen(false);
+                // Reset form
+                setChargeName('');
+                setChargeCode('');
+                setChargeCategory('');
+                setChargeDepartment('');
+                setChargeBaseAmount('');
+                setChargeTaxRate('');
+                setChargeDescription('');
+                setChargeServiceType('');
+                setChargeBillingFrequency('one-time');
+                setChargeApplicableTo([]);
+                setChargeMinAmount('');
+                setChargeMaxAmount('');
+                setChargeIsEmergency(false);
+                setChargeRequiresApproval(false);
+                setChargeStatus('active');
+              }}
+              className="w-32"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  toast.success('Charge saved as draft');
+                }}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Save as Draft
+              </Button>
+              <Button 
+                className="bg-[#27AE60] hover:bg-green-700"
+                onClick={() => {
+                  if (!chargeName || !chargeCode || !chargeCategory || !chargeBaseAmount) {
+                    toast.error('Please fill all required fields');
+                    return;
+                  }
+                  toast.success('Charge added successfully!');
+                  setIsAddChargeDialogOpen(false);
+                  // Reset form
+                  setChargeName('');
+                  setChargeCode('');
+                  setChargeCategory('');
+                  setChargeDepartment('');
+                  setChargeBaseAmount('');
+                  setChargeTaxRate('');
+                  setChargeDescription('');
+                  setChargeServiceType('');
+                  setChargeBillingFrequency('one-time');
+                  setChargeApplicableTo([]);
+                  setChargeMinAmount('');
+                  setChargeMaxAmount('');
+                  setChargeIsEmergency(false);
+                  setChargeRequiresApproval(false);
+                  setChargeStatus('active');
+                }}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Add Charge
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Insurance/Organization Dialog */}
       <Dialog open={isAddInsuranceDialogOpen} onOpenChange={setIsAddInsuranceDialogOpen}>

@@ -178,5 +178,13 @@ class Api extends CI_Controller {
         $this->user = $user;
         return true;
     }
+
+    /**
+     * Get current user (for libraries to access)
+     * @return mixed|null
+     */
+    public function get_current_user() {
+        return $this->user;
+    }
 }
 

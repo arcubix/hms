@@ -165,6 +165,11 @@ class Rooms extends Api {
 
             if ($room_id) {
                 $room = $this->Room_model->get_by_id($room_id);
+                
+                // Log room creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'Room', $room_id, "Created room: {$data['room_number']}");
+                
                 $this->success($room, 'Room created successfully', 201);
             } else {
                 $this->error('Failed to create room', 500);
@@ -189,6 +194,8 @@ class Rooms extends Api {
                 $this->error('Room not found', 404);
                 return;
             }
+
+            $old_room = $room; // Store old data for audit log
 
             // Validate floor exists if provided
             if (isset($data['floor_id'])) {
@@ -239,6 +246,11 @@ class Rooms extends Api {
 
             if ($result) {
                 $room = $this->Room_model->get_by_id($id);
+                
+                // Log room update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'Room', $id, "Updated room: {$room['room_number']}", $old_room, $room);
+                
                 $this->success($room, 'Room updated successfully');
             } else {
                 $this->error('Failed to update room', 500);
@@ -265,6 +277,10 @@ class Rooms extends Api {
             $result = $this->Room_model->delete($id);
 
             if ($result) {
+                // Log room deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Master Data', 'Room', $id, "Deleted room: {$room['room_number']}");
+                
                 $this->success(null, 'Room deleted successfully');
             } else {
                 $this->error('Cannot delete room. It may be assigned to doctors.', 400);

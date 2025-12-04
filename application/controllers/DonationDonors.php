@@ -154,6 +154,12 @@ class DonationDonors extends Api {
             
             if ($id) {
                 $donor = $this->DonationDonor_model->get_by_id($id);
+                
+                // Log donation donor creation
+                $this->load->library('audit_log');
+                $donor_name = $data['name'] ?? 'Unknown';
+                $this->audit_log->logCreate('Donations', 'Donor', $id, "Created donation donor: {$donor_name}");
+                
                 $this->success($donor, 'Donation donor created successfully', 201);
             } else {
                 $this->error('Failed to create donation donor', 500);
@@ -196,8 +202,14 @@ class DonationDonors extends Api {
 
             $result = $this->DonationDonor_model->update($id, $data);
             
+            $old_donor = $donor;
             if ($result) {
                 $updated_donor = $this->DonationDonor_model->get_by_id($id);
+                
+                // Log donation donor update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Donations', 'Donor', $id, "Updated donation donor ID: {$id}", $old_donor, $updated_donor);
+                
                 $this->success($updated_donor, 'Donation donor updated successfully');
             } else {
                 $this->error('Failed to update donation donor', 500);
@@ -245,6 +257,12 @@ class DonationDonors extends Api {
             
             if ($payment_id) {
                 $payments = $this->DonationDonor_model->get_payments($donor_id);
+                
+                // Log donation payment addition
+                $this->load->library('audit_log');
+                $amount = $data['amount'] ?? 0;
+                $this->audit_log->logCreate('Donations', 'Donation Payment', $payment_id, "Added payment: {$amount} for Donor ID: {$donor_id}");
+                
                 $this->success($payments, 'Payment added successfully', 201);
             } else {
                 $this->error('Failed to add payment', 500);
@@ -270,6 +288,10 @@ class DonationDonors extends Api {
             $result = $this->DonationDonor_model->delete($id);
             
             if ($result) {
+                // Log donation donor deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Donations', 'Donor', $id, "Deleted donation donor ID: {$id}");
+                
                 $this->success(null, 'Donation donor deleted successfully');
             } else {
                 $this->error('Failed to delete donation donor', 500);

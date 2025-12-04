@@ -117,6 +117,14 @@ class Stock_adjustments extends Api {
             
             if ($adjustment_id) {
                 $adjustment = $this->Stock_adjustment_model->get_by_id($adjustment_id);
+                
+                // Log stock adjustment creation
+                $this->load->library('audit_log');
+                $adjustment_type = $data['adjustment_type'] ?? 'Unknown';
+                $quantity = $data['quantity'] ?? 0;
+                $reason = $data['reason'] ?? 'No reason provided';
+                $this->audit_log->logCreate('Pharmacy', 'Stock Adjustment', $adjustment_id, "Created stock adjustment: {$adjustment_type} for Medicine ID: {$data['medicine_id']}, Quantity: {$quantity}, Reason: {$reason}");
+                
                 $this->success($adjustment, 'Stock adjustment created successfully', 201);
             } else {
                 $this->error('Failed to create adjustment', 400);
@@ -160,8 +168,14 @@ class Stock_adjustments extends Api {
         }
         
         try {
+            $old_adjustment = $this->Stock_adjustment_model->get_by_id($id);
             if ($this->Stock_adjustment_model->approve($id, $this->user['id'])) {
                 $adjustment = $this->Stock_adjustment_model->get_by_id($id);
+                
+                // Log stock adjustment approval
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Stock Adjustment', $id, "Approved stock adjustment ID: {$id}", $old_adjustment, $adjustment);
+                
                 $this->success($adjustment, 'Adjustment approved and stock updated');
             } else {
                 $this->error('Failed to approve adjustment', 400);
@@ -187,8 +201,14 @@ class Stock_adjustments extends Api {
         }
         
         try {
+            $old_adjustment = $this->Stock_adjustment_model->get_by_id($id);
             if ($this->Stock_adjustment_model->reject($id, $this->user['id'])) {
                 $adjustment = $this->Stock_adjustment_model->get_by_id($id);
+                
+                // Log stock adjustment rejection
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Stock Adjustment', $id, "Rejected stock adjustment ID: {$id}", $old_adjustment, $adjustment);
+                
                 $this->success($adjustment, 'Adjustment rejected');
             } else {
                 $this->error('Failed to reject adjustment', 400);

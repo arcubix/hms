@@ -127,6 +127,13 @@ class Pharmacy_stock extends Api {
             
             if ($stock_id) {
                 $stock = $this->Medicine_stock_model->get_by_id($stock_id);
+                
+                // Log stock creation
+                $this->load->library('audit_log');
+                $batch_number = $data['batch_number'] ?? 'Unknown';
+                $quantity = $data['quantity'] ?? 0;
+                $this->audit_log->logCreate('Pharmacy', 'Stock', $stock_id, "Added stock batch: {$batch_number} for Medicine ID: {$data['medicine_id']}, Quantity: {$quantity}");
+                
                 $this->success($stock, 'Stock added successfully', 201);
             } else {
                 $this->error('Failed to add stock', 400);
@@ -198,10 +205,16 @@ class Pharmacy_stock extends Api {
                 }
             }
             
+            $old_stock = $stock;
             $result = $this->Medicine_stock_model->update($id, $data);
             
             if ($result) {
                 $stock = $this->Medicine_stock_model->get_by_id($id);
+                
+                // Log stock update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Stock', $id, "Updated stock batch ID: {$id}", $old_stock, $stock);
+                
                 $this->success($stock, 'Stock updated successfully');
             } else {
                 $this->error('Failed to update stock', 400);

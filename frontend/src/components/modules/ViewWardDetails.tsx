@@ -9,7 +9,7 @@
  * - Facility details and amenities
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -56,11 +56,9 @@ import {
   FileText,
   ClipboardList,
   Bell,
-  Settings,
-  Loader2
+  Settings
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '../../services/api';
+import { toast } from 'sonner@2.0.3';
 
 interface ViewWardDetailsProps {
   wardId?: string;
@@ -101,157 +99,390 @@ interface StaffMember {
   status: 'On Duty' | 'Off Duty' | 'Break';
 }
 
+// Mock Data
+const mockWardData = {
+  id: 'W001',
+  name: 'Emergency Ward A',
+  type: 'Emergency',
+  building: 'Main Building',
+  floor: 'Ground Floor',
+  totalBeds: 20,
+  occupiedBeds: 14,
+  availableBeds: 4,
+  cleaningBeds: 1,
+  maintenanceBeds: 1,
+  status: 'Active',
+  incharge: 'Nurse Alice Thompson',
+  contact: '+1-555-0101',
+  email: 'alice.thompson@hospital.com',
+  established: '2015',
+  lastInspection: '2024-11-15',
+  facilities: [
+    'Central Oxygen Supply',
+    'Cardiac Monitors',
+    'Ventilators',
+    'Defibrillators',
+    'Emergency Call System',
+    'Nurse Station',
+    'Isolation Capability',
+    'Wi-Fi'
+  ]
+};
+
+const mockBeds: BedInfo[] = [
+  {
+    bedNumber: 'EA-01',
+    status: 'Occupied',
+    patient: {
+      name: 'Robert Johnson',
+      age: 58,
+      gender: 'Male',
+      uhid: 'UHID-89456',
+      admissionDate: '2024-11-21 08:30 AM',
+      diagnosis: 'Acute Myocardial Infarction',
+      doctor: 'Dr. Sarah Mitchell',
+      severity: 'Critical',
+      vitalSigns: {
+        heartRate: 88,
+        bloodPressure: '140/90',
+        temperature: 98.6,
+        spo2: 94,
+        respiratoryRate: 18
+      },
+      lastUpdated: '5 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-02',
+    status: 'Occupied',
+    patient: {
+      name: 'Jennifer Williams',
+      age: 34,
+      gender: 'Female',
+      uhid: 'UHID-89457',
+      admissionDate: '2024-11-21 09:15 AM',
+      diagnosis: 'Severe Dehydration',
+      doctor: 'Dr. Michael Brown',
+      severity: 'Stable',
+      vitalSigns: {
+        heartRate: 72,
+        bloodPressure: '120/80',
+        temperature: 99.1,
+        spo2: 98,
+        respiratoryRate: 16
+      },
+      lastUpdated: '10 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-03',
+    status: 'Available',
+    lastCleaned: '2024-11-21 10:00 AM'
+  },
+  {
+    bedNumber: 'EA-04',
+    status: 'Occupied',
+    patient: {
+      name: 'Maria Garcia',
+      age: 62,
+      gender: 'Female',
+      uhid: 'UHID-89459',
+      admissionDate: '2024-11-21 11:30 AM',
+      diagnosis: 'Acute Respiratory Distress',
+      doctor: 'Dr. James Wilson',
+      severity: 'Moderate',
+      vitalSigns: {
+        heartRate: 85,
+        bloodPressure: '130/82',
+        temperature: 99.8,
+        spo2: 92,
+        respiratoryRate: 22
+      },
+      lastUpdated: '3 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-05',
+    status: 'Available',
+    lastCleaned: '2024-11-21 09:30 AM'
+  },
+  {
+    bedNumber: 'EA-06',
+    status: 'Cleaning',
+    lastCleaned: 'In Progress'
+  },
+  {
+    bedNumber: 'EA-07',
+    status: 'Occupied',
+    patient: {
+      name: 'Thomas Anderson',
+      age: 45,
+      gender: 'Male',
+      uhid: 'UHID-89460',
+      admissionDate: '2024-11-20 02:15 PM',
+      diagnosis: 'Head Trauma',
+      doctor: 'Dr. Emily Davis',
+      severity: 'Stable',
+      vitalSigns: {
+        heartRate: 78,
+        bloodPressure: '125/78',
+        temperature: 98.4,
+        spo2: 97,
+        respiratoryRate: 15
+      },
+      lastUpdated: '8 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-08',
+    status: 'Reserved',
+    lastCleaned: '2024-11-21 08:00 AM'
+  },
+  {
+    bedNumber: 'EA-09',
+    status: 'Available',
+    lastCleaned: '2024-11-21 07:30 AM'
+  },
+  {
+    bedNumber: 'EA-10',
+    status: 'Maintenance',
+    maintenanceNotes: 'Oxygen supply line repair'
+  },
+  {
+    bedNumber: 'EA-11',
+    status: 'Occupied',
+    patient: {
+      name: 'Sarah Mitchell',
+      age: 29,
+      gender: 'Female',
+      uhid: 'UHID-89461',
+      admissionDate: '2024-11-21 07:45 AM',
+      diagnosis: 'Severe Allergic Reaction',
+      doctor: 'Dr. Michael Brown',
+      severity: 'Moderate',
+      vitalSigns: {
+        heartRate: 95,
+        bloodPressure: '118/76',
+        temperature: 99.2,
+        spo2: 95,
+        respiratoryRate: 20
+      },
+      lastUpdated: '12 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-12',
+    status: 'Occupied',
+    patient: {
+      name: 'David Chen',
+      age: 51,
+      gender: 'Male',
+      uhid: 'UHID-89462',
+      admissionDate: '2024-11-21 06:30 AM',
+      diagnosis: 'Chest Pain - Under Investigation',
+      doctor: 'Dr. Sarah Mitchell',
+      severity: 'Critical',
+      vitalSigns: {
+        heartRate: 92,
+        bloodPressure: '145/95',
+        temperature: 98.7,
+        spo2: 93,
+        respiratoryRate: 19
+      },
+      lastUpdated: '2 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-13',
+    status: 'Available',
+    lastCleaned: '2024-11-21 11:00 AM'
+  },
+  {
+    bedNumber: 'EA-14',
+    status: 'Occupied',
+    patient: {
+      name: 'Linda Martinez',
+      age: 67,
+      gender: 'Female',
+      uhid: 'UHID-89463',
+      admissionDate: '2024-11-20 11:20 PM',
+      diagnosis: 'Stroke - Ischemic',
+      doctor: 'Dr. Emily Davis',
+      severity: 'Critical',
+      vitalSigns: {
+        heartRate: 76,
+        bloodPressure: '150/92',
+        temperature: 98.9,
+        spo2: 96,
+        respiratoryRate: 17
+      },
+      lastUpdated: '7 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-15',
+    status: 'Occupied',
+    patient: {
+      name: 'James Wilson',
+      age: 42,
+      gender: 'Male',
+      uhid: 'UHID-89464',
+      admissionDate: '2024-11-21 10:15 AM',
+      diagnosis: 'Severe Abdominal Pain',
+      doctor: 'Dr. James Wilson',
+      severity: 'Moderate',
+      vitalSigns: {
+        heartRate: 82,
+        bloodPressure: '128/84',
+        temperature: 99.5,
+        spo2: 97,
+        respiratoryRate: 16
+      },
+      lastUpdated: '15 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-16',
+    status: 'Occupied',
+    patient: {
+      name: 'Patricia Brown',
+      age: 55,
+      gender: 'Female',
+      uhid: 'UHID-89465',
+      admissionDate: '2024-11-21 09:45 AM',
+      diagnosis: 'Diabetic Ketoacidosis',
+      doctor: 'Dr. Michael Brown',
+      severity: 'Stable',
+      vitalSigns: {
+        heartRate: 74,
+        bloodPressure: '122/79',
+        temperature: 98.8,
+        spo2: 98,
+        respiratoryRate: 14
+      },
+      lastUpdated: '20 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-17',
+    status: 'Occupied',
+    patient: {
+      name: 'Michael Davis',
+      age: 38,
+      gender: 'Male',
+      uhid: 'UHID-89466',
+      admissionDate: '2024-11-21 08:00 AM',
+      diagnosis: 'Fracture - Multiple Ribs',
+      doctor: 'Dr. Emily Davis',
+      severity: 'Stable',
+      vitalSigns: {
+        heartRate: 80,
+        bloodPressure: '126/82',
+        temperature: 98.5,
+        spo2: 96,
+        respiratoryRate: 18
+      },
+      lastUpdated: '25 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-18',
+    status: 'Occupied',
+    patient: {
+      name: 'Elizabeth Taylor',
+      age: 71,
+      gender: 'Female',
+      uhid: 'UHID-89467',
+      admissionDate: '2024-11-20 09:30 PM',
+      diagnosis: 'Pneumonia - Severe',
+      doctor: 'Dr. Sarah Mitchell',
+      severity: 'Critical',
+      vitalSigns: {
+        heartRate: 98,
+        bloodPressure: '138/88',
+        temperature: 101.2,
+        spo2: 89,
+        respiratoryRate: 24
+      },
+      lastUpdated: '4 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-19',
+    status: 'Occupied',
+    patient: {
+      name: 'Christopher Lee',
+      age: 33,
+      gender: 'Male',
+      uhid: 'UHID-89468',
+      admissionDate: '2024-11-21 11:00 AM',
+      diagnosis: 'Drug Overdose',
+      doctor: 'Dr. James Wilson',
+      severity: 'Moderate',
+      vitalSigns: {
+        heartRate: 65,
+        bloodPressure: '110/70',
+        temperature: 97.8,
+        spo2: 94,
+        respiratoryRate: 12
+      },
+      lastUpdated: '18 mins ago'
+    }
+  },
+  {
+    bedNumber: 'EA-20',
+    status: 'Available',
+    lastCleaned: '2024-11-21 10:30 AM'
+  }
+];
+
+const mockStaff: StaffMember[] = [
+  {
+    id: '1',
+    name: 'Alice Thompson',
+    role: 'Ward Incharge',
+    shift: 'Morning (6AM - 2PM)',
+    contact: '+1-555-0101',
+    status: 'On Duty'
+  },
+  {
+    id: '2',
+    name: 'Sarah Johnson',
+    role: 'Senior Nurse',
+    shift: 'Morning (6AM - 2PM)',
+    contact: '+1-555-0102',
+    status: 'On Duty'
+  },
+  {
+    id: '3',
+    name: 'Michael Davis',
+    role: 'Staff Nurse',
+    shift: 'Morning (6AM - 2PM)',
+    contact: '+1-555-0103',
+    status: 'Break'
+  },
+  {
+    id: '4',
+    name: 'Emily Wilson',
+    role: 'Staff Nurse',
+    shift: 'Evening (2PM - 10PM)',
+    contact: '+1-555-0104',
+    status: 'Off Duty'
+  },
+  {
+    id: '5',
+    name: 'Robert Martinez',
+    role: 'Nursing Assistant',
+    shift: 'Morning (6AM - 2PM)',
+    contact: '+1-555-0105',
+    status: 'On Duty'
+  }
+];
+
 export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
-  const [wardData, setWardData] = useState<any>(null);
-  const [beds, setBeds] = useState<BedInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<any>(null);
   const [selectedBed, setSelectedBed] = useState<BedInfo | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showMedicalRecords, setShowMedicalRecords] = useState(false);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-
-  useEffect(() => {
-    if (wardId) {
-      loadWardData();
-      loadWardBeds();
-      loadWardStats();
-    }
-  }, [wardId]);
-
-  useEffect(() => {
-    if (wardId) {
-      loadStaff();
-    }
-  }, [wardId]);
-
-  const loadWardData = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getEmergencyWard(parseInt(wardId || '0'));
-      setWardData(data);
-    } catch (error: any) {
-      toast.error('Failed to load ward data: ' + (error.message || 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWardBeds = async () => {
-    try {
-      const data = await api.getEmergencyWardBeds({ ward_id: parseInt(wardId || '0') });
-      const transformedBeds: BedInfo[] = data.map((bed: any) => ({
-        bedNumber: bed.bed_number || bed.bedNumber || '',
-        status: (bed.status === 'Occupied' ? 'Occupied' : 
-                bed.status === 'Available' ? 'Available' :
-                bed.status === 'Under Cleaning' ? 'Cleaning' :
-                bed.status === 'Maintenance' ? 'Maintenance' : 'Available') as BedInfo['status'],
-        patient: bed.patient_name ? {
-          name: bed.patient_name || '',
-          age: bed.patient_age || 0,
-          gender: bed.patient_gender || '',
-          uhid: bed.uhid || bed.patient_uhid || '',
-          admissionDate: bed.admission_date || '',
-          diagnosis: bed.diagnosis || '',
-          doctor: bed.doctor_name || '',
-          severity: 'Stable' as const,
-          vitalSigns: {
-            heartRate: bed.vitals_pulse || 0,
-            bloodPressure: bed.vitals_bp || '',
-            temperature: bed.vitals_temp || 0,
-            spo2: bed.vitals_spo2 || 0,
-            respiratoryRate: bed.vitals_resp || 0
-          },
-          lastUpdated: bed.last_updated || ''
-        } : undefined,
-        lastCleaned: bed.last_cleaned_at || undefined,
-        maintenanceNotes: bed.maintenance_notes || undefined
-      }));
-      setBeds(transformedBeds);
-    } catch (error: any) {
-      toast.error('Failed to load beds: ' + (error.message || 'Unknown error'));
-    }
-  };
-
-  const loadWardStats = async () => {
-    try {
-      const data = await api.getEmergencyWardStats(parseInt(wardId || '0'));
-      setStats(data);
-    } catch (error: any) {
-      console.warn('Could not load ward stats:', error);
-    }
-  };
-
-  const loadStaff = async () => {
-    try {
-      // Load current duty staff for this ward
-      const currentDate = new Date().toISOString().split('T')[0];
-      const roster = await api.getEmergencyDutyRoster({ date: currentDate });
-      const transformedStaff: StaffMember[] = roster
-        .filter((entry: any) => entry.status === 'On Duty')
-        .map((entry: any) => ({
-          id: entry.user_id?.toString() || entry.id?.toString() || '',
-          name: entry.user_name || '',
-          role: entry.user_role || entry.specialization || 'Staff',
-          shift: `${entry.shift_type} (${entry.shift_start_time} - ${entry.shift_end_time})`,
-          contact: entry.user_phone || '',
-          status: entry.status === 'On Duty' ? 'On Duty' : 'Off Duty'
-        }));
-      setStaff(transformedStaff);
-    } catch (error: any) {
-      console.warn('Could not load staff:', error);
-      setStaff([]);
-    }
-  };
-
-  if (loading && !wardData) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-gray-600">Loading ward details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!wardData) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-2xl font-semibold">Ward Not Found</h1>
-            <Button variant="outline" onClick={onClose}>
-              <X className="w-4 h-4 mr-2" />
-              Close
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const ward = {
-    id: wardData.id?.toString() || '',
-    name: wardData.name || '',
-    type: wardData.type || '',
-    building: wardData.building_name || wardData.building || '',
-    floor: wardData.floor_name || `Floor ${wardData.floor_number || ''}` || '',
-    totalBeds: stats?.total_beds || wardData.total_beds || 0,
-    occupiedBeds: stats?.occupied_beds || 0,
-    availableBeds: stats?.available_beds || 0,
-    cleaningBeds: stats?.cleaning_beds || 0,
-    maintenanceBeds: stats?.maintenance_beds || 0,
-    status: wardData.status || 'Active',
-    incharge: wardData.incharge_name || wardData.incharge || '',
-    contact: wardData.contact || '',
-    email: wardData.email || wardData.incharge_email || '',
-    established: wardData.established_date ? new Date(wardData.established_date).getFullYear().toString() : '',
-    lastInspection: wardData.last_inspection_date || '',
-    facilities: wardData.facilities ? (typeof wardData.facilities === 'string' ? JSON.parse(wardData.facilities) : wardData.facilities) : []
-  };
-
-  // Helper functions
 
   const getBedStatusColor = (status: string) => {
     switch (status) {
@@ -289,7 +520,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
     }
   };
 
-  const occupancyRate = ward.totalBeds > 0 ? ((ward.occupiedBeds / ward.totalBeds) * 100).toFixed(0) : '0';
+  const occupancyRate = ((mockWardData.occupiedBeds / mockWardData.totalBeds) * 100).toFixed(0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -307,14 +538,14 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                   <Building2 className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold text-gray-900">{ward.name}</h1>
+                  <h1 className="text-2xl font-semibold text-gray-900">{mockWardData.name}</h1>
                   <p className="text-sm text-gray-600">
-                    {ward.building} • {ward.floor} • {ward.type} Ward
+                    {mockWardData.building} • {mockWardData.floor} • {mockWardData.type} Ward
                   </p>
                 </div>
               </div>
               <Badge className="bg-green-100 text-green-800">
-                {ward.status}
+                {mockWardData.status}
               </Badge>
             </div>
             <div className="flex gap-2">
@@ -341,23 +572,23 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
               <p className="text-xs text-blue-600 font-medium">Total Beds</p>
-              <p className="text-2xl font-bold text-blue-700">{ward.totalBeds}</p>
+              <p className="text-2xl font-bold text-blue-700">{mockWardData.totalBeds}</p>
             </div>
             <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
               <p className="text-xs text-orange-600 font-medium">Occupied</p>
-              <p className="text-2xl font-bold text-orange-700">{ward.occupiedBeds}</p>
+              <p className="text-2xl font-bold text-orange-700">{mockWardData.occupiedBeds}</p>
             </div>
             <div className="bg-green-50 rounded-lg p-3 border border-green-200">
               <p className="text-xs text-green-600 font-medium">Available</p>
-              <p className="text-2xl font-bold text-green-700">{ward.availableBeds}</p>
+              <p className="text-2xl font-bold text-green-700">{mockWardData.availableBeds}</p>
             </div>
             <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
               <p className="text-xs text-yellow-600 font-medium">Cleaning</p>
-              <p className="text-2xl font-bold text-yellow-700">{ward.cleaningBeds}</p>
+              <p className="text-2xl font-bold text-yellow-700">{mockWardData.cleaningBeds}</p>
             </div>
             <div className="bg-red-50 rounded-lg p-3 border border-red-200">
               <p className="text-xs text-red-600 font-medium">Maintenance</p>
-              <p className="text-2xl font-bold text-red-700">{ward.maintenanceBeds}</p>
+              <p className="text-2xl font-bold text-red-700">{mockWardData.maintenanceBeds}</p>
             </div>
             <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
               <p className="text-xs text-purple-600 font-medium">Occupancy</p>
@@ -428,7 +659,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
               <Card>
                 <CardContent className="p-6">
                   <div className="grid grid-cols-4 md:grid-cols-5 gap-4">
-                    {beds.map((bed) => (
+                    {mockBeds.map((bed) => (
                       <button
                         key={bed.bedNumber}
                         onClick={() => setSelectedBed(bed)}
@@ -456,7 +687,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
             {/* Bed List View */}
             {viewMode === 'list' && (
               <div className="space-y-3">
-                {beds.map((bed) => (
+                {mockBeds.map((bed) => (
                   <Card key={bed.bedNumber} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
@@ -519,8 +750,8 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                   </TabsList>
 
                   <TabsContent value="staff" className="space-y-4 mt-4">
-                    {staff.map((staffMember) => (
-                      <div key={staffMember.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    {mockStaff.map((staff) => (
+                      <div key={staff.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <Avatar>
                             <AvatarFallback className="bg-blue-600 text-white">
@@ -551,7 +782,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
 
                   <TabsContent value="facilities" className="mt-4">
                     <div className="grid grid-cols-2 gap-3">
-                      {ward.facilities.map((facility, index) => (
+                      {mockWardData.facilities.map((facility, index) => (
                         <div key={index} className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
                           <CheckCircle className="w-4 h-4 text-blue-600" />
                           <span className="text-sm text-gray-700">{facility}</span>
@@ -562,11 +793,11 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-gray-600">Established</p>
-                          <p className="font-medium">{ward.established}</p>
+                          <p className="font-medium">{mockWardData.established}</p>
                         </div>
                         <div>
                           <p className="text-gray-600">Last Inspection</p>
-                          <p className="font-medium">{ward.lastInspection}</p>
+                          <p className="font-medium">{mockWardData.lastInspection}</p>
                         </div>
                       </div>
                     </div>
@@ -596,7 +827,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                         <div className="text-center p-3 bg-purple-50 rounded-lg">
                           <p className="text-sm text-gray-600">Critical</p>
                           <p className="text-xl font-bold text-purple-700">
-                            {beds.filter(b => b.patient?.severity === 'Critical').length}
+                            {mockBeds.filter(b => b.patient?.severity === 'Critical').length}
                           </p>
                         </div>
                       </div>
@@ -811,7 +1042,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                       <UserCheck className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-medium">{ward.incharge}</p>
+                      <p className="font-medium">{mockWardData.incharge}</p>
                       <p className="text-xs text-gray-600">Ward Incharge</p>
                     </div>
                   </div>
@@ -819,15 +1050,15 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-gray-600">
                       <Phone className="w-4 h-4" />
-                      <span>{ward.contact}</span>
+                      <span>{mockWardData.contact}</span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">
                       <Mail className="w-4 h-4" />
-                      <span className="text-xs">{ward.email}</span>
+                      <span className="text-xs">{mockWardData.email}</span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">
                       <MapPin className="w-4 h-4" />
-                      <span>{ward.building}, {ward.floor}</span>
+                      <span>{mockWardData.building}, {mockWardData.floor}</span>
                     </div>
                   </div>
                   <Button variant="outline" className="w-full mt-4">
@@ -847,7 +1078,7 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
           <PatientMedicalRecords
             patientId={selectedBed.patient.uhid}
             bedNumber={selectedBed.bedNumber}
-            wardName={ward.name}
+            wardName={mockWardData.name}
             onClose={() => setShowMedicalRecords(false)}
           />
         </div>
@@ -855,4 +1086,3 @@ export function ViewWardDetails({ wardId, onClose }: ViewWardDetailsProps) {
     </div>
   );
 }
-

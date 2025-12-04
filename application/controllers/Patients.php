@@ -152,6 +152,11 @@ class Patients extends Api {
 
             if ($patient_id) {
                 $patient = $this->Patient_model->get_by_id($patient_id);
+                
+                // Log patient creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Patient Management', 'Patient', $patient_id, "Created patient: {$patient['name']} ({$patient['patient_id']})");
+                
                 $this->success($patient, 'Patient created successfully', 201);
             } else {
                 $this->error('Failed to create patient', 500);
@@ -177,6 +182,8 @@ class Patients extends Api {
                 return;
             }
 
+            $old_patient = $patient; // Store old data for audit log
+
             // Remove patient_id from update data (should not be changed)
             unset($data['patient_id']);
             unset($data['id']);
@@ -185,6 +192,11 @@ class Patients extends Api {
 
             if ($result) {
                 $patient = $this->Patient_model->get_by_id($id);
+                
+                // Log patient update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Patient Management', 'Patient', $id, "Updated patient: {$patient['name']} ({$patient['patient_id']})", $old_patient, $patient);
+                
                 $this->success($patient, 'Patient updated successfully');
             } else {
                 $this->error('Failed to update patient', 500);
@@ -211,6 +223,10 @@ class Patients extends Api {
             $result = $this->Patient_model->delete($id);
 
             if ($result) {
+                // Log patient deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Patient Management', 'Patient', $id, "Deleted patient: {$patient['name']} ({$patient['patient_id']})");
+                
                 $this->success(null, 'Patient deleted successfully');
             } else {
                 $this->error('Failed to delete patient', 500);

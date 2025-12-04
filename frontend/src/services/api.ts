@@ -3944,6 +3944,1771 @@ class ApiService {
     }>(`/api/message-statistics${query ? '?' + query : ''}`);
     return data.data;
   }
+
+  // ============================================
+  // IPD MANAGEMENT API METHODS
+  // ============================================
+
+  // Dashboard
+  async getIPDDashboardStats() {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDDashboardStats;
+    }>('/api/ipd/dashboard');
+    return data.data;
+  }
+
+  async getIPDStats() {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDDashboardStats['stats'];
+    }>('/api/ipd/stats');
+    return data.data;
+  }
+
+  // Admissions
+  async getIPDAdmissions(filters?: {
+    search?: string;
+    status?: string;
+    ward_id?: number;
+    department?: string;
+    admission_type?: string;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.ward_id) params.append('ward_id', filters.ward_id.toString());
+    if (filters?.department) params.append('department', filters.department);
+    if (filters?.admission_type) params.append('admission_type', filters.admission_type);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmission[];
+    }>(`/api/ipd/admissions${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getIPDAdmission(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmission;
+    }>(`/api/ipd/admissions/${id}`);
+    return data.data;
+  }
+
+  async createIPDAdmission(admissionData: CreateIPDAdmissionData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmission;
+      message: string;
+    }>('/api/ipd/admissions', {
+      method: 'POST',
+      body: JSON.stringify(admissionData),
+    });
+    return data.data;
+  }
+
+  async updateIPDAdmission(id: number, admissionData: Partial<CreateIPDAdmissionData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmission;
+      message: string;
+    }>(`/api/ipd/admissions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(admissionData),
+    });
+    return data.data;
+  }
+
+  // Wards
+  async getIPDWards(filters?: {
+    search?: string;
+    status?: string;
+    type?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.type) params.append('type', filters.type);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDWard[];
+    }>(`/api/ipd/wards${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getIPDWard(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDWard;
+    }>(`/api/ipd/wards/${id}`);
+    return data.data;
+  }
+
+  // IPD Duty Roster
+  async getIPDDutyRoster(filters?: {
+    user_id?: number;
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    shift_type?: string;
+    status?: string;
+    ward_id?: number;
+    department_id?: number;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.user_id) params.append('user_id', String(filters.user_id));
+    if (filters?.date) params.append('date', filters.date);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.shift_type) params.append('shift_type', filters.shift_type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.ward_id) params.append('ward_id', String(filters.ward_id));
+    if (filters?.department_id) params.append('department_id', String(filters.department_id));
+    if (filters?.search) params.append('search', filters.search);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/duty-roster${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async createIPDDutyRoster(rosterData: {
+    user_id: number;
+    date: string;
+    shift_type: string;
+    shift_start_time: string;
+    shift_end_time: string;
+    ward_id?: number;
+    department_id?: number;
+    specialization?: string;
+    status?: string;
+    notes?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/ipd/duty-roster', {
+      method: 'POST',
+      body: JSON.stringify(rosterData),
+    });
+    return data.data;
+  }
+
+  async updateIPDDutyRoster(id: number, rosterData: Partial<{
+    user_id: number;
+    date: string;
+    shift_type: string;
+    shift_start_time: string;
+    shift_end_time: string;
+    ward_id?: number;
+    department_id?: number;
+    specialization?: string;
+    status?: string;
+    notes?: string;
+  }>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/duty-roster/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(rosterData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDDutyRoster(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/duty-roster/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getIPDWardBeds(wardId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed[];
+    }>(`/api/ipd/wards/${wardId}/beds`);
+    return data.data || [];
+  }
+
+  async createIPDWard(wardData: CreateIPDWardData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDWard;
+      message: string;
+    }>(`/api/ipd/wards`, {
+      method: 'POST',
+      body: JSON.stringify(wardData),
+    });
+    return data.data;
+  }
+
+  async updateIPDWard(id: number, wardData: Partial<CreateIPDWardData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDWard;
+      message: string;
+    }>(`/api/ipd/wards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(wardData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDWard(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/wards/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Beds
+  async getIPDBeds(filters?: {
+    search?: string;
+    status?: string;
+    ward_id?: number;
+    bed_type?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.ward_id) params.append('ward_id', filters.ward_id.toString());
+    if (filters?.bed_type) params.append('bed_type', filters.bed_type);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed[];
+    }>(`/api/ipd/beds${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getIPDBed(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed;
+    }>(`/api/ipd/beds/${id}`);
+    return data.data;
+  }
+
+  async getAvailableIPDBeds(filters?: {
+    ward_id?: number;
+    bed_type?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.ward_id) params.append('ward_id', filters.ward_id.toString());
+    if (filters?.bed_type) params.append('bed_type', filters.bed_type);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed[];
+    }>(`/api/ipd/beds/available${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async createIPDBed(bedData: CreateIPDBedData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed;
+      message: string;
+    }>(`/api/ipd/beds`, {
+      method: 'POST',
+      body: JSON.stringify(bedData),
+    });
+    return data.data;
+  }
+
+  async updateIPDBed(id: number, bedData: Partial<CreateIPDBedData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBed;
+      message: string;
+    }>(`/api/ipd/beds/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(bedData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDBed(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/beds/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Rooms
+  async getIPDRooms(filters?: {
+    search?: string;
+    status?: string;
+    room_type?: string;
+    floor_id?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.room_type) params.append('room_type', filters.room_type);
+    if (filters?.floor_id) params.append('floor_id', filters.floor_id.toString());
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRoom[];
+    }>(`/api/ipd/rooms${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async getIPDRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRoom;
+    }>(`/api/ipd/rooms/${id}`);
+    return data.data;
+  }
+
+  async getAvailableIPDRooms(filters?: {
+    room_type?: string;
+    floor_id?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.room_type) params.append('room_type', filters.room_type);
+    if (filters?.floor_id) params.append('floor_id', filters.floor_id.toString());
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRoom[];
+    }>(`/api/ipd/rooms/available${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
+  async createIPDRoom(roomData: CreateIPDRoomData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRoom;
+      message: string;
+    }>(`/api/ipd/rooms`, {
+      method: 'POST',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async updateIPDRoom(id: number, roomData: Partial<CreateIPDRoomData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRoom;
+      message: string;
+    }>(`/api/ipd/rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(roomData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDRoom(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/rooms/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Vital Signs
+  async getIPDVitals(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDVitalSign[];
+    }>(`/api/ipd/admissions/${admissionId}/vitals`);
+    return data.data || [];
+  }
+
+  async recordIPDVitals(admissionId: number, vitalData: CreateIPDVitalSignData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDVitalSign;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/vitals`, {
+      method: 'POST',
+      body: JSON.stringify(vitalData),
+    });
+    return data.data;
+  }
+
+  // Treatment Orders
+  async getIPDTreatmentOrders(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDTreatmentOrder[];
+    }>(`/api/ipd/admissions/${admissionId}/orders`);
+    return data.data || [];
+  }
+
+  async createIPDTreatmentOrder(admissionId: number, orderData: CreateIPDTreatmentOrderData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDTreatmentOrder;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/orders`, {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  // Nursing Notes
+  async getIPDNursingNotes(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDNursingNote[];
+    }>(`/api/ipd/admissions/${admissionId}/nursing-notes`);
+    return data.data || [];
+  }
+
+  async addIPDNursingNote(admissionId: number, noteData: CreateIPDNursingNoteData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDNursingNote;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/nursing-notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData),
+    });
+    return data.data;
+  }
+
+  // Billing
+  async getIPDBilling(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBilling;
+    }>(`/api/ipd/admissions/${admissionId}/billing`);
+    return data.data;
+  }
+
+  async recordIPDPayment(admissionId: number, paymentData: RecordIPDPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDBilling;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/billing/payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    return data.data;
+  }
+
+  // Discharge
+  async getIPDDischarge(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDDischargeSummary;
+    }>(`/api/ipd/admissions/${admissionId}/discharge`);
+    return data.data;
+  }
+
+  async createIPDDischarge(admissionId: number, dischargeData: CreateIPDDischargeData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDDischargeSummary;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/discharge`, {
+      method: 'POST',
+      body: JSON.stringify(dischargeData),
+    });
+    return data.data;
+  }
+
+  // Transfers
+  async getIPDTransfers(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDTransfer[];
+    }>(`/api/ipd/admissions/${admissionId}/transfers`);
+    return data.data || [];
+  }
+
+  async transferIPDPatient(admissionId: number, transferData: CreateIPDTransferData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDTransfer;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify(transferData),
+    });
+    return data.data;
+  }
+
+  // Rehabilitation Requests
+  async getIPDRehabilitationRequests(filters?: {
+    status?: string;
+    admission_id?: number;
+    patient_id?: number;
+    service_type?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const url = `/api/ipd/rehabilitation-requests${queryString ? '?' + queryString : ''}`;
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        requests: IPDRehabilitationRequest[];
+        stats: IPDRehabilitationStats;
+      };
+    }>(url);
+    return data.data;
+  }
+
+  async getIPDRehabilitationRequest(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRehabilitationRequest;
+    }>(`/api/ipd/rehabilitation-requests/${id}`);
+    return data.data;
+  }
+
+  async createIPDRehabilitationRequest(requestData: CreateIPDRehabilitationRequestData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRehabilitationRequest;
+      message: string;
+    }>(`/api/ipd/rehabilitation-requests`, {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async updateIPDRehabilitationRequest(id: number, requestData: Partial<CreateIPDRehabilitationRequestData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDRehabilitationRequest;
+      message: string;
+    }>(`/api/ipd/rehabilitation-requests/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDRehabilitationRequest(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/rehabilitation-requests/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Admission Requests
+  async getIPDAdmissionRequests(filters?: {
+    status?: string;
+    priority?: string;
+    department?: string;
+    doctor_id?: number;
+    patient_id?: number;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const url = `/api/ipd/admission-requests${queryString ? '?' + queryString : ''}`;
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        requests: IPDAdmissionRequest[];
+        stats: IPDAdmissionRequestStats;
+      };
+    }>(url);
+    return data.data;
+  }
+
+  async getIPDAdmissionRequest(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmissionRequest;
+    }>(`/api/ipd/admission-requests/${id}`);
+    return data.data;
+  }
+
+  async createIPDAdmissionRequest(requestData: CreateIPDAdmissionRequestData) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmissionRequest;
+      message: string;
+    }>(`/api/ipd/admission-requests`, {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async approveIPDAdmissionRequest(id: number, admissionId?: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmissionRequest;
+      message: string;
+    }>(`/api/ipd/admission-requests/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ admission_id: admissionId }),
+    });
+    return data.data;
+  }
+
+  async rejectIPDAdmissionRequest(id: number, rejectionReason?: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmissionRequest;
+      message: string;
+    }>(`/api/ipd/admission-requests/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ rejection_reason: rejectionReason }),
+    });
+    return data.data;
+  }
+
+  async updateIPDAdmissionRequest(id: number, requestData: Partial<CreateIPDAdmissionRequestData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDAdmissionRequest;
+      message: string;
+    }>(`/api/ipd/admission-requests/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDAdmissionRequest(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/admission-requests/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Birth Certificates
+  async getBirthCertificates(filters?: {
+    search?: string;
+    status?: 'Pending' | 'Issued' | 'Verified';
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const url = `/api/birth-certificates${queryString ? '?' + queryString : ''}`;
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        certificates: BirthCertificate[];
+        stats: {
+          total: number;
+          Pending?: number;
+          Issued?: number;
+          Verified?: number;
+        };
+      };
+    }>(url);
+    return data.data;
+  }
+
+  async getBirthCertificate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: BirthCertificate;
+    }>(`/api/birth-certificates/${id}`);
+    return data.data;
+  }
+
+  async createBirthCertificate(certificateData: CreateBirthCertificateData) {
+    const data = await this.request<{
+      success: boolean;
+      data: BirthCertificate;
+      message: string;
+    }>(`/api/birth-certificates`, {
+      method: 'POST',
+      body: JSON.stringify(certificateData),
+    });
+    return data.data;
+  }
+
+  async updateBirthCertificate(id: number, certificateData: Partial<CreateBirthCertificateData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: BirthCertificate;
+      message: string;
+    }>(`/api/birth-certificates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(certificateData),
+    });
+    return data.data;
+  }
+
+  async deleteBirthCertificate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/birth-certificates/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Death Certificates
+  async getDeathCertificates(filters?: {
+    search?: string;
+    status?: 'Pending' | 'Issued' | 'Verified';
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const url = `/api/death-certificates${queryString ? '?' + queryString : ''}`;
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        certificates: DeathCertificate[];
+        stats: {
+          total: number;
+          Pending?: number;
+          Issued?: number;
+          Verified?: number;
+        };
+      };
+    }>(url);
+    return data.data;
+  }
+
+  async getDeathCertificate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: DeathCertificate;
+    }>(`/api/death-certificates/${id}`);
+    return data.data;
+  }
+
+  async createDeathCertificate(certificateData: CreateDeathCertificateData) {
+    const data = await this.request<{
+      success: boolean;
+      data: DeathCertificate;
+      message: string;
+    }>(`/api/death-certificates`, {
+      method: 'POST',
+      body: JSON.stringify(certificateData),
+    });
+    return data.data;
+  }
+
+  async updateDeathCertificate(id: number, certificateData: Partial<CreateDeathCertificateData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: DeathCertificate;
+      message: string;
+    }>(`/api/death-certificates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(certificateData),
+    });
+    return data.data;
+  }
+
+  async deleteDeathCertificate(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/death-certificates/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // ============================================
+  // SOFTWARE TEAM CONTACTS API METHODS
+  // ============================================
+
+  async getSoftwareTeamContacts(filters?: {
+    search?: string;
+    department?: string;
+    status?: 'available' | 'busy' | 'offline';
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.department) params.append('department', filters.department);
+    if (filters?.status) params.append('status', filters.status);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/software-team-contacts?${queryString}` : '/api/software-team-contacts';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        contacts: SoftwareTeamContact[];
+        departments: string[];
+      };
+    }>(endpoint);
+    return data.data;
+  }
+
+  async getSoftwareTeamContact(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: SoftwareTeamContact;
+    }>(`/api/software-team-contacts/${id}`);
+    return data.data;
+  }
+
+  async createSoftwareTeamContact(contactData: CreateSoftwareTeamContactData) {
+    const data = await this.request<{
+      success: boolean;
+      data: SoftwareTeamContact;
+      message: string;
+    }>('/api/software-team-contacts', {
+      method: 'POST',
+      body: JSON.stringify(contactData),
+    });
+    return data.data;
+  }
+
+  async updateSoftwareTeamContact(id: string | number, contactData: Partial<CreateSoftwareTeamContactData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: SoftwareTeamContact;
+      message: string;
+    }>(`/api/software-team-contacts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(contactData),
+    });
+    return data.data;
+  }
+
+  async deleteSoftwareTeamContact(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/software-team-contacts/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getSoftwareTeamContactDepartments() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/software-team-contacts/departments');
+    return data.data || [];
+  }
+
+  // ============================================
+  // SUPPORT TICKETS API METHODS
+  // ============================================
+
+  async getSupportTickets(filters?: {
+    search?: string;
+    status?: 'open' | 'in-progress' | 'resolved' | 'closed';
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    module?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.module) params.append('module', filters.module);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/support-tickets?${queryString}` : '/api/support-tickets';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        tickets: SupportTicket[];
+        stats: SupportTicketStats;
+      };
+    }>(endpoint);
+    return data.data;
+  }
+
+  async getSupportTicket(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicket;
+    }>(`/api/support-tickets/${id}`);
+    return data.data;
+  }
+
+  async createSupportTicket(ticketData: CreateSupportTicketData) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicket;
+      message: string;
+    }>('/api/support-tickets', {
+      method: 'POST',
+      body: JSON.stringify(ticketData),
+    });
+    return data.data;
+  }
+
+  async updateSupportTicket(id: string | number, ticketData: Partial<UpdateSupportTicketData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicket;
+      message: string;
+    }>(`/api/support-tickets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(ticketData),
+    });
+    return data.data;
+  }
+
+  async deleteSupportTicket(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/support-tickets/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getSupportTicketComments(ticketId: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketComment[];
+    }>(`/api/support-tickets/${ticketId}/comments`);
+    return data.data || [];
+  }
+
+  async addSupportTicketComment(ticketId: string | number, commentData: { content: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketComment;
+      message: string;
+    }>(`/api/support-tickets/${ticketId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(commentData),
+    });
+    return data.data;
+  }
+
+  async updateSupportTicketComment(ticketId: string | number, commentId: string | number, commentData: { content: string }) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketComment;
+      message: string;
+    }>(`/api/support-tickets/${ticketId}/comments/${commentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(commentData),
+    });
+    return data.data;
+  }
+
+  async deleteSupportTicketComment(ticketId: string | number, commentId: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/support-tickets/${ticketId}/comments/${commentId}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getSupportTicketAttachments(ticketId: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketAttachment[];
+    }>(`/api/support-tickets/${ticketId}/attachments`);
+    return data.data || [];
+  }
+
+  async uploadSupportTicketAttachment(ticketId: string | number, formData: FormData) {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketAttachment;
+      message: string;
+    }>(`/api/support-tickets/${ticketId}/attachments`, {
+      method: 'POST',
+      body: formData,
+    });
+    return data.data;
+  }
+
+  async deleteSupportTicketAttachment(ticketId: string | number, attachmentId: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/support-tickets/${ticketId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getSupportTicketStats() {
+    const data = await this.request<{
+      success: boolean;
+      data: SupportTicketStats;
+    }>('/api/support-tickets/stats');
+    return data.data;
+  }
+
+  // Update Vital Signs
+  async updateIPDVital(id: number, vitalData: Partial<CreateIPDVitalSignData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: IPDVitalSign;
+      message: string;
+    }>(`/api/ipd/vitals/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(vitalData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDVital(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/vitals/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Daily Care Orders
+  async getIPDDailyCareOrders(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/daily-care-orders`);
+    return data.data || [];
+  }
+
+  async createIPDDailyCareOrder(admissionId: number, orderData: CreateIPDDailyCareOrderData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/daily-care-orders`, {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async updateIPDDailyCareOrder(id: number, orderData: Partial<CreateIPDDailyCareOrderData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/daily-care-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDDailyCareOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/daily-care-orders/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Medications
+  async getIPDMedications(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/medications`);
+    return data.data || [];
+  }
+
+  async createIPDMedication(admissionId: number, medicationData: CreateIPDMedicationData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/medications`, {
+      method: 'POST',
+      body: JSON.stringify(medicationData),
+    });
+    return data.data;
+  }
+
+  async updateIPDMedication(id: number, medicationData: Partial<CreateIPDMedicationData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/medications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(medicationData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDMedication(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/medications/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Lab Orders
+  async getIPDLabOrders(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/lab-orders`);
+    return data.data || [];
+  }
+
+  async createIPDLabOrder(admissionId: number, orderData: CreateIPDLabOrderData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/lab-orders`, {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async updateIPDLabOrder(id: number, orderData: Partial<CreateIPDLabOrderData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/lab-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDLabOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/lab-orders/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Radiology Orders
+  async getIPDRadiologyOrders(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/radiology-orders`);
+    return data.data || [];
+  }
+
+  async createIPDRadiologyOrder(admissionId: number, orderData: CreateIPDRadiologyOrderData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/radiology-orders`, {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async updateIPDRadiologyOrder(id: number, orderData: Partial<CreateIPDRadiologyOrderData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/radiology-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDRadiologyOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/radiology-orders/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Doctor Notes
+  async getIPDDoctorNotes(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/doctor-notes`);
+    return data.data || [];
+  }
+
+  async createIPDDoctorNote(admissionId: number, noteData: CreateIPDDoctorNoteData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/doctor-notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData),
+    });
+    return data.data;
+  }
+
+  async updateIPDDoctorNote(id: number, noteData: Partial<CreateIPDDoctorNoteData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/doctor-notes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(noteData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDDoctorNote(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/doctor-notes/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Pharmacist Notes
+  async getIPDPharmacistNotes(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/pharmacist-notes`);
+    return data.data || [];
+  }
+
+  async createIPDPharmacistNote(admissionId: number, noteData: CreateIPDPharmacistNoteData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/pharmacist-notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData),
+    });
+    return data.data;
+  }
+
+  async updateIPDPharmacistNote(id: number, noteData: Partial<CreateIPDPharmacistNoteData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/pharmacist-notes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(noteData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDPharmacistNote(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/pharmacist-notes/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Procedures
+  async getIPDProcedures(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/procedures`);
+    return data.data || [];
+  }
+
+  async createIPDProcedure(admissionId: number, procedureData: CreateIPDProcedureData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/procedures`, {
+      method: 'POST',
+      body: JSON.stringify(procedureData),
+    });
+    return data.data;
+  }
+
+  async updateIPDProcedure(id: number, procedureData: Partial<CreateIPDProcedureData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/procedures/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(procedureData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDProcedure(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/procedures/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Nutrition
+  async getIPDNutrition(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/nutrition`);
+    return data.data || [];
+  }
+
+  async createIPDNutrition(admissionId: number, nutritionData: CreateIPDNutritionData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/nutrition`, {
+      method: 'POST',
+      body: JSON.stringify(nutritionData),
+    });
+    return data.data;
+  }
+
+  async updateIPDNutrition(id: number, nutritionData: Partial<CreateIPDNutritionData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/nutrition/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(nutritionData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDNutrition(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/nutrition/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Intake & Output
+  async getIPDIntakeOutput(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/intake-output`);
+    return data.data || [];
+  }
+
+  async createIPDIntakeOutput(admissionId: number, ioData: CreateIPDIntakeOutputData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/intake-output`, {
+      method: 'POST',
+      body: JSON.stringify(ioData),
+    });
+    return data.data;
+  }
+
+  async updateIPDIntakeOutput(id: number, ioData: Partial<CreateIPDIntakeOutputData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/intake-output/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(ioData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDIntakeOutput(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/intake-output/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Health & Physical Habit
+  async getIPDHealthPhysicalHabits(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/health-physical-habits`);
+    return data.data || [];
+  }
+
+  async createIPDHealthPhysicalHabit(admissionId: number, assessmentData: CreateIPDHealthPhysicalHabitData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/health-physical-habits`, {
+      method: 'POST',
+      body: JSON.stringify(assessmentData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDHealthPhysicalHabit(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/health-physical-habits/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Forms
+  async getIPDForms(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/forms`);
+    return data.data || [];
+  }
+
+  async createIPDForm(admissionId: number, formData: CreateIPDFormData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/forms`, {
+      method: 'POST',
+      body: JSON.stringify(formData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDForm(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/forms/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Doctor Recommendations
+  async getIPDDoctorRecommendations(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/doctor-recommendations`);
+    return data.data || [];
+  }
+
+  async createIPDDoctorRecommendation(admissionId: number, recommendationData: CreateIPDDoctorRecommendationData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/doctor-recommendations`, {
+      method: 'POST',
+      body: JSON.stringify(recommendationData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDDoctorRecommendation(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/doctor-recommendations/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Doctor Consultations
+  async getIPDDoctorConsultations(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/doctor-consultations`);
+    return data.data || [];
+  }
+
+  async createIPDDoctorConsultation(admissionId: number, consultationData: CreateIPDDoctorConsultationData) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/admissions/${admissionId}/doctor-consultations`, {
+      method: 'POST',
+      body: JSON.stringify(consultationData),
+    });
+    return data.data;
+  }
+
+  async deleteIPDDoctorConsultation(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/doctor-consultations/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Patient Files
+  async getIPDPatientFiles(admissionId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/admissions/${admissionId}/files`);
+    return data.data || [];
+  }
+
+  async uploadIPDFile(admissionId: number, formData: FormData) {
+    // For FormData, we need to make a direct fetch call without Content-Type header
+    const url = `${API_URL}/api/ipd/admissions/${admissionId}/files`;
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.handleUnauthorized();
+      }
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(error.message || 'Upload failed');
+    }
+
+    const data = await response.json();
+    return data.data;
+  }
+
+  async deleteIPDFile(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/files/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // ============================================
+  // AUDIT LOGS API METHODS
+  // ============================================
+
+  async getAuditLogs(filters?: AuditLogFilters) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.user_id) params.append('user_id', filters.user_id.toString());
+    if (filters?.action_type) params.append('action_type', filters.action_type);
+    if (filters?.module) params.append('module', filters.module);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.page) params.append('offset', ((filters.page - 1) * (filters.limit || 15)).toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/audit-logs?${queryString}` : '/api/audit-logs';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: AuditLogResponse;
+    }>(endpoint);
+    return data.data;
+  }
+
+  async getAuditLog(id: string | number) {
+    const data = await this.request<{
+      success: boolean;
+      data: AuditLog;
+    }>(`/api/audit-logs/${id}`);
+    return data.data;
+  }
+
+  async getAuditLogStatistics(filters?: { date_from?: string; date_to?: string; user_id?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.user_id) params.append('user_id', filters.user_id.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/audit-logs/statistics?${queryString}` : '/api/audit-logs/statistics';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: AuditLogStatistics;
+    }>(endpoint);
+    return data.data;
+  }
+
+  async getUserAuditLogs(userId: string | number, filters?: AuditLogFilters) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.action_type) params.append('action_type', filters.action_type);
+    if (filters?.module) params.append('module', filters.module);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.page) params.append('offset', ((filters.page - 1) * (filters.limit || 15)).toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/audit-logs/users/${userId}?${queryString}` : `/api/audit-logs/users/${userId}`;
+    
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        logs: AuditLog[];
+        total: number;
+      };
+    }>(endpoint);
+    return data.data;
+  }
+
+  async exportAuditLogs(filters?: AuditLogFilters) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.user_id) params.append('user_id', filters.user_id.toString());
+    if (filters?.action_type) params.append('action_type', filters.action_type);
+    if (filters?.module) params.append('module', filters.module);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/audit-logs/export?${queryString}` : '/api/audit-logs/export';
+    
+    // For file download, we need to handle it differently
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
+  async getAuditLogModules() {
+    const data = await this.request<{
+      success: boolean;
+      data: string[];
+    }>('/api/audit-logs/modules');
+    return data.data || [];
+  }
+
+  async getAuditLogUsers() {
+    const data = await this.request<{
+      success: boolean;
+      data: AuditLogUser[];
+    }>('/api/audit-logs/users-list');
+    return data.data || [];
+  }
 }
 
 export interface Patient {
@@ -4234,13 +5999,6 @@ export interface CreateEmergencyHealthPhysicalData {
   assessment?: string;
   plan?: string;
   provider_id?: number;
-}
-
-export interface CreateIPDAdmissionData {
-  admission_type: 'ward' | 'private';
-  ward_id?: number;
-  bed_id?: number;
-  notes?: string;
 }
 
 export interface CreatePatientData {
@@ -5794,6 +7552,1008 @@ export interface Token {
   reception_code?: string;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================
+// IPD MANAGEMENT INTERFACES
+// ============================================
+
+export interface IPDWard {
+  id: number;
+  name: string;
+  type: 'General' | 'ICU' | 'NICU' | 'PICU' | 'CCU' | 'HDU' | 'Isolation' | 'Private' | 'Deluxe';
+  building?: string;
+  floor_id?: number;
+  floor_number?: number;
+  floor_name?: string;
+  building_name?: string;
+  total_beds: number;
+  incharge_user_id?: number;
+  incharge_name?: string;
+  incharge_email?: string;
+  incharge_phone?: string;
+  contact?: string;
+  email?: string;
+  facilities?: string[];
+  description?: string;
+  status: 'active' | 'maintenance' | 'closed';
+  established_date?: string;
+  last_inspection_date?: string;
+  occupied_beds?: number;
+  available_beds?: number;
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDBed {
+  id: number;
+  ward_id: number;
+  ward_name?: string;
+  ward_type?: string;
+  bed_number: string;
+  bed_type: 'General' | 'ICU' | 'Private' | 'Deluxe' | 'Isolation';
+  status: 'available' | 'occupied' | 'reserved' | 'maintenance' | 'cleaning';
+  current_admission_id?: number;
+  daily_rate: number;
+  facilities?: string[];
+  last_cleaned_at?: string;
+  maintenance_notes?: string;
+  patient_name?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  ipd_number?: string;
+  uhid?: string;
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDRoom {
+  id: number;
+  room_number: string;
+  room_type: 'Private' | 'Deluxe' | 'Suite';
+  floor_id?: number;
+  floor_number?: number;
+  floor_name?: string;
+  building_name?: string;
+  building?: string;
+  status: 'available' | 'occupied' | 'maintenance' | 'cleaning';
+  current_admission_id?: number;
+  daily_rate: number;
+  facilities?: string[];
+  amenities?: string[];
+  capacity: number;
+  description?: string;
+  attendant_bed?: boolean;
+  remarks?: string;
+  patient_name?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  ipd_number?: string;
+  uhid?: string;
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDAdmission {
+  id: number;
+  ipd_number: string;
+  patient_id: number;
+  patient_name?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  patient_phone?: string;
+  patient_address?: string;
+  patient_email?: string;
+  patient_city?: string;
+  patient_state?: string;
+  patient_zip_code?: string;
+  blood_group?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  uhid?: string;
+  admission_date: string;
+  admission_time: string;
+  admission_type: 'Emergency' | 'Planned' | 'Transfer' | 'Referral';
+  department?: string;
+  consulting_doctor_id?: number;
+  consulting_doctor_name?: string;
+  consulting_doctor_specialty?: string;
+  consulting_doctor_phone?: string;
+  admitted_by_user_id?: number;
+  admitted_by_name?: string;
+  ward_id?: number;
+  ward_name?: string;
+  ward_type?: string;
+  bed_id?: number;
+  bed_number?: string;
+  bed_type?: string;
+  room_id?: number;
+  room_number?: string;
+  room_type?: string;
+  diagnosis?: string;
+  estimated_duration?: number;
+  actual_duration?: number;
+  status: 'admitted' | 'under-treatment' | 'critical' | 'stable' | 'discharged' | 'absconded';
+  insurance_provider?: string;
+  insurance_policy_number?: string;
+  insurance_coverage_amount?: number;
+  insurance_approval_number?: string;
+  advance_payment?: number;
+  payment_mode?: 'Cash' | 'Card' | 'UPI' | 'Insurance' | 'Cheque';
+  discharge_date?: string;
+  discharge_time?: string;
+  vital_signs?: IPDVitalSign[];
+  treatment_orders?: IPDTreatmentOrder[];
+  nursing_notes?: IPDNursingNote[];
+  billing?: IPDBilling;
+  discharge?: IPDDischargeSummary;
+  transfers?: IPDTransfer[];
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDVitalSign {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  recorded_date: string;
+  recorded_time: string;
+  recorded_by_user_id?: number;
+  recorded_by_name?: string;
+  temperature?: number;
+  blood_pressure_systolic?: number;
+  blood_pressure_diastolic?: number;
+  heart_rate?: number;
+  respiratory_rate?: number;
+  oxygen_saturation?: number;
+  blood_sugar?: number;
+  pain_score?: number;
+  consciousness_level: 'Alert' | 'Drowsy' | 'Confused' | 'Unconscious';
+  notes?: string;
+  created_at: string;
+}
+
+export interface IPDTreatmentOrder {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  order_date: string;
+  order_time: string;
+  ordered_by_doctor_id?: number;
+  ordered_by_doctor_name?: string;
+  ordered_by_doctor_specialty?: string;
+  order_type: 'Medication' | 'Procedure' | 'Lab Test' | 'Imaging' | 'Diet' | 'Physiotherapy' | 'Consultation';
+  order_details: string;
+  frequency?: string;
+  duration?: string;
+  priority: 'routine' | 'urgent' | 'stat';
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled' | 'on-hold';
+  start_date?: string;
+  end_date?: string;
+  administered_by_user_id?: number;
+  administered_by_name?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDNursingNote {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  date: string;
+  time: string;
+  shift: 'Morning' | 'Evening' | 'Night';
+  nurse_user_id?: number;
+  nurse_name?: string;
+  category: 'General' | 'Medication' | 'Vital Signs' | 'Procedure' | 'Incident' | 'Assessment';
+  note: string;
+  severity?: 'low' | 'medium' | 'high';
+  created_at: string;
+}
+
+export interface IPDBilling {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  billing_date: string;
+  room_charges?: {
+    bed_type?: string;
+    room_type?: string;
+    rate_per_day: number;
+    days: number;
+    total: number;
+  };
+  consultation_charges?: Array<{
+    doctor: string;
+    visits: number;
+    rate_per_visit: number;
+    total: number;
+  }>;
+  medication_charges: number;
+  lab_charges: number;
+  imaging_charges: number;
+  procedure_charges?: Array<{
+    procedure_name: string;
+    date: string;
+    amount: number;
+  }>;
+  other_charges?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total_amount: number;
+  advance_paid: number;
+  insurance_covered: number;
+  due_amount: number;
+  payment_status: 'pending' | 'partial' | 'paid';
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDDischargeSummary {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  discharge_date: string;
+  discharge_time: string;
+  admitting_diagnosis?: string;
+  final_diagnosis: string;
+  treatment_given: string;
+  procedures_performed?: string[];
+  condition_at_discharge: 'Improved' | 'Stable' | 'Critical' | 'Expired' | 'LAMA';
+  discharge_advice: string;
+  medications?: Array<{
+    name: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+  }>;
+  follow_up_date?: string;
+  follow_up_doctor_id?: number;
+  follow_up_doctor_name?: string;
+  dietary_advice?: string;
+  activity_restrictions?: string;
+  discharging_doctor_id?: number;
+  discharging_doctor_name?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDTransfer {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  transfer_date: string;
+  transfer_time: string;
+  from_ward_id?: number;
+  from_ward_name?: string;
+  from_bed_id?: number;
+  from_bed_number?: string;
+  from_room_id?: number;
+  from_room_number?: string;
+  to_ward_id?: number;
+  to_ward_name?: string;
+  to_bed_id?: number;
+  to_bed_number?: string;
+  to_room_id?: number;
+  to_room_number?: string;
+  transfer_reason?: string;
+  transferred_by_user_id?: number;
+  transferred_by_name?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface IPDDashboardStats {
+  stats: {
+    current_patients: number;
+    critical_patients: number;
+    today_admissions: number;
+    pending_discharges: number;
+    total_beds: number;
+    available_beds: number;
+    total_rooms: number;
+    available_rooms: number;
+  };
+  admission_trend: Array<{
+    date: string;
+    admissions: number;
+  }>;
+  discharge_trend: Array<{
+    date: string;
+    discharges: number;
+  }>;
+  department_distribution: Array<{
+    department: string;
+    patient_count: number;
+  }>;
+  wards: IPDWard[];
+}
+
+export interface CreateIPDAdmissionData {
+  patient_id: number;
+  uhid?: string;
+  admission_date: string;
+  admission_time?: string;
+  admission_type: 'Emergency' | 'Planned' | 'Transfer' | 'Referral';
+  department?: string;
+  consulting_doctor_id?: number;
+  ward_id?: number;
+  bed_id?: number;
+  room_id?: number;
+  diagnosis?: string;
+  estimated_duration?: number;
+  insurance_provider?: string;
+  insurance_policy_number?: string;
+  insurance_coverage_amount?: number;
+  insurance_approval_number?: string;
+  advance_payment?: number;
+  payment_mode?: 'Cash' | 'Card' | 'UPI' | 'Insurance' | 'Cheque';
+}
+
+export interface CreateIPDVitalSignData {
+  recorded_date?: string;
+  recorded_time?: string;
+  temperature?: number;
+  blood_pressure_systolic?: number;
+  blood_pressure_diastolic?: number;
+  heart_rate?: number;
+  respiratory_rate?: number;
+  oxygen_saturation?: number;
+  blood_sugar?: number;
+  pain_score?: number;
+  consciousness_level?: 'Alert' | 'Drowsy' | 'Confused' | 'Unconscious';
+  notes?: string;
+}
+
+export interface CreateIPDTreatmentOrderData {
+  order_date?: string;
+  order_time?: string;
+  ordered_by_doctor_id?: number;
+  order_type: 'Medication' | 'Procedure' | 'Lab Test' | 'Imaging' | 'Diet' | 'Physiotherapy' | 'Consultation';
+  order_details: string;
+  frequency?: string;
+  duration?: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'pending' | 'in-progress' | 'completed' | 'cancelled' | 'on-hold';
+  start_date?: string;
+  end_date?: string;
+  notes?: string;
+}
+
+export interface CreateIPDNursingNoteData {
+  date?: string;
+  time?: string;
+  shift?: 'Morning' | 'Evening' | 'Night';
+  category?: 'General' | 'Medication' | 'Vital Signs' | 'Procedure' | 'Incident' | 'Assessment';
+  note: string;
+  severity?: 'low' | 'medium' | 'high';
+}
+
+export interface CreateIPDDischargeData {
+  discharge_date?: string;
+  discharge_time?: string;
+  admitting_diagnosis?: string;
+  final_diagnosis: string;
+  treatment_given: string;
+  procedures_performed?: string[];
+  condition_at_discharge: 'Improved' | 'Stable' | 'Critical' | 'Expired' | 'LAMA';
+  discharge_advice: string;
+  medications?: Array<{
+    name: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+  }>;
+  follow_up_date?: string;
+  follow_up_doctor_id?: number;
+  dietary_advice?: string;
+  activity_restrictions?: string;
+  discharging_doctor_id?: number;
+}
+
+export interface CreateIPDTransferData {
+  transfer_date?: string;
+  transfer_time?: string;
+  to_ward_id?: number;
+  to_bed_id?: number;
+  to_room_id?: number;
+  transfer_reason?: string;
+  notes?: string;
+}
+
+export interface RecordIPDPaymentData {
+  payment_amount: number;
+  payment_mode?: 'Cash' | 'Card' | 'UPI' | 'Insurance' | 'Cheque';
+}
+
+export interface IPDRehabilitationRequest {
+  id: number;
+  admission_id?: number;
+  patient_id: number;
+  patient_name?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  ipd_number?: string;
+  service_type: string;
+  requested_by_doctor_id?: number;
+  requested_by_name?: string;
+  doctor_name?: string;
+  doctor_specialty?: string;
+  frequency?: string;
+  duration?: string;
+  status: 'pending' | 'active' | 'completed' | 'cancelled' | 'on-hold';
+  start_date?: string;
+  end_date?: string;
+  next_session_date?: string;
+  next_session_time?: string;
+  total_sessions?: number;
+  completed_sessions?: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDRehabilitationStats {
+  activePatients: number;
+  pendingRequests: number;
+  todaysSessions: number;
+  completed: number;
+}
+
+export interface CreateIPDRehabilitationRequestData {
+  admission_id?: number;
+  patient_id: number;
+  service_type: string;
+  requested_by_doctor_id?: number;
+  requested_by_name?: string;
+  frequency?: string;
+  duration?: string;
+  status?: 'pending' | 'active' | 'completed' | 'cancelled' | 'on-hold';
+  start_date?: string;
+  end_date?: string;
+  next_session_date?: string;
+  next_session_time?: string;
+  total_sessions?: number;
+  completed_sessions?: number;
+  notes?: string;
+}
+
+export interface IPDAdmissionRequest {
+  id: number;
+  request_id: string;
+  patient_id: number;
+  patient_name?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  patient_phone?: string;
+  requested_by_doctor_id: number;
+  doctor_name?: string;
+  doctor_specialty?: string;
+  department: string;
+  priority: 'normal' | 'urgent' | 'emergency';
+  ward_preference?: string;
+  room_preference?: string;
+  diagnosis?: string;
+  reason?: string;
+  estimated_duration?: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  approved_by?: number;
+  approved_by_name?: string;
+  approved_at?: string;
+  rejection_reason?: string;
+  admission_id?: number;
+  requested_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IPDAdmissionRequestStats {
+  pending: number;
+  approvedToday: number;
+  rejected: number;
+  urgent: number;
+}
+
+export interface CreateIPDAdmissionRequestData {
+  patient_id: number;
+  requested_by_doctor_id: number;
+  department: string;
+  priority?: 'normal' | 'urgent' | 'emergency';
+  ward_preference?: string;
+  room_preference?: string;
+  diagnosis?: string;
+  reason?: string;
+  estimated_duration?: number;
+}
+
+export interface CreateIPDWardData {
+  name: string;
+  type: 'General' | 'ICU' | 'NICU' | 'PICU' | 'CCU' | 'HDU' | 'Isolation' | 'Private' | 'Deluxe';
+  total_beds: number;
+  floor_id?: number;
+  building?: string;
+  incharge_user_id?: number;
+  contact?: string;
+  email?: string;
+  facilities?: string[];
+  description?: string;
+  status?: 'active' | 'maintenance' | 'closed';
+  established_date?: string;
+}
+
+export interface CreateIPDBedData {
+  ward_id: number;
+  bed_number: string;
+  bed_type: 'General' | 'ICU' | 'Private' | 'Deluxe' | 'Isolation';
+  daily_rate: number;
+  facilities?: string[];
+  status?: 'available' | 'occupied' | 'reserved' | 'maintenance' | 'cleaning';
+  maintenance_notes?: string;
+}
+
+export interface CreateIPDRoomData {
+  room_number: string;
+  room_type: 'Private' | 'Deluxe' | 'Suite';
+  floor_id?: number;
+  building?: string;
+  daily_rate: number;
+  capacity: number;
+  facilities?: string[];
+  amenities?: string[];
+  description?: string;
+  status?: 'available' | 'occupied' | 'maintenance' | 'cleaning';
+  attendant_bed?: boolean;
+  remarks?: string;
+}
+
+// Daily Care Orders
+export interface CreateIPDDailyCareOrderData {
+  order_date?: string;
+  order_time?: string;
+  order_type: string;
+  order_description: string;
+  frequency?: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'active' | 'completed' | 'cancelled';
+  start_date?: string;
+  end_date?: string;
+  notes?: string;
+}
+
+// Medications
+export interface CreateIPDMedicationData {
+  medication_name: string;
+  dosage: string;
+  frequency: string;
+  route?: string;
+  start_date: string;
+  end_date?: string;
+  duration?: number;
+  instructions?: string;
+  status?: 'active' | 'completed' | 'discontinued';
+}
+
+// Lab Orders
+export interface CreateIPDLabOrderData {
+  order_date?: string;
+  order_time?: string;
+  test_name: string;
+  test_type?: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'ordered' | 'collected' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+// Radiology Orders
+export interface CreateIPDRadiologyOrderData {
+  order_date?: string;
+  order_time?: string;
+  test_name: string;
+  test_type?: string;
+  body_part?: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'ordered' | 'scheduled' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+// Doctor Notes
+export interface CreateIPDDoctorNoteData {
+  note_date?: string;
+  note_time?: string;
+  note_type?: string;
+  note: string;
+  assessment?: string;
+  plan?: string;
+}
+
+// Pharmacist Notes
+export interface CreateIPDPharmacistNoteData {
+  note_date?: string;
+  note_time?: string;
+  note_type?: string;
+  note: string;
+}
+
+// Procedures
+export interface CreateIPDProcedureData {
+  procedure_name: string;
+  procedure_date: string;
+  procedure_time?: string;
+  procedure_type?: string;
+  anesthesia_type?: string;
+  procedure_notes?: string;
+  complications?: string;
+  status?: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+}
+
+// Nutrition
+export interface CreateIPDNutritionData {
+  date: string;
+  meal_type?: string;
+  diet_type?: string;
+  items?: string;
+  calories?: number;
+  protein?: number;
+  carbohydrates?: number;
+  fats?: number;
+  notes?: string;
+}
+
+// Intake & Output
+export interface CreateIPDIntakeOutputData {
+  date: string;
+  time?: string;
+  intake_type?: string;
+  intake_amount?: number;
+  output_type?: string;
+  output_amount?: number;
+  balance?: number;
+  notes?: string;
+}
+
+// Health & Physical Habit
+export interface CreateIPDHealthPhysicalHabitData {
+  assessment_date?: string;
+  height?: number;
+  weight?: number;
+  bmi?: number;
+  smoking_status?: string;
+  alcohol_consumption?: string;
+  exercise_habit?: string;
+  dietary_restrictions?: string;
+  allergies?: string;
+  chronic_conditions?: string;
+  family_history?: string;
+  social_history?: string;
+}
+
+// Forms
+export interface CreateIPDFormData {
+  form_name: string;
+  form_type?: string;
+  form_data?: any;
+  status?: 'draft' | 'completed' | 'archived';
+}
+
+// Doctor Recommendations
+export interface CreateIPDDoctorRecommendationData {
+  recommendation_date?: string;
+  recommendation_time?: string;
+  recommendation_type?: string;
+  recommendation: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'pending' | 'approved' | 'rejected' | 'completed';
+}
+
+// Doctor Consultations
+export interface CreateIPDDoctorConsultationData {
+  request_date?: string;
+  request_time?: string;
+  department: string;
+  reason: string;
+  priority?: 'routine' | 'urgent' | 'stat';
+  status?: 'pending' | 'approved' | 'rejected' | 'completed';
+}
+
+// Birth Certificates
+export interface BirthCertificate {
+  id: number;
+  certificate_no: string;
+  baby_name: string;
+  baby_gender: 'Male' | 'Female';
+  date_of_birth: string;
+  time_of_birth: string;
+  weight?: string;
+  height?: string;
+  head_circumference?: string;
+  mother_name: string;
+  mother_mrn?: string;
+  mother_nic?: string;
+  mother_patient_id?: number;
+  father_name: string;
+  father_cnic?: string;
+  delivery_no?: string;
+  mode_of_delivery?: string;
+  birthmark?: string;
+  doctor_id?: number;
+  doctor_name?: string;
+  phone_number?: string;
+  address?: string;
+  status: 'Pending' | 'Issued' | 'Verified';
+  remarks?: string;
+  registration_date: string;
+  created_by?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateBirthCertificateData {
+  baby_name: string;
+  baby_gender: 'Male' | 'Female';
+  date_of_birth: string;
+  time_of_birth?: string;
+  weight?: string;
+  height?: string;
+  head_circumference?: string;
+  mother_name: string;
+  mother_mrn?: string;
+  mother_nic?: string;
+  mother_patient_id?: number;
+  father_name: string;
+  father_cnic?: string;
+  delivery_no?: string;
+  mode_of_delivery?: string;
+  birthmark?: string;
+  doctor_id?: number;
+  doctor_name?: string;
+  phone_number?: string;
+  address?: string;
+  status?: 'Pending' | 'Issued' | 'Verified';
+  remarks?: string;
+  registration_date?: string;
+}
+
+// Death Certificates
+export interface DeathCertificate {
+  id: number;
+  certificate_no: string;
+  patient_id?: number;
+  patient_name: string;
+  patient_nic?: string;
+  patient_gender: 'Male' | 'Female';
+  date_of_birth: string;
+  age_years?: number;
+  age_months?: number;
+  age_days?: number;
+  father_name?: string;
+  address?: string;
+  admission_id?: number;
+  date_of_admission?: string;
+  guardian_name?: string;
+  guardian_nic?: string;
+  phone_number?: string;
+  date_of_death: string;
+  cause_of_death: string;
+  doctor_id?: number;
+  doctor_name?: string;
+  status: 'Pending' | 'Issued' | 'Verified';
+  registration_date: string;
+  created_by?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateDeathCertificateData {
+  patient_id?: number;
+  patient_name: string;
+  patient_nic?: string;
+  patient_gender: 'Male' | 'Female';
+  date_of_birth: string;
+  age_years?: number;
+  age_months?: number;
+  age_days?: number;
+  father_name?: string;
+  address?: string;
+  admission_id?: number;
+  date_of_admission?: string;
+  guardian_name?: string;
+  guardian_nic?: string;
+  phone_number?: string;
+  date_of_death: string;
+  cause_of_death: string;
+  doctor_id?: number;
+  doctor_name?: string;
+  status?: 'Pending' | 'Issued' | 'Verified';
+  registration_date?: string;
+}
+
+// Software Team Contacts
+export interface SoftwareTeamContact {
+  id: number;
+  name: string;
+  role: string;
+  department: string;
+  email: string;
+  phone: string;
+  mobile?: string;
+  extension?: string;
+  availability: string;
+  status: 'available' | 'busy' | 'offline';
+  specialization: string[];
+  avatar?: string;
+  location?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_active?: number;
+}
+
+export interface CreateSoftwareTeamContactData {
+  name: string;
+  role: string;
+  department: string;
+  email: string;
+  phone: string;
+  mobile?: string;
+  extension?: string;
+  availability: string;
+  status?: 'available' | 'busy' | 'offline';
+  specialization?: string[];
+  avatar?: string;
+  location?: string;
+}
+
+// Support Tickets
+export interface SupportTicket {
+  id: number;
+  ticket_number: string;
+  practice_id?: string;
+  subject: string;
+  module: string;
+  description: string;
+  status: 'open' | 'in-progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  contact_number: string;
+  assigned_to_user_id?: number;
+  assigned_to_name?: string;
+  assigned_to_role?: string;
+  created_by_user_id: number;
+  created_by_name?: string;
+  created_by_role?: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  closed_at?: string;
+  comments?: SupportTicketComment[];
+  attachments?: SupportTicketAttachment[];
+}
+
+export interface SupportTicketComment {
+  id: number;
+  ticket_id: number;
+  author_user_id: number;
+  author_name: string;
+  author_role?: string;
+  content: string;
+  type: 'user' | 'support';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportTicketAttachment {
+  id: number;
+  ticket_id: number;
+  file_name: string;
+  file_path: string;
+  file_type?: string;
+  file_size?: number;
+  uploaded_by_user_id: number;
+  created_at: string;
+}
+
+export interface SupportTicketStats {
+  open: number;
+  'in-progress': number;
+  resolved: number;
+  closed: number;
+  total: number;
+}
+
+export interface CreateSupportTicketData {
+  practice_id?: string;
+  module: string;
+  description: string;
+  subject?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  contact_number: string;
+}
+
+export interface UpdateSupportTicketData {
+  subject?: string;
+  module?: string;
+  description?: string;
+  status?: 'open' | 'in-progress' | 'resolved' | 'closed';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  contact_number?: string;
+  assigned_to_user_id?: number;
+}
+
+// ============================================
+// AUDIT LOGS API METHODS
+// ============================================
+
+export interface AuditLog {
+  id: number;
+  user_id?: number;
+  user_name?: string;
+  user_role?: string;
+  action_type: 'create' | 'update' | 'delete' | 'login' | 'logout' | 'view' | 'export' | 'settings' | 'error';
+  action: string;
+  module: string;
+  entity_type?: string;
+  entity_id?: number;
+  details?: string;
+  ip_address?: string;
+  user_agent?: string;
+  request_method?: string;
+  request_url?: string;
+  status: 'success' | 'failed' | 'warning';
+  error_message?: string;
+  metadata?: any;
+  created_at: string;
+}
+
+export interface AuditLogFilters {
+  date_from?: string;
+  date_to?: string;
+  user_id?: number;
+  action_type?: 'all' | 'create' | 'update' | 'delete' | 'login' | 'logout' | 'view' | 'export' | 'settings' | 'error';
+  module?: string;
+  status?: 'success' | 'failed' | 'warning';
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AuditLogStatistics {
+  total: number;
+  creates: number;
+  updates: number;
+  deletes: number;
+  logins: number;
+  logouts: number;
+  views: number;
+  exports: number;
+  settings: number;
+  errors: number;
+  failed: number;
+}
+
+export interface AuditLogResponse {
+  logs: AuditLog[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AuditLogUser {
+  user_id: number;
+  user_name: string;
+  user_role: string;
 }
 
 export const api = new ApiService();

@@ -79,6 +79,12 @@ class Suppliers extends Api {
             
             if ($supplier_id) {
                 $supplier = $this->Supplier_model->get_by_id($supplier_id);
+                
+                // Log supplier creation
+                $this->load->library('audit_log');
+                $supplier_name = $supplier['name'] ?? 'Unknown';
+                $this->audit_log->logCreate('Pharmacy', 'Supplier', $supplier_id, "Created supplier: {$supplier_name}");
+                
                 $this->success($supplier, 'Supplier created successfully', 201);
             } else {
                 $this->error('Failed to create supplier', 400);
@@ -130,10 +136,16 @@ class Suppliers extends Api {
         try {
             $data = $this->get_request_data();
             
+            $old_supplier = $this->Supplier_model->get_by_id($id);
             $result = $this->Supplier_model->update($id, $data);
             
             if ($result) {
                 $supplier = $this->Supplier_model->get_by_id($id);
+                
+                // Log supplier update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Supplier', $id, "Updated supplier ID: {$id}", $old_supplier, $supplier);
+                
                 $this->success($supplier, 'Supplier updated successfully');
             } else {
                 $this->error('Failed to update supplier', 400);

@@ -25,6 +25,7 @@ import { Textarea } from '../ui/textarea';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
 import { Alert, AlertDescription } from '../ui/alert';
+import { Switch } from '../ui/switch';
 import {
   Bed,
   User,
@@ -64,7 +65,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Maximize2,
-  Minimize2
+  Minimize2,
+  DollarSign,
+  Wind
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 

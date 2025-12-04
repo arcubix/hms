@@ -185,6 +185,10 @@ class Appointments extends Api {
                 $appointment['token_id'] = $token_result['token_id'];
             }
             
+            // Log appointment creation
+            $this->load->library('audit_log');
+            $this->audit_log->logCreate('Appointments', 'Appointment', $result['id'], "Created appointment for patient ID: {$data['patient_id']}");
+            
             $this->success($appointment, 'Appointment created successfully');
         } else {
             $this->error($result['message'] ?? 'Failed to create appointment', 400);
@@ -234,10 +238,16 @@ class Appointments extends Api {
             $data = $this->input->post();
         }
         
+        $old_appointment = $this->Appointment_model->get_by_id($id);
         $result = $this->Appointment_model->update($id, $data);
         
         if ($result['success']) {
             $appointment = $this->Appointment_model->get_by_id($id);
+            
+            // Log appointment update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Appointments', 'Appointment', $id, "Updated appointment ID: {$id}", $old_appointment, $appointment);
+            
             $this->success($appointment, 'Appointment updated successfully');
         } else {
             $this->error($result['message'] ?? 'Failed to update appointment', 400);
@@ -248,7 +258,13 @@ class Appointments extends Api {
      * Delete appointment
      */
     public function delete($id) {
+        $appointment = $this->Appointment_model->get_by_id($id);
+        
         if ($this->Appointment_model->delete($id)) {
+            // Log appointment deletion
+            $this->load->library('audit_log');
+            $this->audit_log->logDelete('Appointments', 'Appointment', $id, "Deleted appointment ID: {$id}");
+            
             $this->success(null, 'Appointment deleted successfully');
         } else {
             $this->error('Failed to delete appointment', 500);

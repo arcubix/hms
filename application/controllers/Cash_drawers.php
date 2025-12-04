@@ -64,6 +64,12 @@ class Cash_drawers extends Api {
             
             if ($result['success']) {
                 $drawer = $this->Cash_drawer_model->get_by_id($result['drawer_id']);
+                
+                // Log drawer opening
+                $this->load->library('audit_log');
+                $drawer_number = $data['drawer_number'] ?? 'Unknown';
+                $this->audit_log->logCreate('Pharmacy', 'Cash Drawer', $result['drawer_id'], "Opened cash drawer: {$drawer_number}");
+                
                 $this->success($drawer, 'Drawer opened successfully', 201);
             } else {
                 $this->error($result['message'] ?? 'Failed to open drawer', 400);
@@ -116,8 +122,14 @@ class Cash_drawers extends Api {
             
             $result = $this->Cash_drawer_model->close($id, $data);
             
+            $old_drawer = $this->Cash_drawer_model->get_by_id($id);
             if ($result['success']) {
                 $drawer = $this->Cash_drawer_model->get_by_id($id);
+                
+                // Log drawer closing
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Cash Drawer', $id, "Closed cash drawer ID: {$id}", $old_drawer, $drawer);
+                
                 $this->success($drawer, 'Drawer closed successfully');
             } else {
                 $this->error($result['message'] ?? 'Failed to close drawer', 400);
@@ -173,6 +185,13 @@ class Cash_drawers extends Api {
             
             if ($drop_id) {
                 $drop = $this->Cash_drawer_model->get_drops($id);
+                
+                // Log cash drop
+                $this->load->library('audit_log');
+                $drop_type = $data['drop_type'] ?? 'Unknown';
+                $amount = $data['amount'] ?? 0;
+                $this->audit_log->logCreate('Pharmacy', 'Cash Drop', $drop_id, "Recorded cash {$drop_type}: {$amount} for drawer ID: {$id}");
+                
                 $this->success($drop, 'Cash drop recorded successfully', 201);
             } else {
                 $this->error('Failed to record cash drop', 400);

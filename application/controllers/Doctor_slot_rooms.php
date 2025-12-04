@@ -133,6 +133,11 @@ class Doctor_slot_rooms extends Api {
         $inserted = $this->Doctor_slot_room_model->bulk_create($data);
         
         if ($inserted !== false) {
+            // Log bulk assignment creation
+            $this->load->library('audit_log');
+            $doctor_id = $data['doctor_id'] ?? 'Unknown';
+            $this->audit_log->log('Appointments', 'Doctor Slot Room', null, "Bulk created {$inserted} slot-room assignments for Doctor ID: {$doctor_id}");
+            
             $this->success(array('inserted' => $inserted), 'Bulk assignments created successfully');
         } else {
             $this->error('Failed to create bulk assignments', 500);
@@ -214,6 +219,13 @@ class Doctor_slot_rooms extends Api {
         
         if ($id) {
             $assignment = $this->Doctor_slot_room_model->get_by_id($id);
+            
+            // Log slot-room assignment creation
+            $this->load->library('audit_log');
+            $doctor_id = $data['doctor_id'] ?? 'Unknown';
+            $room_id = $data['room_id'] ?? 'Unknown';
+            $this->audit_log->logCreate('Appointments', 'Doctor Slot Room', $id, "Created slot-room assignment for Doctor ID: {$doctor_id}, Room ID: {$room_id}");
+            
             $this->success($assignment, 'Slot-room assignment created successfully');
         } else {
             $this->error('Failed to create slot-room assignment', 500);
@@ -267,8 +279,14 @@ class Doctor_slot_rooms extends Api {
             }
         }
         
+        $old_assignment = $this->Doctor_slot_room_model->get_by_id($id);
         if ($this->Doctor_slot_room_model->update($id, $data)) {
             $assignment = $this->Doctor_slot_room_model->get_by_id($id);
+            
+            // Log slot-room assignment update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Appointments', 'Doctor Slot Room', $id, "Updated slot-room assignment ID: {$id}", $old_assignment, $assignment);
+            
             $this->success($assignment, 'Slot-room assignment updated successfully');
         } else {
             $this->error('Failed to update slot-room assignment', 500);
@@ -279,7 +297,12 @@ class Doctor_slot_rooms extends Api {
      * Delete slot-room assignment
      */
     private function delete($id) {
+        $assignment = $this->Doctor_slot_room_model->get_by_id($id);
         if ($this->Doctor_slot_room_model->delete($id)) {
+            // Log slot-room assignment deletion
+            $this->load->library('audit_log');
+            $this->audit_log->logDelete('Appointments', 'Doctor Slot Room', $id, "Deleted slot-room assignment ID: {$id}");
+            
             $this->success(null, 'Slot-room assignment deleted successfully');
         } else {
             $this->error('Failed to delete slot-room assignment', 500);

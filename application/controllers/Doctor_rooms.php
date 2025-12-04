@@ -144,6 +144,11 @@ class Doctor_rooms extends Api {
         
         if ($id) {
             $assignment = $this->Doctor_room_model->get_by_id($id);
+            
+            // Log room assignment creation
+            $this->load->library('audit_log');
+            $this->audit_log->logCreate('OPD Management', 'Doctor Room Assignment', $id, "Assigned doctor {$data['doctor_id']} to room {$data['room_id']}");
+            
             $this->success($assignment, 'Room assignment created successfully');
         } else {
             $this->error('Failed to create room assignment', 500);
@@ -197,8 +202,15 @@ class Doctor_rooms extends Api {
             }
         }
         
+        $old_assignment = $this->Doctor_room_model->get_by_id($id);
+        
         if ($this->Doctor_room_model->update($id, $data)) {
             $assignment = $this->Doctor_room_model->get_by_id($id);
+            
+            // Log room assignment update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('OPD Management', 'Doctor Room Assignment', $id, "Updated room assignment ID: {$id}", $old_assignment, $assignment);
+            
             $this->success($assignment, 'Room assignment updated successfully');
         } else {
             $this->error('Failed to update room assignment', 500);
@@ -209,7 +221,13 @@ class Doctor_rooms extends Api {
      * Delete doctor room assignment
      */
     private function delete($id) {
+        $assignment = $this->Doctor_room_model->get_by_id($id);
+        
         if ($this->Doctor_room_model->delete($id)) {
+            // Log room assignment deletion
+            $this->load->library('audit_log');
+            $this->audit_log->logDelete('OPD Management', 'Doctor Room Assignment', $id, "Deleted room assignment ID: {$id}");
+            
             $this->success(null, 'Room assignment deleted successfully');
         } else {
             $this->error('Failed to delete room assignment', 500);

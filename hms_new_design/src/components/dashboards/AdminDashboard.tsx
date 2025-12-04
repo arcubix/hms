@@ -20,7 +20,8 @@ import {
   Hospital,
   Scan,
   MessageSquare,
-  Package
+  Package,
+  UserCog
 } from 'lucide-react';
 import { User } from '../../App';
 import { PatientList } from '../modules/PatientList';
@@ -44,6 +45,8 @@ import { RadiologyManagement } from '../modules/RadiologyManagement';
 import { PreferenceSettings } from '../modules/PreferenceSettings';
 import { ManageMessage } from '../modules/ManageMessage';
 import { InventoryManagement } from '../inventory/InventoryManagement';
+import { UserManagement } from '../modules/UserManagement';
+import IndoorDutyRoster from '../modules/IndoorDutyRoster';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface AdminDashboardProps {
@@ -65,11 +68,13 @@ const navigationItems: NavigationItem[] = [
   { icon: <Pill className="w-5 h-5" />, label: 'Pharmacy', id: 'pharmacy' },
   { icon: <FlaskConical className="w-5 h-5" />, label: 'Laboratory', id: 'lab' },
   { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
+  { icon: <UserCog className="w-5 h-5" />, label: 'Indoor Duty Roster', id: 'indoor-duty-roster' },
   { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
   { icon: <FileText className="w-5 h-5" />, label: 'Reports', id: 'reports' },
   { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
   { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', id: 'messages' },
-  { icon: <Package className="w-5 h-5" />, label: 'Inventory', id: 'inventory' }
+  { icon: <Package className="w-5 h-5" />, label: 'Inventory', id: 'inventory' },
+  { icon: <UserCog className="w-5 h-5" />, label: 'User Management', id: 'user-management' }
 ];
 
 // Mock data for charts
@@ -168,6 +173,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <RadiologyManagement />;
       case 'emergency':
         return <EmergencyManagement />;
+      case 'indoor-duty-roster':
+        return <IndoorDutyRoster />;
       case 'analytics':
         return <EvaluationDashboard />;
       case 'settings':
@@ -176,6 +183,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <ManageMessage />;
       case 'inventory':
         return <InventoryManagement />;
+      case 'user-management':
+        return <UserManagement />;
       default:
         return <EnhancedAdminDashboard />;
     }

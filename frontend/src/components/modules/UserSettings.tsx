@@ -1,9 +1,9 @@
 /**
  * User Settings Component
- * Manages user permissions and settings based on screenshots
+ * Manages user permissions and settings with validation and error handling
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from '../ui/checkbox';
 import { Separator } from '../ui/separator';
 import { Alert, AlertDescription } from '../ui/alert';
-import { Info, Save } from 'lucide-react';
+import { Info, Save, Loader2, AlertCircle } from 'lucide-react';
 import { api, UserSettings, RolePermission, UserSettingsFormData } from '../../services/api';
 import { toast } from 'sonner';
 
@@ -65,8 +65,13 @@ const ROLE_CATEGORIES = [
 export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [permissionDefinitions, setPermissionDefinitions] = useState<RolePermission[]>([]);
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [originalSettings, setOriginalSettings] = useState<UserSettingsFormData | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   
   const [settings, setSettings] = useState<UserSettingsFormData>({
     consultation_fee: 0,
@@ -86,31 +91,114 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
   });
 
   useEffect(() => {
-    loadSettings();
-    loadPermissionDefinitions();
-    loadUserPermissions();
+    if (userId) {
+      loadSettings();
+      loadPermissionDefinitions();
+      loadUserPermissions();
+    }
   }, [userId]);
+
+  // Track dirty state
+  useEffect(() => {
+    if (originalSettings) {
+      const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+      setIsDirty(hasChanges);
+    }
+  }, [settings, originalSettings]);
+
+  // Validation function
+  const validateSettings = useCallback((): { valid: boolean; errors: Record<string, string> } => {
+    const errors: Record<string, string> = {};
+    
+    if (settings.consultation_fee < 0) {
+      errors.consultation_fee = 'Consultation fee cannot be negative';
+    }
+    
+    if (settings.follow_up_charges < 0) {
+      errors.follow_up_charges = 'Follow up charges cannot be negative';
+    }
+    
+    if (settings.follow_up_share_price < 0) {
+      errors.follow_up_share_price = 'Follow up share price cannot be negative';
+    }
+    
+    if (settings.share_price < 0) {
+      errors.share_price = 'Share price cannot be negative';
+    }
+    
+    if (settings.share_type === 'Percentage' && settings.share_price > 100) {
+      errors.share_price = 'Share percentage cannot exceed 100%';
+    }
+    
+    if (settings.lab_share_value < 0) {
+      errors.lab_share_value = 'Lab share value cannot be negative';
+    }
+    
+    if (settings.lab_share_type === 'percentage' && settings.lab_share_value > 100) {
+      errors.lab_share_value = 'Lab share percentage cannot exceed 100%';
+    }
+    
+    if (settings.radiology_share_value < 0) {
+      errors.radiology_share_value = 'Radiology share value cannot be negative';
+    }
+    
+    if (settings.radiology_share_type === 'percentage' && settings.radiology_share_value > 100) {
+      errors.radiology_share_value = 'Radiology share percentage cannot exceed 100%';
+    }
+    
+    if (settings.invoice_edit_count < 0) {
+      errors.invoice_edit_count = 'Invoice edit limit cannot be negative';
+    }
+    
+    setValidationErrors(errors);
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors
+    };
+  }, [settings]);
 
   const loadSettings = async () => {
     try {
+      setLoadingSettings(true);
       setLoading(true);
       const userSettings = await api.getUserSettings(userId);
       if (userSettings) {
-        setSettings(prev => ({
-          ...prev,
-          ...userSettings,
-          rolePermissions: prev.rolePermissions // Keep existing role permissions structure
-        }));
+        const loadedSettings: UserSettingsFormData = {
+          consultation_fee: userSettings.consultation_fee ?? 0,
+          follow_up_charges: userSettings.follow_up_charges ?? 0,
+          follow_up_share_price: userSettings.follow_up_share_price ?? 0,
+          share_price: userSettings.share_price ?? 0,
+          share_type: userSettings.share_type || 'Rupees',
+          follow_up_share_types: userSettings.follow_up_share_types || [],
+          lab_share_value: userSettings.lab_share_value ?? 0,
+          lab_share_type: userSettings.lab_share_type || 'percentage',
+          radiology_share_value: userSettings.radiology_share_value ?? 0,
+          radiology_share_type: userSettings.radiology_share_type || 'percentage',
+          instant_booking: userSettings.instant_booking ?? false,
+          visit_charges: userSettings.visit_charges ?? false,
+          invoice_edit_count: userSettings.invoice_edit_count ?? 0,
+          rolePermissions: settings.rolePermissions // Keep existing role permissions structure
+        };
+        
+        setSettings(loadedSettings);
+        setOriginalSettings(JSON.parse(JSON.stringify(loadedSettings))); // Deep copy
+        setValidationErrors({});
       }
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to load settings. Please refresh the page.';
+      toast.error(errorMessage);
       console.error('Failed to load settings:', error);
     } finally {
+      setLoadingSettings(false);
       setLoading(false);
     }
   };
 
   const loadPermissionDefinitions = async () => {
     try {
+      setLoadingPermissions(true);
       const definitions = await api.getPermissionDefinitions();
       setPermissionDefinitions(definitions);
       
@@ -134,8 +222,14 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
         ...prev,
         rolePermissions: rolePerms
       }));
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to load permission definitions.';
+      toast.error(errorMessage);
       console.error('Failed to load permission definitions:', error);
+    } finally {
+      setLoadingPermissions(false);
     }
   };
 
@@ -143,8 +237,12 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
     try {
       const permissions = await api.getUserPermissions(userId);
       setUserPermissions(permissions);
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to load user permissions.';
       console.error('Failed to load user permissions:', error);
+      // Don't show toast for permissions as it's not critical
     }
   };
 
@@ -175,24 +273,33 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
   };
 
   const handleSave = async () => {
+    // Validate before saving
+    const validation = validateSettings();
+    if (!validation.valid) {
+      // Show first error
+      const firstError = Object.values(validation.errors)[0];
+      toast.error(firstError);
+      return;
+    }
+    
     try {
       setSaving(true);
       
       // Save settings
       const settingsToSave: Partial<UserSettings> = {
-        consultation_fee: settings.consultation_fee,
-        follow_up_charges: settings.follow_up_charges,
-        follow_up_share_price: settings.follow_up_share_price,
-        share_price: settings.share_price,
+        consultation_fee: settings.consultation_fee || 0,
+        follow_up_charges: settings.follow_up_charges || 0,
+        follow_up_share_price: settings.follow_up_share_price || 0,
+        share_price: settings.share_price || 0,
         share_type: settings.share_type,
         follow_up_share_types: settings.follow_up_share_types,
-        lab_share_value: settings.lab_share_value,
+        lab_share_value: settings.lab_share_value || 0,
         lab_share_type: settings.lab_share_type,
-        radiology_share_value: settings.radiology_share_value,
+        radiology_share_value: settings.radiology_share_value || 0,
         radiology_share_type: settings.radiology_share_type,
         instant_booking: settings.instant_booking,
         visit_charges: settings.visit_charges,
-        invoice_edit_count: settings.invoice_edit_count
+        invoice_edit_count: settings.invoice_edit_count || 0
       };
       
       await api.updateUserSettings(userId, settingsToSave);
@@ -207,10 +314,17 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
       
       await api.updateUserPermissions(userId, allPermissions);
       
+      // Reload settings to ensure sync
+      await loadSettings();
+      
       toast.success('Settings saved successfully');
+      setIsDirty(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save settings');
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to save settings. Please try again.';
+      toast.error(errorMessage);
       console.error('Error saving settings:', error);
     } finally {
       setSaving(false);
@@ -219,7 +333,12 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
 
 
   if (loading) {
-    return <div className="flex items-center justify-center p-8">Loading settings...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center p-8 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <p className="text-gray-600">Loading settings...</p>
+      </div>
+    );
   }
 
   return (
@@ -238,12 +357,21 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                 <Label>Consultation fee in Rs.</Label>
                 <Input
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={settings.consultation_fee || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    consultation_fee: parseFloat(e.target.value) || 0
-                  })}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setSettings(prev => ({
+                      ...prev,
+                      consultation_fee: isNaN(value) ? 0 : Math.max(0, value)
+                    }));
+                  }}
+                  className={validationErrors.consultation_fee ? 'border-red-500' : ''}
                 />
+                {validationErrors.consultation_fee && (
+                  <p className="text-sm text-red-500">{validationErrors.consultation_fee}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -251,38 +379,66 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
+                    min="0"
+                    step="0.01"
                     value={settings.follow_up_charges || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      follow_up_charges: parseFloat(e.target.value) || 0
-                    })}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      setSettings(prev => ({
+                        ...prev,
+                        follow_up_charges: isNaN(value) ? 0 : Math.max(0, value)
+                      }));
+                    }}
+                    className={validationErrors.follow_up_charges ? 'border-red-500' : ''}
                   />
                   <Info className="w-4 h-4 text-gray-400" />
                 </div>
+                {validationErrors.follow_up_charges && (
+                  <p className="text-sm text-red-500">{validationErrors.follow_up_charges}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>Follow Up Share</Label>
                 <Input
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={settings.follow_up_share_price || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    follow_up_share_price: parseFloat(e.target.value) || 0
-                  })}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setSettings(prev => ({
+                      ...prev,
+                      follow_up_share_price: isNaN(value) ? 0 : Math.max(0, value)
+                    }));
+                  }}
+                  className={validationErrors.follow_up_share_price ? 'border-red-500' : ''}
                 />
+                {validationErrors.follow_up_share_price && (
+                  <p className="text-sm text-red-500">{validationErrors.follow_up_share_price}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>Share Price in Rs.</Label>
                 <Input
                   type="number"
+                  min="0"
+                  step="0.01"
+                  max={settings.share_type === 'Percentage' ? 100 : undefined}
                   value={settings.share_price || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    share_price: parseFloat(e.target.value) || 0
-                  })}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setSettings(prev => ({
+                      ...prev,
+                      share_price: isNaN(value) ? 0 : Math.max(0, value)
+                    }));
+                  }}
+                  className={validationErrors.share_price ? 'border-red-500' : ''}
                 />
+                {validationErrors.share_price && (
+                  <p className="text-sm text-red-500">{validationErrors.share_price}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -333,16 +489,23 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
               <div className="flex gap-2">
                 <Input
                   type="number"
+                  min="0"
+                  step="0.01"
+                  max={settings.lab_share_type === 'percentage' ? 100 : undefined}
                   value={settings.lab_share_value || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    lab_share_value: parseFloat(e.target.value) || 0
-                  })}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setSettings(prev => ({
+                      ...prev,
+                      lab_share_value: isNaN(value) ? 0 : Math.max(0, value)
+                    }));
+                  }}
+                  className={validationErrors.lab_share_value ? 'border-red-500' : ''}
                 />
                 <Select
                   value={settings.lab_share_type}
                   onValueChange={(value: 'percentage' | 'rupees') => 
-                    setSettings({ ...settings, lab_share_type: value })
+                    setSettings(prev => ({ ...prev, lab_share_type: value }))
                   }
                 >
                   <SelectTrigger className="w-32">
@@ -354,6 +517,9 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                   </SelectContent>
                 </Select>
               </div>
+              {validationErrors.lab_share_value && (
+                <p className="text-sm text-red-500">{validationErrors.lab_share_value}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -361,16 +527,23 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
               <div className="flex gap-2">
                 <Input
                   type="number"
+                  min="0"
+                  step="0.01"
+                  max={settings.radiology_share_type === 'percentage' ? 100 : undefined}
                   value={settings.radiology_share_value || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    radiology_share_value: parseFloat(e.target.value) || 0
-                  })}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setSettings(prev => ({
+                      ...prev,
+                      radiology_share_value: isNaN(value) ? 0 : Math.max(0, value)
+                    }));
+                  }}
+                  className={validationErrors.radiology_share_value ? 'border-red-500' : ''}
                 />
                 <Select
                   value={settings.radiology_share_type}
                   onValueChange={(value: 'percentage' | 'rupees') => 
-                    setSettings({ ...settings, radiology_share_type: value })
+                    setSettings(prev => ({ ...prev, radiology_share_type: value }))
                   }
                 >
                   <SelectTrigger className="w-32">
@@ -382,6 +555,9 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                   </SelectContent>
                 </Select>
               </div>
+              {validationErrors.radiology_share_value && (
+                <p className="text-sm text-red-500">{validationErrors.radiology_share_value}</p>
+              )}
             </div>
           </div>
 
@@ -492,19 +668,61 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
               <Label>Invoice Edit Limit</Label>
               <Input
                 type="number"
+                min="0"
                 value={settings.invoice_edit_count || ''}
-                onChange={(e) => setSettings({
-                  ...settings,
-                  invoice_edit_count: parseInt(e.target.value) || 0
-                })}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  setSettings(prev => ({
+                    ...prev,
+                    invoice_edit_count: isNaN(value) ? 0 : Math.max(0, value)
+                  }));
+                }}
+                className={validationErrors.invoice_edit_count ? 'border-red-500' : ''}
               />
+              {validationErrors.invoice_edit_count && (
+                <p className="text-sm text-red-500">{validationErrors.invoice_edit_count}</p>
+              )}
             </div>
           </div>
 
-          <div className="flex justify-end pt-4">
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4 mr-2" />
-              {saving ? 'Saving...' : 'Save Settings'}
+          {isDirty && (
+            <Alert className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                You have unsaved changes. Please save your settings before leaving.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            {isDirty && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (originalSettings) {
+                    setSettings(JSON.parse(JSON.stringify(originalSettings)));
+                    setIsDirty(false);
+                    setValidationErrors({});
+                    toast.info('Changes discarded');
+                  }
+                }}
+                disabled={saving}
+              >
+                Discard Changes
+              </Button>
+            )}
+            <Button onClick={handleSave} disabled={saving || loadingSettings}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Settings
+                </>
+              )}
             </Button>
           </div>
         </CardContent>

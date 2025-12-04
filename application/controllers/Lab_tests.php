@@ -69,6 +69,11 @@ class Lab_tests extends Api {
             
             if ($test_id) {
                 $test = $this->Lab_test_model->get_by_id($test_id);
+                
+                // Log lab test creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Laboratory', 'Lab Test', $test_id, "Created lab test: {$data['test_name']}");
+                
                 $this->success($test, 'Lab test created successfully', 201);
             } else {
                 $this->error('Failed to create lab test', 400);
@@ -115,8 +120,15 @@ class Lab_tests extends Api {
         try {
             $data = $this->get_request_data();
             
+            $old_test = $this->Lab_test_model->get_by_id($id);
+            
             if ($this->Lab_test_model->update($id, $data)) {
                 $test = $this->Lab_test_model->get_by_id($id);
+                
+                // Log lab test update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Laboratory', 'Lab Test', $id, "Updated lab test: {$test['test_name']}", $old_test, $test);
+                
                 $this->success($test, 'Lab test updated successfully');
             } else {
                 $this->error('Failed to update lab test', 400);

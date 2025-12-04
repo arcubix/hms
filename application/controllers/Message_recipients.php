@@ -208,8 +208,14 @@ class Message_recipients extends Api {
                 return;
             }
             
+            $old_prefs = $query->row_array();
             $this->db->where('id', $id);
             $this->db->update('message_recipients', $update_data);
+            
+            // Log recipient preferences update
+            $this->load->library('audit_log');
+            $user_id = $old_prefs['user_id'] ?? 'Unknown';
+            $this->audit_log->logUpdate('Message Management', 'Recipient Preferences', $id, "Updated recipient preferences for User ID: {$user_id}", $old_prefs, $update_data);
             
             $this->success(null, 'Recipient preferences updated successfully');
             
@@ -269,10 +275,15 @@ class Message_recipients extends Api {
                 }
             }
             
+            // Log bulk update
+            $this->load->library('audit_log');
+            $total = $updated + $created;
+            $this->audit_log->log('Message Management', 'Recipient Preferences', null, "Bulk updated recipient preferences for {$total} recipients ({$updated} updated, {$created} created)");
+            
             $this->success(array(
                 'updated' => $updated,
                 'created' => $created,
-                'total' => $updated + $created
+                'total' => $total
             ), 'Bulk update completed successfully');
             
         } catch (Exception $e) {

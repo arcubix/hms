@@ -120,10 +120,16 @@ class Users extends Api {
                     return;
                 }
 
+                $old_permissions = $this->User_model->get_user_permissions($id);
                 $result = $this->User_model->update_user_permissions($id, $data['permissions']);
                 
                 if ($result) {
                     $permissions = $this->User_model->get_user_permissions($id);
+                    
+                    // Log permissions update
+                    $this->load->library('audit_log');
+                    $this->audit_log->logUpdate('User Management', 'User Permissions', $id, "Updated permissions for user: {$user['name']}", $old_permissions, $permissions);
+                    
                     $this->success($permissions, 'Permissions updated successfully');
                 } else {
                     $this->error('Failed to update permissions', 500);
@@ -164,10 +170,16 @@ class Users extends Api {
             } elseif ($method === 'PUT' || $method === 'PATCH') {
                 $data = $this->get_request_data();
                 
+                $old_settings = $this->User_model->get_user_settings($id);
                 $result = $this->User_model->update_user_settings($id, $data);
                 
                 if ($result) {
                     $settings = $this->User_model->get_user_settings($id);
+                    
+                    // Log settings update
+                    $this->load->library('audit_log');
+                    $this->audit_log->logSettings('User Management', 'User Settings', $old_settings, $settings, "Updated settings for user: {$user['name']}");
+                    
                     $this->success($settings, 'Settings updated successfully');
                 } else {
                     $this->error('Failed to update settings', 500);
@@ -316,6 +328,11 @@ class Users extends Api {
 
             if ($user_id) {
                 $user = $this->User_model->get_user_with_details($user_id);
+                
+                // Log user creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('User Management', 'User', $user_id, "Created user: {$user['name']} ({$user['email']})");
+                
                 $this->success($user, 'User created successfully', 201);
             } else {
                 $this->error('Failed to create user', 500);
@@ -335,6 +352,7 @@ class Users extends Api {
             $data = $this->get_request_data();
             
             $user = $this->User_model->get_user_by_id($id);
+            $old_user = $user; // Store old data for audit log
             
             if (!$user) {
                 $this->error('User not found', 404);
@@ -364,6 +382,11 @@ class Users extends Api {
 
             if ($result) {
                 $user = $this->User_model->get_user_with_details($id);
+                
+                // Log user update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('User Management', 'User', $id, "Updated user: {$user['name']}", $old_user, $user);
+                
                 $this->success($user, 'User updated successfully');
             } else {
                 $this->error('Failed to update user', 500);
@@ -390,6 +413,10 @@ class Users extends Api {
             $result = $this->User_model->delete_user($id);
 
             if ($result) {
+                // Log user deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('User Management', 'User', $id, "Deleted user: {$user['name']} ({$user['email']})");
+                
                 $this->success(null, 'User deleted successfully');
             } else {
                 $this->error('Failed to delete user', 500);

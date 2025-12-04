@@ -134,6 +134,12 @@ class ReferralHospitals extends Api {
             
             if ($id) {
                 $hospital = $this->ReferralHospital_model->get_by_id($id);
+                
+                // Log referral hospital creation
+                $this->load->library('audit_log');
+                $hospital_name = $data['hospital_name'] ?? 'Unknown';
+                $this->audit_log->logCreate('Referrals', 'Referral Hospital', $id, "Created referral hospital: {$hospital_name}");
+                
                 $this->success($hospital, 'Referral hospital created successfully', 201);
             } else {
                 $this->error('Failed to create referral hospital', 500);
@@ -175,8 +181,14 @@ class ReferralHospitals extends Api {
 
             $result = $this->ReferralHospital_model->update($id, $data);
             
+            $old_hospital = $hospital;
             if ($result) {
                 $updated_hospital = $this->ReferralHospital_model->get_by_id($id);
+                
+                // Log referral hospital update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Referrals', 'Referral Hospital', $id, "Updated referral hospital ID: {$id}", $old_hospital, $updated_hospital);
+                
                 $this->success($updated_hospital, 'Referral hospital updated successfully');
             } else {
                 $this->error('Failed to update referral hospital', 500);
@@ -202,6 +214,10 @@ class ReferralHospitals extends Api {
             $result = $this->ReferralHospital_model->delete($id);
             
             if ($result) {
+                // Log referral hospital deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Referrals', 'Referral Hospital', $id, "Deleted referral hospital ID: {$id}");
+                
                 $this->success(null, 'Referral hospital deleted successfully');
             } else {
                 $this->error('Failed to delete referral hospital', 500);

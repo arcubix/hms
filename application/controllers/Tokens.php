@@ -99,8 +99,15 @@ class Tokens extends Api {
             return;
         }
         
+        $old_token = $this->Token_model->get_by_id($id);
+        
         if ($this->token_service->update_token_status($id, $data['status'])) {
             $token = $this->Token_model->get_by_id($id);
+            
+            // Log token status update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('OPD Management', 'Token', $id, "Updated token status to: {$data['status']}", $old_token, $token);
+            
             $this->success($token, 'Token status updated successfully');
         } else {
             $this->error('Failed to update token status', 500);

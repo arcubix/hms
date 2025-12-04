@@ -115,6 +115,10 @@ class Pos_settings extends Api {
                 log_message('debug', 'update_settings returned: ' . $updated);
                 
                 if ($updated > 0) {
+                    // Log POS settings bulk update
+                    $this->load->library('audit_log');
+                    $this->audit_log->log('Pharmacy', 'POS Settings', null, "Bulk updated {$updated} POS settings");
+                    
                     log_message('debug', 'Sending success response');
                     $this->success(array(
                         'message' => 'Settings updated successfully',

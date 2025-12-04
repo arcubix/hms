@@ -149,6 +149,11 @@ class Departments extends Api {
 
             if ($department_id) {
                 $department = $this->Department_model->get_by_id($department_id);
+                
+                // Log department creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'Department', $department_id, "Created department: {$data['department_name']}");
+                
                 $this->success($department, 'Department created successfully', 201);
             } else {
                 $this->error('Failed to create department', 500);
@@ -200,10 +205,16 @@ class Departments extends Api {
             unset($data['created_by']);
             unset($data['created_at']);
 
+            $old_department = $department; // Store old data for audit log
             $result = $this->Department_model->update($id, $data);
 
             if ($result) {
                 $department = $this->Department_model->get_by_id($id);
+                
+                // Log department update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'Department', $id, "Updated department: {$department['department_name']}", $old_department, $department);
+                
                 $this->success($department, 'Department updated successfully');
             } else {
                 $this->error('Failed to update department', 500);
@@ -230,6 +241,10 @@ class Departments extends Api {
             $result = $this->Department_model->delete($id);
 
             if ($result) {
+                // Log department deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Master Data', 'Department', $id, "Deleted department: {$department['department_name']}");
+                
                 $this->success(null, 'Department deleted successfully');
             } else {
                 $this->error('Cannot delete department. It may have rooms or receptions assigned to it.', 400);

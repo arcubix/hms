@@ -72,6 +72,11 @@ class Prescriptions extends Api {
             
             if ($result['success']) {
                 $prescription = $this->Prescription_model->get_by_id($result['id']);
+                
+                // Log prescription creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Prescriptions', 'Prescription', $result['id'], "Created prescription for patient ID: {$data['patient_id']}");
+                
                 $this->success($prescription, 'Prescription created successfully', 201);
             } else {
                 $this->error($result['message'] ?? 'Failed to create prescription', 400);
@@ -118,10 +123,16 @@ class Prescriptions extends Api {
         try {
             $data = $this->get_request_data();
             
+            $old_prescription = $this->Prescription_model->get_by_id($id);
             $result = $this->Prescription_model->update($id, $data);
             
             if ($result['success']) {
                 $prescription = $this->Prescription_model->get_by_id($id);
+                
+                // Log prescription update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Prescriptions', 'Prescription', $id, "Updated prescription ID: {$id}", $old_prescription, $prescription);
+                
                 $this->success($prescription, 'Prescription updated successfully');
             } else {
                 $this->error($result['message'] ?? 'Failed to update prescription', 400);

@@ -159,6 +159,11 @@ class Gst_rates extends Api {
             
             if ($id) {
                 $rate = $this->Gst_rate_model->get_by_id($id);
+                
+                // Log GST rate creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'GST Rate', $id, "Created GST rate: {$data['rate_name']} ({$data['rate_percentage']}%)");
+                
                 $this->success($rate, 'GST rate created successfully', 201);
             } else {
                 $this->error('Failed to create GST rate', 500);
@@ -192,10 +197,16 @@ class Gst_rates extends Api {
                 return;
             }
             
+            $old_rate = $this->Gst_rate_model->get_by_id($id);
             $updated = $this->Gst_rate_model->update($id, $data);
             
             if ($updated) {
                 $rate = $this->Gst_rate_model->get_by_id($id);
+                
+                // Log GST rate update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'GST Rate', $id, "Updated GST rate: {$rate['rate_name']}", $old_rate, $rate);
+                
                 $this->success($rate, 'GST rate updated successfully');
             } else {
                 $this->error('GST rate not found or could not be updated', 404);
@@ -221,9 +232,15 @@ class Gst_rates extends Api {
         }
         
         try {
+            $rate = $this->Gst_rate_model->get_by_id($id);
             $deleted = $this->Gst_rate_model->delete($id);
             
             if ($deleted) {
+                // Log GST rate deletion
+                $this->load->library('audit_log');
+                $rate_name = $rate ? $rate['rate_name'] : 'Unknown';
+                $this->audit_log->logDelete('Master Data', 'GST Rate', $id, "Deleted GST rate: {$rate_name}");
+                
                 $this->success(array('id' => $id), 'GST rate deleted successfully');
             } else {
                 $this->error('Cannot delete default GST rate or rate not found', 400);

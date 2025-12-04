@@ -148,7 +148,14 @@ class System_settings extends Api {
             // Validate mode switch (non-blocking, returns warnings)
             $validation = $this->validate_mode_switch($mode);
             
+            // Get old mode for audit log
+            $old_mode = $this->System_settings_model->get_room_mode();
+            
             if ($this->System_settings_model->set_room_mode($mode, $user_id)) {
+                // Log room mode change
+                $this->load->library('audit_log');
+                $this->audit_log->logSettings('System Settings', 'room_management_mode', $old_mode, $mode, "Changed room management mode from {$old_mode} to {$mode}");
+                
                 $response = array('mode' => $mode);
                 if (!empty($validation['warnings'])) {
                     $response['warnings'] = $validation['warnings'];
@@ -180,8 +187,17 @@ class System_settings extends Api {
         
         $user_id = isset($this->user) ? (is_object($this->user) ? $this->user->id : (is_array($this->user) ? $this->user['id'] : null)) : null;
         
+        // Get old setting value for audit log
+        $old_setting = $this->System_settings_model->get_setting($key);
+        $old_value = $old_setting ? $old_setting['value'] : null;
+        
         if ($this->System_settings_model->update_setting($key, $data['value'], $user_id)) {
             $setting = $this->System_settings_model->get_setting($key);
+            
+            // Log setting update
+            $this->load->library('audit_log');
+            $this->audit_log->logSettings('System Settings', $key, $old_value, $data['value'], "Updated system setting: {$key}");
+            
             $this->success($setting, 'Setting updated successfully');
         } else {
             $this->error('Failed to update setting', 500);
@@ -217,10 +233,19 @@ class System_settings extends Api {
             // Note: We allow the switch even with warnings
         }
         
+        // Get old settings for audit log
+        $old_settings = $this->System_settings_model->get_settings();
+        
         $updated = $this->System_settings_model->update_settings($data['settings'], $user_id);
         
         if ($updated > 0) {
             $settings = $this->System_settings_model->get_settings();
+            
+            // Log bulk settings update
+            $this->load->library('audit_log');
+            $changed_keys = array_keys($data['settings']);
+            $this->audit_log->logSettings('System Settings', 'Bulk Update', null, null, "Updated multiple settings: " . implode(', ', $changed_keys));
+            
             $this->success($settings, 'Settings updated successfully');
         } else {
             $this->error('Failed to update settings', 500);

@@ -159,10 +159,15 @@ class Message_platforms extends Api {
                 return;
             }
             
+            $old_platform = $platform;
             $this->db->where('platform', $type);
             $this->db->update('message_platform_settings', $update_data);
             
             $platform = $this->get_platform_by_type($type);
+            
+            // Log platform settings update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Message Management', 'Platform Settings', $platform['id'] ?? null, "Updated {$type} platform settings", $old_platform, $platform);
             
             // Hide sensitive data in response
             if (!empty($platform['api_secret'])) {

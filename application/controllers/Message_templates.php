@@ -158,6 +158,11 @@ class Message_templates extends Api {
             
             if ($template_id) {
                 $template = $this->get_template_by_id($template_id);
+                
+                // Log template creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Message Management', 'Message Template', $template_id, "Created template: {$data['name']}");
+                
                 $this->success($template, 'Template created successfully', 201);
             } else {
                 $this->error('Failed to create template', 500);
@@ -252,10 +257,17 @@ class Message_templates extends Api {
                 return;
             }
             
+            $old_template = $template; // Store old data for audit log
+            
             $this->db->where('id', $id);
             $this->db->update('message_templates', $update_data);
             
             $template = $this->get_template_by_id($id);
+            
+            // Log template update
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Message Management', 'Message Template', $id, "Updated template: {$template['name']}", $old_template, $template);
+            
             $this->success($template, 'Template updated successfully');
             
         } catch (Exception $e) {
@@ -277,6 +289,10 @@ class Message_templates extends Api {
             
             $this->db->where('id', $id);
             $this->db->delete('message_templates');
+            
+            // Log template deletion
+            $this->load->library('audit_log');
+            $this->audit_log->logDelete('Message Management', 'Message Template', $id, "Deleted template: {$template['name']}");
             
             $this->success(null, 'Template deleted successfully');
             

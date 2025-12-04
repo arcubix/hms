@@ -163,6 +163,11 @@ class Pharmacy_sales extends Api {
                     }
                 }
                 
+                // Log sale creation
+                $this->load->library('audit_log');
+                $invoice_num = $sale['invoice_number'] ?? $result['invoice_number'] ?? 'N/A';
+                $this->audit_log->logCreate('Pharmacy', 'Sale', $result['sale_id'], "Created sale: Invoice {$invoice_num}");
+                
                 $this->success($sale, 'Sale completed successfully', 201);
             } else {
                 $this->error($result['message'] ?? 'Failed to create sale', 400);
@@ -361,9 +366,17 @@ class Pharmacy_sales extends Api {
             // Restore stock by default
             $data['restore_stock'] = $data['restore_stock'] ?? true;
             
+            // Get sale info before voiding for audit log
+            $sale = $this->Sale_model->get_by_id($id);
+            
             $result = $this->Voided_sale_model->void_sale($id, $data);
             
             if ($result['success']) {
+                // Log sale void
+                $this->load->library('audit_log');
+                $invoice_num = $sale['invoice_number'] ?? 'N/A';
+                $this->audit_log->logUpdate('Pharmacy', 'Sale', $id, "Voided sale: Invoice {$invoice_num} - Reason: {$data['void_reason']}");
+                
                 $this->success($result, 'Sale voided successfully');
             } else {
                 $this->error($result['message'] ?? 'Failed to void sale', 400);

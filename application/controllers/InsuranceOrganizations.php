@@ -245,6 +245,11 @@ class InsuranceOrganizations extends Api {
             
             if ($id) {
                 $organization = $this->InsuranceOrganization_model->get_by_id($id);
+                
+                // Log insurance organization creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Insurance Management', 'Insurance Organization', $id, "Created insurance organization: {$data['name']}");
+                
                 $this->success($organization, 'Insurance organization created successfully', 201);
             } else {
                 $this->error('Failed to create insurance organization', 500);
@@ -267,6 +272,8 @@ class InsuranceOrganizations extends Api {
                 return;
             }
 
+            $old_organization = $organization; // Store old data for audit log
+
             $data = $this->get_request_data();
 
             // Validate type if provided
@@ -288,6 +295,11 @@ class InsuranceOrganizations extends Api {
             
             if ($result) {
                 $updated_organization = $this->InsuranceOrganization_model->get_by_id($id);
+                
+                // Log insurance organization update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Insurance Management', 'Insurance Organization', $id, "Updated insurance organization: {$updated_organization['name']}", $old_organization, $updated_organization);
+                
                 $this->success($updated_organization, 'Insurance organization updated successfully');
             } else {
                 $this->error('Failed to update insurance organization', 500);
@@ -360,6 +372,10 @@ class InsuranceOrganizations extends Api {
             $result = $this->InsuranceOrganization_model->delete($id);
             
             if ($result) {
+                // Log insurance organization deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Insurance Management', 'Insurance Organization', $id, "Deleted insurance organization: {$organization['name']}");
+                
                 $this->success(null, 'Insurance organization deleted successfully');
             } else {
                 $this->error('Failed to delete insurance organization', 500);

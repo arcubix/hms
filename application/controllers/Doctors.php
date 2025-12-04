@@ -211,6 +211,11 @@ class Doctors extends Api {
                 }
                 
                 $doctor = $this->Doctor_model->get_by_id($doctor_id);
+                
+                // Log doctor creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'Doctor', $doctor_id, "Created doctor: {$data['name']} ({$data['doctor_id']})");
+                
                 $this->success($doctor, 'Doctor created successfully', 201);
             } else {
                 $this->error('Failed to create doctor', 500);
@@ -235,6 +240,8 @@ class Doctors extends Api {
                 $this->error('Doctor not found', 404);
                 return;
             }
+
+            $old_doctor = $doctor; // Store old data for audit log
 
             // Validate email if provided
             if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
@@ -279,6 +286,11 @@ class Doctors extends Api {
                 }
                 
                 $doctor = $this->Doctor_model->get_by_id($id);
+                
+                // Log doctor update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'Doctor', $id, "Updated doctor: {$doctor['name']} ({$doctor['doctor_id']})", $old_doctor, $doctor);
+                
                 $this->success($doctor, 'Doctor updated successfully');
             } else {
                 $this->error('Failed to update doctor', 500);
@@ -305,6 +317,10 @@ class Doctors extends Api {
             $result = $this->Doctor_model->delete($id);
 
             if ($result) {
+                // Log doctor deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Master Data', 'Doctor', $id, "Deleted doctor: {$doctor['name']} ({$doctor['doctor_id']})");
+                
                 $this->success(null, 'Doctor deleted successfully');
             } else {
                 $this->error('Failed to delete doctor', 500);

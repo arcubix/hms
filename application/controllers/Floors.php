@@ -153,6 +153,11 @@ class Floors extends Api {
 
             if ($floor_id) {
                 $floor = $this->Floor_model->get_by_id($floor_id);
+                
+                // Log floor creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'Floor', $floor_id, "Created floor: {$data['floor_number']}");
+                
                 $this->success($floor, 'Floor created successfully', 201);
             } else {
                 $this->error('Failed to create floor', 500);
@@ -177,6 +182,8 @@ class Floors extends Api {
                 $this->error('Floor not found', 404);
                 return;
             }
+
+            $old_floor = $floor; // Store old data for audit log
 
             // Validate floor_number is numeric if provided
             if (isset($data['floor_number']) && !is_numeric($data['floor_number'])) {
@@ -216,6 +223,11 @@ class Floors extends Api {
 
             if ($result) {
                 $floor = $this->Floor_model->get_by_id($id);
+                
+                // Log floor update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'Floor', $id, "Updated floor: {$floor['floor_number']}", $old_floor, $floor);
+                
                 $this->success($floor, 'Floor updated successfully');
             } else {
                 $this->error('Failed to update floor', 500);
@@ -242,6 +254,10 @@ class Floors extends Api {
             $result = $this->Floor_model->delete($id);
 
             if ($result) {
+                // Log floor deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Master Data', 'Floor', $id, "Deleted floor: {$floor['floor_number']}");
+                
                 $this->success(null, 'Floor deleted successfully');
             } else {
                 $this->error('Cannot delete floor. It may have rooms or receptions assigned to it.', 400);

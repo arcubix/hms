@@ -41,6 +41,7 @@ export function InventoryManagement({ onClose }: InventoryManagementProps) {
   const [activeView, setActiveView] = useState<'dashboard' | 'list' | 'detail' | 'add' | 'edit' | 'stockin' | 'stockout' | 'purchase' | 'reports' | 'categorylist' | 'categorydetail' | 'addeditcategory'>('dashboard');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [categoryEditMode, setCategoryEditMode] = useState<'add' | 'edit'>('add');
 
   // Mock data for dashboard
   const stats = [
@@ -152,15 +153,15 @@ export function InventoryManagement({ onClose }: InventoryManagementProps) {
   }
 
   if (activeView === 'categorylist') {
-    return <CategoryList onBack={() => setActiveView('dashboard')} onViewCategory={(id) => { setSelectedCategoryId(id); setActiveView('categorydetail'); }} onAddCategory={() => setActiveView('addeditcategory')} />;
+    return <CategoryList onBack={() => setActiveView('dashboard')} onViewCategory={(id) => { setSelectedCategoryId(id); setActiveView('categorydetail'); }} onAddCategory={() => { setCategoryEditMode('add'); setActiveView('addeditcategory'); }} />;
   }
 
   if (activeView === 'categorydetail' && selectedCategoryId) {
-    return <CategoryDetail categoryId={selectedCategoryId} onBack={() => setActiveView('categorylist')} onEdit={() => setActiveView('addeditcategory')} />;
+    return <CategoryDetail categoryId={selectedCategoryId} onBack={() => setActiveView('categorylist')} onEdit={() => { setCategoryEditMode('edit'); setActiveView('addeditcategory'); }} />;
   }
 
   if (activeView === 'addeditcategory') {
-    return <AddEditCategory mode={activeView} categoryId={selectedCategoryId} onBack={() => setActiveView('categorylist')} onSave={() => setActiveView('categorylist')} />;
+    return <AddEditCategory mode={categoryEditMode} categoryId={selectedCategoryId} onBack={() => setActiveView('categorylist')} onSave={() => setActiveView('categorylist')} />;
   }
 
   return (

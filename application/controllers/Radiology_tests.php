@@ -69,6 +69,11 @@ class Radiology_tests extends Api {
             
             if ($test_id) {
                 $test = $this->Radiology_test_model->get_by_id($test_id);
+                
+                // Log radiology test creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Radiology', 'Radiology Test', $test_id, "Created radiology test: {$data['test_name']}");
+                
                 $this->success($test, 'Radiology test created successfully', 201);
             } else {
                 $this->error('Failed to create radiology test', 400);
@@ -115,8 +120,15 @@ class Radiology_tests extends Api {
         try {
             $data = $this->get_request_data();
             
+            $old_test = $this->Radiology_test_model->get_by_id($id);
+            
             if ($this->Radiology_test_model->update($id, $data)) {
                 $test = $this->Radiology_test_model->get_by_id($id);
+                
+                // Log radiology test update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Radiology', 'Radiology Test', $id, "Updated radiology test: {$test['test_name']}", $old_test, $test);
+                
                 $this->success($test, 'Radiology test updated successfully');
             } else {
                 $this->error('Failed to update radiology test', 400);

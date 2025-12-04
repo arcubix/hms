@@ -460,10 +460,10 @@ export function PriorityModules({ onClose, userRole = 'admin' }: PriorityModules
                           </Badge>
                           
                           {selected && (
-                            <Badge className="bg-blue-500 text-white text-xs">
-                              <Star className="w-3 h-3 mr-1" />
+                            <span className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 border-2 border-blue-200 text-white text-xs font-medium py-3 px-4 rounded-[14px] h-16 gap-1">
+                              <Star className="w-3 h-3" />
                               Priority
-                            </Badge>
+                            </span>
                           )}
                         </div>
                         

@@ -65,6 +65,11 @@ class Medicines extends Api {
             
             if ($medicine_id) {
                 $medicine = $this->Medicine_model->get_by_id($medicine_id);
+                
+                // Log medicine creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Pharmacy', 'Medicine', $medicine_id, "Created medicine: {$data['name']}");
+                
                 $this->success($medicine, 'Medicine created successfully', 201);
             } else {
                 $this->error('Failed to create medicine', 400);

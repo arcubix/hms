@@ -37,6 +37,11 @@ class Auth extends Api {
 
             if (!$user) {
                 log_message('debug', 'Login failed: User not found - ' . $email);
+                
+                // Log failed login attempt (user not found)
+                $this->load->library('audit_log');
+                $this->audit_log->logLogin(null, false, 'User not found: ' . $email);
+                
                 $this->error('Invalid email or password', 401);
                 return;
             }
@@ -47,12 +52,21 @@ class Auth extends Api {
             if (!$password_verified) {
                 log_message('debug', 'Login failed: Password mismatch for user - ' . $email);
                 log_message('debug', 'Stored hash: ' . substr($user['password'], 0, 20) . '...');
+                
+                // Log failed login attempt
+                $this->load->library('audit_log');
+                $this->audit_log->logLogin($user['id'], false, 'Invalid password');
+                
                 $this->error('Invalid email or password', 401);
                 return;
             }
 
             // Check if user is active
             if ($user['status'] !== 'active') {
+                // Log failed login attempt (inactive account)
+                $this->load->library('audit_log');
+                $this->audit_log->logLogin($user['id'], false, 'Account is inactive');
+                
                 $this->error('Account is inactive', 403);
                 return;
             }
@@ -62,6 +76,11 @@ class Auth extends Api {
 
             // Save token to session table
             $this->User_model->save_token($user['id'], $token);
+            
+            // Log successful login
+            $this->load->library('audit_log');
+            $this->audit_log->set_user($user);
+            $this->audit_log->logLogin($user['id'], true);
 
             // Remove password from response
             unset($user['password']);
@@ -122,6 +141,16 @@ class Auth extends Api {
 
         if ($token) {
             $this->User_model->delete_token($token);
+        }
+        
+        // Log logout
+        if ($this->user) {
+            $user_id = is_object($this->user) ? $this->user->id : (is_array($this->user) ? $this->user['id'] : null);
+            if ($user_id) {
+                $this->load->library('audit_log');
+                $this->audit_log->set_user($this->user);
+                $this->audit_log->logLogout($user_id);
+            }
         }
 
         $this->success(null, 'Logged out successfully');

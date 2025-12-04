@@ -75,6 +75,7 @@ const moduleIcons: { [key: string]: any } = {
   'inventory': Package,
   'triage': AlertCircle,
   'duty-roster': Clock,
+  'indoor-duty-roster': Clock,
   'settings': Settings
 };
 
@@ -245,13 +246,24 @@ const initialModules: Module[] = [
     roleAccess: ['admin', 'nurse']
   },
   {
+    id: 'indoor-duty-roster',
+    name: 'Indoor Duty Roster',
+    description: 'Doctor indoor duty scheduling and ward coverage',
+    icon: 'indoor-duty-roster',
+    category: 'administrative',
+    enabled: true,
+    priority: 16,
+    isPinned: false,
+    roleAccess: ['admin', 'doctor']
+  },
+  {
     id: 'records',
     name: 'Health Records',
     description: 'Medical history and documents',
     icon: 'records',
     category: 'clinical',
     enabled: true,
-    priority: 16,
+    priority: 17,
     isPinned: false,
     roleAccess: ['doctor', 'nurse', 'admin']
   }

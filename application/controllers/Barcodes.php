@@ -105,6 +105,12 @@ class Barcodes extends Api {
                     ->where('b.id', $barcode_id)
                     ->get()
                     ->row_array();
+                
+                // Log barcode creation
+                $this->load->library('audit_log');
+                $barcode_value = $data['barcode'] ?? 'Unknown';
+                $this->audit_log->logCreate('Pharmacy', 'Barcode', $barcode_id, "Created barcode: {$barcode_value} for Medicine ID: {$data['medicine_id']}");
+                
                 $this->success($barcode, 'Barcode created successfully', 201);
             } else {
                 $this->error('Failed to create barcode', 400);
@@ -182,6 +188,7 @@ class Barcodes extends Api {
                 }
             }
             
+            $old_barcode = $barcode;
             $this->db->where('id', $id);
             if ($this->db->update('barcodes', $data)) {
                 $updated = $this->db->select('b.*, m.name as medicine_name, m.medicine_code')
@@ -190,6 +197,11 @@ class Barcodes extends Api {
                     ->where('b.id', $id)
                     ->get()
                     ->row_array();
+                
+                // Log barcode update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Barcode', $id, "Updated barcode ID: {$id}", $old_barcode, $updated);
+                
                 $this->success($updated, 'Barcode updated successfully');
             } else {
                 $this->error('Failed to update barcode', 400);
@@ -212,6 +224,11 @@ class Barcodes extends Api {
         
         $this->db->where('id', $id);
         if ($this->db->delete('barcodes')) {
+            // Log barcode deletion
+            $this->load->library('audit_log');
+            $barcode_value = $barcode['barcode'] ?? 'Unknown';
+            $this->audit_log->logDelete('Pharmacy', 'Barcode', $id, "Deleted barcode: {$barcode_value}");
+            
             $this->success(null, 'Barcode deleted successfully');
         } else {
             $this->error('Failed to delete barcode', 400);

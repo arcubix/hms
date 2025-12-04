@@ -105,6 +105,13 @@ class Purchase_orders extends Api {
             
             if ($po_id) {
                 $po = $this->Purchase_order_model->get_by_id($po_id);
+                
+                // Log purchase order creation
+                $this->load->library('audit_log');
+                $supplier_id = $data['supplier_id'] ?? 'Unknown';
+                $item_count = count($data['items'] ?? []);
+                $this->audit_log->logCreate('Pharmacy', 'Purchase Order', $po_id, "Created purchase order for Supplier ID: {$supplier_id} with {$item_count} item(s)");
+                
                 $this->success($po, 'Purchase order created successfully', 201);
             } else {
                 $this->error('Failed to create purchase order', 400);
@@ -151,10 +158,16 @@ class Purchase_orders extends Api {
         try {
             $data = $this->get_request_data();
             
+            $old_po = $this->Purchase_order_model->get_by_id($id);
             $result = $this->Purchase_order_model->update($id, $data);
             
             if ($result) {
                 $po = $this->Purchase_order_model->get_by_id($id);
+                
+                // Log purchase order update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Purchase Order', $id, "Updated purchase order ID: {$id}", $old_po, $po);
+                
                 $this->success($po, 'Purchase order updated successfully');
             } else {
                 $this->error('Failed to update purchase order', 400);
@@ -179,10 +192,16 @@ class Purchase_orders extends Api {
             return;
         }
         
+        $old_po = $this->Purchase_order_model->get_by_id($id);
         $result = $this->Purchase_order_model->approve($id, $this->user['id']);
         
         if ($result) {
             $po = $this->Purchase_order_model->get_by_id($id);
+            
+            // Log purchase order approval
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Pharmacy', 'Purchase Order', $id, "Approved purchase order ID: {$id}", $old_po, $po);
+            
             $this->success($po, 'Purchase order approved successfully');
         } else {
             $this->error('Failed to approve purchase order', 400);
@@ -201,10 +220,17 @@ class Purchase_orders extends Api {
         $data = $this->get_request_data();
         $reason = $data['reason'] ?? null;
         
+        $old_po = $this->Purchase_order_model->get_by_id($id);
         $result = $this->Purchase_order_model->cancel($id, $reason);
         
         if ($result) {
             $po = $this->Purchase_order_model->get_by_id($id);
+            
+            // Log purchase order cancellation
+            $this->load->library('audit_log');
+            $reason_text = $reason ? " Reason: {$reason}" : "";
+            $this->audit_log->logUpdate('Pharmacy', 'Purchase Order', $id, "Cancelled purchase order ID: {$id}{$reason_text}", $old_po, $po);
+            
             $this->success($po, 'Purchase order cancelled successfully');
         } else {
             $this->error('Failed to cancel purchase order', 400);
@@ -289,6 +315,12 @@ class Purchase_orders extends Api {
             
             if ($receipt_id) {
                 $receipt = $this->Stock_receipt_model->get_by_id($receipt_id);
+                
+                // Log purchase order receipt
+                $this->load->library('audit_log');
+                $item_count = count($receipt_data['items']);
+                $this->audit_log->logUpdate('Pharmacy', 'Purchase Order', $id, "Received stock from purchase order ID: {$id} ({$item_count} items)", $po, $po);
+                
                 $this->success($receipt, 'Stock received successfully', 201);
             } else {
                 $this->error('Failed to receive stock', 400);

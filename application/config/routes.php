@@ -265,8 +265,9 @@ $route['api/pharmacy/gst-rates/(:num)/set-default'] = 'gst_rates/set_default/$1'
 
 // User Management Routes
 $route['api/users'] = 'users/index';
-$route['api/users/(:num)'] = 'users/get/$1';
+$route['api/users/(:num)/settings'] = 'users/settings/$1'; // Must be before generic (:num) route
 $route['api/users/(:num)/permissions'] = 'users/permissions/$1';
+$route['api/users/(:num)'] = 'users/get/$1';
 $route['api/users/permissions/definitions'] = 'users/permission_definitions';
 $route['api/users/permissions/role-mappings'] = 'users/role_mappings';
 $route['api/users/roles'] = 'users/roles';
@@ -365,3 +366,115 @@ $route['api/message-statistics'] = 'message_statistics/index';
 $route['api/message-statistics/daily'] = 'message_statistics/daily';
 $route['api/message-statistics/weekly'] = 'message_statistics/weekly';
 $route['api/message-statistics/by-platform'] = 'message_statistics/by_platform';
+
+// IPD Management Routes
+// Dashboard
+$route['api/ipd/dashboard'] = 'ipd/dashboard';
+$route['api/ipd/stats'] = 'ipd/stats';
+
+// Admissions
+$route['api/ipd/admissions'] = 'ipd/admissions';
+$route['api/ipd/admissions/(:num)'] = 'ipd/admissions/$1';
+$route['api/ipd/admissions/(:num)/vitals'] = 'ipd/vitals/$1';
+$route['api/ipd/admissions/(:num)/orders'] = 'ipd/orders/$1';
+$route['api/ipd/admissions/(:num)/nursing-notes'] = 'ipd/nursing_notes/$1';
+$route['api/ipd/admissions/(:num)/billing'] = 'ipd/billing/$1';
+$route['api/ipd/admissions/(:num)/billing/payment'] = 'ipd/billing_payment/$1';
+$route['api/ipd/admissions/(:num)/discharge'] = 'ipd/discharge/$1';
+$route['api/ipd/admissions/(:num)/transfer'] = 'ipd/transfer/$1';
+$route['api/ipd/admissions/(:num)/transfers'] = 'ipd/transfer/$1';
+$route['api/ipd/admissions/(:num)/daily-care-orders'] = 'ipd/daily_care_orders/$1';
+$route['api/ipd/admissions/(:num)/medications'] = 'ipd/medications/$1';
+$route['api/ipd/admissions/(:num)/lab-orders'] = 'ipd/lab_orders/$1';
+$route['api/ipd/admissions/(:num)/radiology-orders'] = 'ipd/radiology_orders/$1';
+$route['api/ipd/admissions/(:num)/doctor-notes'] = 'ipd/doctor_notes/$1';
+$route['api/ipd/admissions/(:num)/pharmacist-notes'] = 'ipd/pharmacist_notes/$1';
+$route['api/ipd/admissions/(:num)/procedures'] = 'ipd/procedures/$1';
+$route['api/ipd/admissions/(:num)/nutrition'] = 'ipd/nutrition/$1';
+$route['api/ipd/admissions/(:num)/intake-output'] = 'ipd/intake_output/$1';
+$route['api/ipd/admissions/(:num)/health-physical-habits'] = 'ipd/health_physical_habits/$1';
+$route['api/ipd/admissions/(:num)/forms'] = 'ipd/forms/$1';
+$route['api/ipd/admissions/(:num)/doctor-recommendations'] = 'ipd/doctor_recommendations/$1';
+$route['api/ipd/admissions/(:num)/doctor-consultations'] = 'ipd/doctor_consultations/$1';
+$route['api/ipd/admissions/(:num)/files'] = 'ipd/files/$1';
+
+// Standalone update/delete routes
+$route['api/ipd/vitals/(:num)'] = 'ipd/vitals_update/$1';
+$route['api/ipd/daily-care-orders/(:num)'] = 'ipd/daily_care_orders_update/$1';
+$route['api/ipd/medications/(:num)'] = 'ipd/medications_update/$1';
+$route['api/ipd/lab-orders/(:num)'] = 'ipd/lab_orders_update/$1';
+$route['api/ipd/radiology-orders/(:num)'] = 'ipd/radiology_orders_update/$1';
+$route['api/ipd/doctor-notes/(:num)'] = 'ipd/doctor_notes_update/$1';
+$route['api/ipd/pharmacist-notes/(:num)'] = 'ipd/pharmacist_notes_update/$1';
+$route['api/ipd/procedures/(:num)'] = 'ipd/procedures_update/$1';
+$route['api/ipd/nutrition/(:num)'] = 'ipd/nutrition_update/$1';
+$route['api/ipd/intake-output/(:num)'] = 'ipd/intake_output_update/$1';
+$route['api/ipd/health-physical-habits/(:num)'] = 'ipd/health_physical_habits_update/$1';
+$route['api/ipd/forms/(:num)'] = 'ipd/forms_update/$1';
+$route['api/ipd/doctor-recommendations/(:num)'] = 'ipd/doctor_recommendations_update/$1';
+$route['api/ipd/doctor-consultations/(:num)'] = 'ipd/doctor_consultations_update/$1';
+$route['api/ipd/files/(:num)'] = 'ipd/files_update/$1';
+
+// Wards
+$route['api/ipd/wards'] = 'ipd/wards';
+$route['api/ipd/wards/(:num)'] = 'ipd/wards/$1';
+$route['api/ipd/wards/(:num)/beds'] = 'ipd/ward_beds/$1';
+
+// Beds
+$route['api/ipd/beds'] = 'ipd/beds';
+$route['api/ipd/beds/(:num)'] = 'ipd/beds/$1';
+$route['api/ipd/beds/available'] = 'ipd/available_beds';
+
+// Rooms
+$route['api/ipd/rooms'] = 'ipd/rooms';
+$route['api/ipd/rooms/(:num)'] = 'ipd/rooms/$1';
+$route['api/ipd/rooms/available'] = 'ipd/available_rooms';
+
+// Duty Roster
+$route['api/ipd/duty-roster'] = 'ipd/duty_roster';
+$route['api/ipd/duty-roster/(:num)'] = 'ipd/duty_roster/$1';
+
+// Rehabilitation Requests
+$route['api/ipd/rehabilitation-requests'] = 'ipd/rehabilitation_requests';
+$route['api/ipd/rehabilitation-requests/(:num)'] = 'ipd/rehabilitation_requests/$1';
+
+// Admission Requests (from doctors)
+$route['api/ipd/admission-requests'] = 'ipd/admission_requests';
+$route['api/ipd/admission-requests/(:num)'] = 'ipd/admission_requests/$1';
+$route['api/ipd/admission-requests/(:num)/approve'] = 'ipd/approve_admission_request/$1';
+$route['api/ipd/admission-requests/(:num)/reject'] = 'ipd/reject_admission_request/$1';
+
+// Birth Certificates
+$route['api/birth-certificates'] = 'birth_certificates/index';
+$route['api/birth-certificates/(:num)'] = 'birth_certificates/index/$1';
+
+// Death Certificates
+$route['api/death-certificates'] = 'death_certificates/index';
+$route['api/death-certificates/(:num)'] = 'death_certificates/index/$1';
+
+// Software Team Contacts
+$route['api/software_team_contacts/departments'] = 'software_team_contacts/departments';
+$route['api/software_team_contacts/(:num)'] = 'software_team_contacts/index/$1';
+$route['api/software_team_contacts'] = 'software_team_contacts/index';
+// Also support dashes for backward compatibility
+$route['api/software-team-contacts/departments'] = 'software_team_contacts/departments';
+$route['api/software-team-contacts/(:num)'] = 'software_team_contacts/index/$1';
+$route['api/software-team-contacts'] = 'software_team_contacts/index';
+
+// Support Tickets
+$route['api/support-tickets/stats'] = 'support_tickets/stats';
+$route['api/support-tickets/(:num)/attachments/(:num)'] = 'support_tickets/attachments/$1/$2';
+$route['api/support-tickets/(:num)/attachments'] = 'support_tickets/attachments/$1';
+$route['api/support-tickets/(:num)/comments/(:num)'] = 'support_tickets/comments/$1/$2';
+$route['api/support-tickets/(:num)/comments'] = 'support_tickets/comments/$1';
+$route['api/support-tickets/(:num)'] = 'support_tickets/index/$1';
+$route['api/support-tickets'] = 'support_tickets/index';
+
+// Audit Logs
+$route['api/audit-logs/export'] = 'audit_logs/export';
+$route['api/audit-logs/statistics'] = 'audit_logs/statistics';
+$route['api/audit-logs/modules'] = 'audit_logs/modules';
+$route['api/audit-logs/users-list'] = 'audit_logs/users_list';
+$route['api/audit-logs/users/(:num)'] = 'audit_logs/users/$1';
+$route['api/audit-logs/(:num)'] = 'audit_logs/index/$1';
+$route['api/audit-logs'] = 'audit_logs/index';

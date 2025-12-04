@@ -98,6 +98,13 @@ class Reorder extends Api {
             
             if ($result) {
                 $reorder_level = $this->Reorder_model->get_by_medicine_id($medicine_id);
+                
+                // Log reorder level setting
+                $this->load->library('audit_log');
+                $minimum_stock = $data['minimum_stock'] ?? 0;
+                $reorder_quantity = $data['reorder_quantity'] ?? 0;
+                $this->audit_log->logUpdate('Pharmacy', 'Reorder Level', $result, "Set reorder level for Medicine ID: {$medicine_id}, Minimum: {$minimum_stock}, Reorder Qty: {$reorder_quantity}");
+                
                 $this->success($reorder_level, 'Reorder level set successfully');
             } else {
                 $this->error('Failed to set reorder level', 400);
@@ -115,10 +122,16 @@ class Reorder extends Api {
         try {
             $pos_generated = $this->Reorder_model->generate_auto_reorder_pos();
             
+            $count = count($pos_generated);
+            
+            // Log auto-reorder PO generation
+            $this->load->library('audit_log');
+            $this->audit_log->log('Pharmacy', 'Auto-Reorder', null, "Generated {$count} auto-reorder purchase orders");
+            
             $this->success(array(
                 'pos_generated' => $pos_generated,
-                'count' => count($pos_generated)
-            ), 'Generated ' . count($pos_generated) . ' purchase order(s)');
+                'count' => $count
+            ), 'Generated ' . $count . ' purchase order(s)');
         } catch (Exception $e) {
             log_message('error', 'Auto-reorder PO generation error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);

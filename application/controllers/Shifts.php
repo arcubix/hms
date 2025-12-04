@@ -87,6 +87,11 @@ class Shifts extends Api {
             
             if ($result['success']) {
                 $shift = $this->Shift_model->get_by_id($result['shift_id']);
+                
+                // Log shift opening
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Pharmacy', 'Shift', $result['shift_id'], "Opened shift ID: {$result['shift_id']}");
+                
                 $this->success($shift, 'Shift opened successfully', 201);
             } else {
                 $this->error($result['message'] ?? 'Failed to open shift', 400);
@@ -131,6 +136,11 @@ class Shifts extends Api {
             
             if ($result['success']) {
                 $shift = $this->Shift_model->get_by_id($id);
+                
+                // Log shift closing
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Pharmacy', 'Shift', $id, "Closed shift ID: {$id}");
+                
                 $this->success($shift, 'Shift closed successfully');
             } else {
                 $this->error($result['message'] ?? 'Failed to close shift', 400);

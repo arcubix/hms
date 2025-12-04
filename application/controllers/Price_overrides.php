@@ -76,6 +76,13 @@ class Price_overrides extends Api {
             
             if ($override_id) {
                 $override = $this->Price_override_model->get_by_id($override_id);
+                
+                // Log price override creation
+                $this->load->library('audit_log');
+                $original_price = $data['original_price'] ?? 0;
+                $override_price = $data['override_price'] ?? 0;
+                $this->audit_log->logCreate('Pharmacy', 'Price Override', $override_id, "Created price override request for Medicine ID: {$data['medicine_id']}, Original: {$original_price}, Override: {$override_price}");
+                
                 $this->success($override, 'Price override request created successfully', 201);
             } else {
                 $this->error('Failed to create price override request', 400);
@@ -124,10 +131,16 @@ class Price_overrides extends Api {
             return;
         }
         
+        $old_override = $this->Price_override_model->get_by_id($id);
         $result = $this->Price_override_model->approve($id, $this->user['id']);
         
         if ($result) {
             $override = $this->Price_override_model->get_by_id($id);
+            
+            // Log price override approval
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Pharmacy', 'Price Override', $id, "Approved price override ID: {$id}", $old_override, $override);
+            
             $this->success($override, 'Price override approved successfully');
         } else {
             $this->error('Failed to approve price override', 400);
@@ -154,10 +167,16 @@ class Price_overrides extends Api {
             return;
         }
         
+        $old_override = $this->Price_override_model->get_by_id($id);
         $result = $this->Price_override_model->reject($id, $this->user['id']);
         
         if ($result) {
             $override = $this->Price_override_model->get_by_id($id);
+            
+            // Log price override rejection
+            $this->load->library('audit_log');
+            $this->audit_log->logUpdate('Pharmacy', 'Price Override', $id, "Rejected price override ID: {$id}", $old_override, $override);
+            
             $this->success($override, 'Price override rejected');
         } else {
             $this->error('Failed to reject price override', 400);

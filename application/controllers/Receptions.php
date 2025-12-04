@@ -141,6 +141,11 @@ class Receptions extends Api {
 
             if ($reception_id) {
                 $reception = $this->Reception_model->get_by_id($reception_id);
+                
+                // Log reception creation
+                $this->load->library('audit_log');
+                $this->audit_log->logCreate('Master Data', 'Reception', $reception_id, "Created reception: {$data['reception_name']}");
+                
                 $this->success($reception, 'Reception created successfully', 201);
             } else {
                 $this->error('Failed to create reception', 500);
@@ -165,6 +170,8 @@ class Receptions extends Api {
                 $this->error('Reception not found', 404);
                 return;
             }
+
+            $old_reception = $reception; // Store old data for audit log
 
             // Validate floor exists if provided
             if (isset($data['floor_id'])) {
@@ -201,6 +208,11 @@ class Receptions extends Api {
 
             if ($result) {
                 $reception = $this->Reception_model->get_by_id($id);
+                
+                // Log reception update
+                $this->load->library('audit_log');
+                $this->audit_log->logUpdate('Master Data', 'Reception', $id, "Updated reception: {$reception['reception_name']}", $old_reception, $reception);
+                
                 $this->success($reception, 'Reception updated successfully');
             } else {
                 $this->error('Failed to update reception', 500);
@@ -227,6 +239,10 @@ class Receptions extends Api {
             $result = $this->Reception_model->delete($id);
 
             if ($result) {
+                // Log reception deletion
+                $this->load->library('audit_log');
+                $this->audit_log->logDelete('Master Data', 'Reception', $id, "Deleted reception: {$reception['reception_name']}");
+                
                 $this->success(null, 'Reception deleted successfully');
             } else {
                 $this->error('Cannot delete reception. It may be assigned to doctors.', 400);
