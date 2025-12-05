@@ -22,25 +22,13 @@ class Support_tickets extends Api {
     }
 
     /**
-     * Check if user has admin permission
-     * @return bool
-     */
-    private function checkAdminPermission() {
-        if (!$this->user) {
-            return false;
-        }
-        
-        $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-        return $user_role === 'admin';
-    }
-
-    /**
-     * Check if user can access ticket (created by them or admin)
+     * Check if user can access ticket (created by them or has admin permission)
      * @param int $ticket_id
      * @return bool
      */
     private function canAccessTicket($ticket_id) {
-        if ($this->checkAdminPermission()) {
+        // Admin can access all tickets
+        if ($this->hasPermission('admin.view_users')) {
             return true;
         }
         
@@ -87,7 +75,7 @@ class Support_tickets extends Api {
                     ];
                     
                     // If not admin, only show own tickets
-                    if (!$this->checkAdminPermission() && $this->user) {
+                    if (!$this->hasPermission('admin.view_users') && $this->user) {
                         $user_id = is_object($this->user) ? $this->user->id : (is_array($this->user) ? $this->user['id'] : null);
                         $filters['created_by'] = $user_id;
                     }

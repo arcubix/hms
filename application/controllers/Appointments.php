@@ -21,6 +21,11 @@ class Appointments extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing appointments
+            if (!$this->requirePermission('add_appointment')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('search')) {
@@ -98,6 +103,10 @@ class Appointments extends Api {
             $this->success($appointments);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating appointments
+            if (!$this->requirePermission('add_appointment')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -209,6 +218,11 @@ class Appointments extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing appointment details
+            if (!$this->requirePermission('add_appointment')) {
+                return;
+            }
+            
             $appointment = $this->Appointment_model->get_by_id($id);
             
             if ($appointment) {
@@ -218,9 +232,17 @@ class Appointments extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating appointments
+            if (!$this->requirePermission('add_appointment')) {
+                return;
+            }
             $this->update($id);
             
         } elseif ($method === 'DELETE') {
+            // Check permission for deleting appointments
+            if (!$this->requirePermission('delete_token_appointment')) {
+                return;
+            }
             $this->delete($id);
             
         } else {

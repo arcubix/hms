@@ -23,6 +23,11 @@ class Radiology_tests extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing radiology tests
+            if (!$this->requireAnyPermission(['radiology_manager.view_radiology_reports', 'radiology_technician.view_radiology_reports'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('search')) {
@@ -45,6 +50,10 @@ class Radiology_tests extends Api {
             $this->success($tests);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating radiology tests
+            if (!$this->requirePermission('radiology_technician.add_radiology_reports')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -97,6 +106,11 @@ class Radiology_tests extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing radiology test details
+            if (!$this->requireAnyPermission(['radiology_manager.view_radiology_reports', 'radiology_technician.view_radiology_reports'])) {
+                return;
+            }
+            
             $test = $this->Radiology_test_model->get_by_id($id);
             
             if ($test) {
@@ -106,6 +120,10 @@ class Radiology_tests extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating radiology tests
+            if (!$this->requireAnyPermission(['radiology_manager.edit_radiology_report', 'radiology_technician.edit_radiology_procedures'])) {
+                return;
+            }
             $this->update($id);
         } else {
             $this->error('Method not allowed', 405);

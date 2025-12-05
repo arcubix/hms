@@ -31,6 +31,11 @@ class ReferralHospitals extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing referral hospitals
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -41,6 +46,10 @@ class ReferralHospitals extends Api {
                 $hospitals = $this->ReferralHospital_model->get_all($filters);
                 $this->success($hospitals);
             } elseif ($method === 'POST') {
+                // Check permission for creating referral hospitals
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -67,6 +76,11 @@ class ReferralHospitals extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing referral hospitals
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $hospital = $this->ReferralHospital_model->get_by_id($id);
                 
                 if (!$hospital) {
@@ -76,8 +90,16 @@ class ReferralHospitals extends Api {
 
                 $this->success($hospital);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating referral hospitals
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting referral hospitals
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -94,6 +116,11 @@ class ReferralHospitals extends Api {
      */
     public function types() {
         try {
+            // Check permission for viewing referral hospital types
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $types = $this->ReferralHospital_model->get_specialty_types();
             $this->success($types);
         } catch (Exception $e) {

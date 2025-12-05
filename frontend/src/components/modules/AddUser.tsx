@@ -36,6 +36,8 @@ import { api, UserFormData, TimingEntry, FAQEntry, ShareProcedure, DoctorSchedul
 import { DoctorScheduleContent } from './DoctorScheduleContent';
 import { toast } from 'sonner';
 import { validateUserForm, ValidationError } from '../../utils/userValidation';
+import { usePermissions } from '../../contexts/PermissionContext';
+import { PermissionButton } from '../common/PermissionButton';
 
 interface AddUserProps {
   onBack: () => void;
@@ -131,6 +133,7 @@ const PROCEDURE_TYPES = [
 ];
 
 export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
+  const { hasPermission } = usePermissions();
   const [currentTab, setCurrentTab] = useState('biography-data');
   const [loading, setLoading] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<Record<string, string>>({});
@@ -1674,9 +1677,14 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Saving...' : 'Add'}
-            </Button>
+            <PermissionButton 
+              permission={userId ? "admin.edit_users" : "admin.create_users"}
+              tooltipMessage={userId ? "You need permission to edit users" : "You need permission to create users"}
+              onClick={handleSubmit} 
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : userId ? 'Update' : 'Add'}
+            </PermissionButton>
           )}
         </div>
       </div>

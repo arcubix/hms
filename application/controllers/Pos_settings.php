@@ -14,15 +14,7 @@ class Pos_settings extends Api {
             return;
         }
         
-        // Check if user has permission (admin or pharmacy manager)
-        // User is set by verify_token() in parent constructor
-        if (isset($this->user) && $this->user) {
-            $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-            if ($user_role && !in_array($user_role, array('admin', 'pharmacy'))) {
-                $this->error('Access denied. Admin or Pharmacy role required.', 403);
-                return;
-            }
-        }
+        // Permission checks will be done in individual methods
     }
 
     /**
@@ -33,6 +25,11 @@ class Pos_settings extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing POS settings
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $category = $this->uri->segment(4);
             
             if ($category && $category !== 'category') {
@@ -45,6 +42,10 @@ class Pos_settings extends Api {
                 $this->success($settings);
             }
         } elseif ($method === 'PUT') {
+            // Check permission for updating POS settings
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             // Handle bulk update
             $this->update();
         } else {

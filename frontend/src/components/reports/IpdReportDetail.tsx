@@ -3,7 +3,7 @@
  * Displays detailed view of individual IPD reports with data, filters, and export options
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -36,6 +36,7 @@ import {
   Mail
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart as RePieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { api } from '../../services/api';
 
 interface ReportDetailProps {
   reportId: string;
@@ -45,15 +46,122 @@ interface ReportDetailProps {
 
 const COLORS = ['#2F80ED', '#27AE60', '#F2994A', '#9B51E0', '#EB5757', '#6FCF97', '#56CCF2', '#BB6BD9'];
 
+// Map frontend report IDs to backend API endpoints
+const REPORT_API_MAP: Record<string, string> = {
+  'daily-admission': 'daily-admissions',
+  'discharge-summary': 'daily-discharges',
+  'alos-report': 'alos',
+  'transfer-report': 'transfers',
+  'occupancy-report': 'bed-occupancy',
+  'bed-turnover': 'bed-turnover',
+  'census-report': 'census',
+  'revenue-report': 'revenue',
+  'collection-report': 'consultant-revenue',
+  'billing-summary': 'billing-summary',
+  'insurance-claims': 'advance-received',
+  'credit-debtors': 'pending-bills',
+  'package-wise': 'bill-comparison',
+  'discount-concession': 'panel-billing',
+  'mortality-report': 'diagnosis-wise',
+  'complication-tracking': 'procedure-wise',
+  'infection-rate': 'doctor-patient-load',
+  'treatment-outcome': 'procedure-wise',
+  'adverse-events': 'procedure-wise',
+  'critical-care': 'vital-monitoring',
+  'readmission-rate': 'census',
+  'realtime-occupancy': 'realtime-occupancy',
+  'ward-saturation': 'ward-saturation',
+  'room-type-usage': 'room-type-usage',
+  'bed-allocation': 'bed-allocation',
+  'bed-blocking': 'bed-blocking',
+  'medication-consumption': 'medication-consumption',
+  'high-cost-drugs': 'medication-consumption',
+  'ward-inventory': 'medication-consumption',
+  'consumables-implants': 'medication-consumption',
+  'lab-utilization': 'lab-utilization',
+  'delayed-reports': 'delayed-lab-reports',
+  'critical-results': 'critical-lab-results',
+  'radiology-usage': 'radiology-usage',
+  'panel-admissions': 'panel-admissions',
+  'panel-billing': 'panel-billing-summary',
+  'claim-status': 'claim-status',
+  'pre-auth-comparison': 'pre-auth-comparison',
+  'patient-complaints': 'nursing-care',
+  'audit-trail': 'nursing-care',
+  'nabh-compliance': 'nursing-care',
+  'code-blue': 'nursing-care',
+  'medication-errors': 'medication-chart',
+  'consent-tracking': 'nursing-care',
+  'nursing-workload': 'nursing-care',
+  'staff-efficiency': 'doctor-patient-load',
+  'handover-report': 'nursing-care',
+  'discharge-summary-status': 'daily-discharges',
+  'documentation-quality': 'nursing-care',
+  'tat-monitoring': 'nursing-care',
+  'dnr-status': 'nursing-care'
+};
+
 export default function IpdReportDetail({ reportId, reportName, onBack }: ReportDetailProps) {
-  const [dateFrom, setDateFrom] = useState('2024-11-01');
-  const [dateTo, setDateTo] = useState('2024-11-27');
+  const [dateFrom, setDateFrom] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
   const [selectedWard, setSelectedWard] = useState('all');
   const [selectedDoctor, setSelectedDoctor] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [reportData, setReportData] = useState<any[]>([]);
+  const [reportSummary, setReportSummary] = useState<any>({});
+  const [apiCalled, setApiCalled] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Fetch report data from API
+  useEffect(() => {
+    const fetchReportData = async () => {
+      const apiEndpoint = REPORT_API_MAP[reportId];
+      if (!apiEndpoint) {
+        // Report not mapped - will use dummy data only for unimplementable reports
+        setApiCalled(false);
+        setApiError(null);
+        return;
+      }
+
+      setLoading(true);
+      setApiError(null);
+      setApiCalled(true);
+      try {
+        const filters: any = {
+          date_from: dateFrom,
+          date_to: dateTo
+        };
+        
+        if (selectedWard !== 'all') {
+          filters.ward_id = parseInt(selectedWard);
+        }
+        if (selectedDoctor !== 'all') {
+          filters.consultant_id = parseInt(selectedDoctor);
+        }
+
+        const response = await api.getIPDReport(apiEndpoint, filters);
+        setReportData(response.data || []);
+        setReportSummary(response.summary || {});
+      } catch (error: any) {
+        console.error('Error fetching report data:', error);
+        setApiError(error?.message || 'Failed to fetch report data');
+        // On error, set empty data - don't fall back to dummy data
+        setReportData([]);
+        setReportSummary({});
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReportData();
+  }, [reportId, dateFrom, dateTo, selectedWard, selectedDoctor]);
 
   // Get report configuration based on reportId
   const getReportConfig = () => {
+    // Use API data if endpoint exists and API was called, otherwise check if report can use dummy data
+    const hasApiEndpoint = !!REPORT_API_MAP[reportId];
+    const useApiData = hasApiEndpoint && apiCalled;
     switch (reportId) {
       // PATIENT FLOW & CENSUS REPORTS
       case 'daily-admission':
@@ -61,9 +169,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Daily Admission Report',
           description: 'Detailed breakdown of daily patient admissions',
           type: 'table-chart',
-          data: generateDailyAdmissionData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Total Admissions', 'Emergency', 'Planned', 'Transfers', 'Bed Occupancy %'],
-          summary: { totalAdmissions: 378, emergencyAdmissions: 151, plannedAdmissions: 170, transfers: 57, avgOccupancy: 83.2 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'discharge-summary':
@@ -71,9 +179,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Discharge Summary Report',
           description: 'Comprehensive patient discharge analysis',
           type: 'table-chart',
-          data: generateDischargeSummaryData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Total Discharges', 'Regular', 'DAMA', 'Referred', 'Deaths', 'Avg LOS (days)'],
-          summary: { totalDischarges: 315, regularDischarge: 280, DAMA: 18, referred: 12, deaths: 5, avgLOS: 5.2 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'alos-report':
@@ -81,9 +189,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Average Length of Stay (ALOS) Report',
           description: 'Department-wise patient stay duration analysis',
           type: 'chart-table',
-          data: generateALOSData(),
+          data: useApiData ? reportData : [],
           columns: ['Department', 'Total Patients', 'Avg LOS (days)', 'Min LOS', 'Max LOS', 'Benchmark'],
-          summary: { overallALOS: 5.9, departments: 10, totalPatients: 412, benchmarkALOS: 6.2 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'census-report':
@@ -91,9 +199,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Midnight Census Report',
           description: 'Daily midnight patient census tracking',
           type: 'chart-table',
-          data: generateCensusData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Midnight Census', 'Admissions', 'Discharges', 'Transfers In', 'Transfers Out'],
-          summary: { averageCensus: 86, currentCensus: 87, totalCapacity: 121, occupancyRate: 71.9 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'transfer-report':
@@ -101,9 +209,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Inter-Ward Transfer Report',
           description: 'Patient movement between wards and departments',
           type: 'table',
-          data: generateTransferData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'From Ward', 'To Ward', 'Reason', 'Authorized By', 'Time'],
-          summary: { totalTransfers: 45, emergencyUpgrade: 12, clinicalImprovement: 18, others: 15 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'readmission-rate':
@@ -111,9 +219,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Readmission Rate Report',
           description: '30-day readmission tracking and analysis',
           type: 'chart-table',
-          data: generateReadmissionData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient ID', 'Name', 'First Admission', 'Discharge Date', 'Readmission Date', 'Days Between', 'Diagnosis'],
-          summary: { totalReadmissions: 18, readmissionRate: 5.7, within7days: 6, within30days: 18 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // CLINICAL OUTCOME REPORTS
@@ -122,9 +230,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Mortality & Morbidity Report',
           description: 'Patient outcome and mortality tracking',
           type: 'chart-table',
-          data: generateMortalityData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Age', 'Department', 'Diagnosis', 'Days Admitted', 'Cause of Death'],
-          summary: { totalDeaths: 5, mortalityRate: 2.1, expectedRate: 1.8 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'complication-tracking':
@@ -132,9 +240,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Post-Operative Complication Report',
           description: 'Surgical complications and adverse events',
           type: 'table-chart',
-          data: generateComplicationData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Procedure', 'Surgery Date', 'Complication', 'Severity', 'Days Post-Op', 'Status'],
-          summary: { totalCases: 12, major: 4, moderate: 5, minor: 3, resolved: 7 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'infection-rate':
@@ -142,9 +250,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Hospital-Acquired Infection Rate',
           description: 'HAI surveillance and infection control',
           type: 'chart-table',
-          data: generateInfectionData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Ward', 'Infection Type', 'Culture Result', 'Days to Onset', 'Treatment'],
-          summary: { totalInfections: 8, infectionRate: 2.5, CAUTI: 2, SSI: 3, CLABSI: 1, VAP: 1, others: 1 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'treatment-outcome':
@@ -152,9 +260,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Treatment Outcome Report',
           description: 'Patient recovery and treatment effectiveness',
           type: 'chart-table',
-          data: generateTreatmentOutcomeData(),
+          data: useApiData ? reportData : [],
           columns: ['Department', 'Total Patients', 'Improved', 'Stable', 'Deteriorated', 'Success Rate %'],
-          summary: { totalPatients: 245, improved: 210, stable: 25, deteriorated: 10 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'adverse-events':
@@ -162,9 +270,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Adverse Events Log',
           description: 'Patient safety incidents and near misses',
           type: 'table',
-          data: generateAdverseEventsData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Event Type', 'Patient', 'Ward', 'Severity', 'Root Cause', 'Action Taken', 'Status'],
-          summary: { totalEvents: 14, critical: 2, major: 5, minor: 7 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'critical-care':
@@ -172,9 +280,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Critical Care Outcomes Report',
           description: 'ICU patient outcomes and interventions',
           type: 'chart-table',
-          data: generateCriticalCareData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'ICU Days', 'Ventilator Days', 'APACHE Score', 'Outcome', 'Mortality Risk %'],
-          summary: { totalICUPatients: 18, avgICUStay: 6.2, ventilated: 12, survived: 16 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // FINANCIAL & REVENUE REPORTS
@@ -183,9 +291,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'IPD Revenue Report',
           description: 'Comprehensive revenue analysis by department',
           type: 'chart-table',
-          data: generateRevenueData(),
+          data: useApiData ? reportData : [],
           columns: ['Department', 'Total Revenue', 'Bed Charges', 'Services', 'Pharmacy', 'Lab/Radiology', 'Growth %'],
-          summary: { totalRevenue: 8665000, avgPerPatient: 21036, monthlyGrowth: 14.3, departments: 8 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'collection-report':
@@ -193,9 +301,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Payment Collection Report',
           description: 'Daily payment collections and outstanding dues',
           type: 'table-chart',
-          data: generateCollectionData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Cash', 'Card', 'Insurance', 'Credit', 'Total Collected', 'Outstanding'],
-          summary: { totalCollected: 4685000, cashCollection: 1285000, cardPayments: 1954000, insuranceClaims: 1446000 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'billing-summary':
@@ -203,9 +311,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Patient-Wise Billing Summary',
           description: 'Detailed billing breakdown per patient',
           type: 'table',
-          data: generateBillingSummaryData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient ID', 'Name', 'Admission Date', 'LOS', 'Total Bill', 'Paid', 'Outstanding', 'Status'],
-          summary: { totalPatients: 20, billAmount: 2092500, amountPaid: 1659500, outstanding: 433000 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'insurance-claims':
@@ -213,9 +321,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Insurance Claims Report',
           description: 'TPA and insurance claim status tracking',
           type: 'table-chart',
-          data: generateInsuranceClaimsData(),
+          data: useApiData ? reportData : [],
           columns: ['Claim ID', 'Patient', 'Insurance Provider', 'Claim Amount', 'Approved Amount', 'Status', 'Days Pending'],
-          summary: { totalClaims: 20, approved: 11, pending: 6, rejected: 3, claimAmount: 3131000, approvedAmount: 2468000 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'credit-debtors':
@@ -223,9 +331,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Credit & Debtors Report',
           description: 'Outstanding dues and credit analysis',
           type: 'table',
-          data: generateCreditDebtorsData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Bill Date', 'Total Amount', 'Paid', 'Outstanding', 'Days Overdue', 'Contact', 'Status'],
-          summary: { totalOutstanding: 400000, patients: 28, over30days: 12, over60days: 6 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'package-wise':
@@ -233,9 +341,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Package-Wise Revenue Report',
           description: 'Revenue from treatment packages',
           type: 'chart-table',
-          data: generatePackageRevenueData(),
+          data: useApiData ? reportData : [],
           columns: ['Package Name', 'Department', 'Count', 'Package Rate', 'Total Revenue', 'Avg Discount %'],
-          summary: { totalPackages: 10, packagesSold: 146, packageRevenue: 14724000, avgDiscount: 6.45 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'discount-concession':
@@ -243,20 +351,21 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Discount & Concession Report',
           description: 'Discounts and concessions analysis',
           type: 'table-chart',
-          data: generateDiscountData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Bill Amount', 'Discount Type', 'Discount %', 'Discount Amount', 'Approved By'],
-          summary: { totalDiscounts: 298375, avgDiscountRate: 13.5, staffDiscount: 82000, seniorCitizen: 36350, others: 180025 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // BED & ROOM MANAGEMENT REPORTS
       case 'realtime-occupancy':
+      case 'occupancy-report':
         return {
           title: 'Real-Time Bed Occupancy Report',
           description: 'Current bed availability across all wards',
           type: 'chart-table',
-          data: generateOccupancyData(),
+          data: useApiData ? reportData : [],
           columns: ['Ward Name', 'Total Beds', 'Occupied', 'Available', 'Under Maintenance', 'Occupancy %'],
-          summary: { totalBeds: 121, occupiedBeds: 96, availableBeds: 23, maintenance: 2, occupancyRate: 79.3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'ward-saturation':
@@ -264,9 +373,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Ward Saturation Report',
           description: 'Ward capacity utilization percentage',
           type: 'chart-table',
-          data: generateWardSaturationData(),
+          data: useApiData ? reportData : [],
           columns: ['Ward', 'Capacity', 'Current Patients', 'Saturation %', 'Avg Daily Occupancy', 'Peak Time'],
-          summary: { avgSaturation: 75.2, highestWard: 'ICU (91.7%)', lowestWard: 'Isolation Ward (33.3%)' }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'room-type-usage':
@@ -274,9 +383,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Room Type Usage Report',
           description: 'Analysis by room categories',
           type: 'chart-table',
-          data: generateRoomTypeData(),
+          data: useApiData ? reportData : [],
           columns: ['Room Type', 'Total Rooms', 'Occupied', 'Available', 'Avg LOS', 'Revenue', 'Occupancy %'],
-          summary: { roomTypes: 8, totalRooms: 114, occupiedRooms: 92, avgOccupancy: 80.7 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'bed-allocation':
@@ -284,9 +393,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Bed Allocation History',
           description: 'Historical bed assignment tracking',
           type: 'table',
-          data: generateBedAllocationData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Ward', 'Bed No', 'Allocated By', 'Duration', 'Status', 'Notes'],
-          summary: { totalAllocations: 20, activeAllocations: 14, discharged: 3, transferred: 1, avgDuration: 4.2 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'bed-blocking':
@@ -294,9 +403,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Bed Blocking Report',
           description: 'Delayed discharges and bed blocking incidents',
           type: 'table',
-          data: generateBedBlockingData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Ward', 'Bed', 'Expected Discharge', 'Actual Status', 'Days Delayed', 'Reason', 'Impact'],
-          summary: { blockedBeds: 8, avgDelayDays: 4.1, totalDelayedDays: 33, estimatedLostRevenue: 148500 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // PHARMACY & CONSUMABLE REPORTS
@@ -305,9 +414,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Medication Consumption Report',
           description: 'Track drug usage by ward and patient',
           type: 'table-chart',
-          data: generateMedicationData(),
+          data: useApiData ? reportData : [],
           columns: ['Medication', 'Generic Name', 'Ward', 'Quantity Used', 'Unit Cost', 'Total Cost', 'Stock Level'],
-          summary: { medications: 12, totalConsumption: 6580, totalValue: 465850, lowStockItems: 3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'high-cost-drugs':
@@ -315,9 +424,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'High-Cost Drug Usage Report',
           description: 'Monitor expensive medication utilization',
           type: 'table-chart',
-          data: generateHighCostDrugsData(),
+          data: useApiData ? reportData : [],
           columns: ['Drug Name', 'Patient Count', 'Total Units', 'Unit Price', 'Total Value', 'Department', 'Indication'],
-          summary: { highCostDrugs: 24, totalValue: 1250000, avgPerPatient: 52083 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'ward-inventory':
@@ -325,9 +434,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Ward Inventory Usage Report',
           description: 'Ward-specific pharmacy inventory consumption',
           type: 'chart-table',
-          data: generateWardInventoryData(),
+          data: useApiData ? reportData : [],
           columns: ['Ward', 'Opening Stock', 'Issued', 'Consumed', 'Returned', 'Closing Stock', 'Value'],
-          summary: { totalWards: 8, totalValue: 285000, consumption: 92 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'consumables-implants':
@@ -335,9 +444,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Consumables & Implants Usage Report',
           description: 'Track surgical consumables and implant usage',
           type: 'table',
-          data: generateConsumablesData(),
+          data: useApiData ? reportData : [],
           columns: ['Item Name', 'Category', 'Patient', 'Procedure', 'Quantity', 'Unit Cost', 'Total Cost', 'Date'],
-          summary: { totalItems: 89, consumables: 65, implants: 24, totalCost: 875000 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // LABORATORY & RADIOLOGY REPORTS
@@ -346,9 +455,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Lab Test Utilization Summary',
           description: 'Frequency and types of lab tests ordered',
           type: 'chart-table',
-          data: generateLabUtilizationData(),
+          data: useApiData ? reportData : [],
           columns: ['Test Name', 'Department', 'Tests Ordered', 'Tests Completed', 'Avg TAT (hrs)', 'Cost', 'Revenue'],
-          summary: { testsOrdered: 3578, testsCompleted: 3537, avgTAT: 5.8, totalRevenue: 1754960 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'delayed-reports':
@@ -356,9 +465,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Delayed Lab Reports',
           description: 'Track TAT delays in lab result delivery',
           type: 'table',
-          data: generateDelayedReportsData(),
+          data: useApiData ? reportData : [],
           columns: ['Test ID', 'Patient', 'Test Name', 'Ordered Date', 'Expected', 'Actual', 'Delay (hrs)', 'Reason'],
-          summary: { delayedTests: 42, avgDelay: 6.8, criticalDelays: 8 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'critical-results':
@@ -366,9 +475,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Critical Lab Results Summary',
           description: 'Monitor critical and panic value reports',
           type: 'table',
-          data: generateCriticalResultsData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Test', 'Result Value', 'Critical Range', 'Notified To', 'Time to Notify', 'Action'],
-          summary: { criticalResults: 28, avgNotifyTime: 8, immediateAction: 24 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'radiology-usage':
@@ -376,60 +485,24 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Radiology Usage Report',
           description: 'Imaging services utilization analysis',
           type: 'chart-table',
-          data: generateRadiologyData(),
+          data: useApiData ? reportData : [],
           columns: ['Modality', 'Studies Performed', 'Avg TAT', 'Total Cost', 'Department', 'Utilization %'],
-          summary: { totalStudies: 456, xray: 245, ct: 89, mri: 65, ultrasound: 57 }
+          summary: useApiData ? reportSummary : {}
         };
 
-      // OT REPORTS
+      // OT REPORTS (Not implemented - no OT tables)
       case 'ot-utilization':
-        return {
-          title: 'OT Utilization Report',
-          description: 'Operation theatre usage and efficiency',
-          type: 'chart-table',
-          data: generateOTUtilizationData(),
-          columns: ['OT Number', 'Total Hours', 'Surgery Hours', 'Idle Time', 'Procedures', 'Utilization %', 'Revenue'],
-          summary: { operationTheaters: 6, avgUtilization: 82.8, totalProcedures: 106, totalRevenue: 5050000 }
-        };
-      
       case 'surgery-roster':
-        return {
-          title: 'Surgery Scheduling Report',
-          description: 'Surgical procedures and scheduling',
-          type: 'table',
-          data: generateSurgeryRosterData(),
-          columns: ['Date', 'OT', 'Time', 'Patient', 'Procedure', 'Surgeon', 'Anesthetist', 'Duration', 'Status'],
-          summary: { scheduledSurgeries: 15, completed: 4, inProgress: 1, scheduled: 10 }
-        };
-      
       case 'anesthesia-report':
-        return {
-          title: 'Anesthesia Report',
-          description: 'Anesthesia types and complications',
-          type: 'table-chart',
-          data: generateAnesthesiaData(),
-          columns: ['Patient', 'Procedure', 'Anesthesia Type', 'Duration', 'Anesthetist', 'Complications', 'ASA Score'],
-          summary: { totalCases: 89, general: 56, spinal: 28, local: 5, complications: 3 }
-        };
-      
       case 'surgical-outcome':
-        return {
-          title: 'Post-Surgical Outcome Report',
-          description: 'Surgery success rates and complications',
-          type: 'chart-table',
-          data: generateSurgicalOutcomeData(),
-          columns: ['Procedure Type', 'Total Cases', 'Successful', 'Complications', 'Mortality', 'Avg LOS', 'Success Rate'],
-          summary: { totalSurgeries: 89, successRate: 94.4, complications: 12, mortality: 2 }
-        };
-      
       case 'surgery-type-frequency':
         return {
-          title: 'Surgery Type Frequency Report',
-          description: 'Most common surgical procedures performed',
-          type: 'chart-table',
-          data: generateSurgeryTypeFrequencyData(),
-          columns: ['Procedure Type', 'Frequency', 'Avg Duration', 'Success Rate', 'Complications', 'Avg Cost'],
-          summary: { totalProcedures: 245, procedureTypes: 28, avgDuration: 128, avgSuccessRate: 94.2 }
+          title: reportName || 'OT Report',
+          description: 'This report requires OT/surgery tables which are not available',
+          type: 'table',
+          data: [],
+          columns: [],
+          summary: {}
         };
 
       // NURSING & STAFF REPORTS
@@ -438,9 +511,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Nursing Workload Report',
           description: 'Nurse-to-patient ratios and workload',
           type: 'chart-table',
-          data: generateNursingWorkloadData(),
+          data: useApiData ? reportData : [],
           columns: ['Ward', 'Total Patients', 'Nurses on Duty', 'Nurse-Patient Ratio', 'Shift', 'Workload Score'],
-          summary: { totalShifts: 10, totalNurses: 39, avgNursePatientRatio: '1:3.5', highWorkloadShifts: 3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'staff-efficiency':
@@ -448,9 +521,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Staff Efficiency Report',
           description: 'Doctor and nurse performance metrics',
           type: 'chart-table',
-          data: generateStaffEfficiencyData(),
+          data: useApiData ? reportData : [],
           columns: ['Staff Name', 'Role', 'Patients Handled', 'Avg Response Time', 'Tasks Completed', 'Efficiency Score'],
-          summary: { totalStaff: 68, avgEfficiency: 87.5, topPerformers: 12 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'handover-report':
@@ -458,9 +531,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Shift Handover Report',
           description: 'Patient handover documentation',
           type: 'table',
-          data: generateHandoverData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Shift', 'Ward', 'From Staff', 'To Staff', 'Patients', 'Critical Notes', 'Pending Tasks'],
-          summary: { totalHandovers: 156, avgTime: 15, completionRate: 98.5 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'patient-complaints':
@@ -468,9 +541,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Patient Complaints Report',
           description: 'Feedback and grievance tracking',
           type: 'table',
-          data: generateComplaintsData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Ward', 'Complaint Type', 'Severity', 'Assigned To', 'Status', 'Resolution Time'],
-          summary: { totalComplaints: 24, resolved: 20, pending: 4, avgResolutionTime: 36 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'code-blue':
@@ -478,9 +551,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Code Blue / Emergency Response Report',
           description: 'Medical emergency alerts and response',
           type: 'table',
-          data: generateCodeBlueData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Time', 'Ward', 'Patient', 'Type', 'Response Time', 'Team Members', 'Outcome'],
-          summary: { totalCodeBlues: 8, avgResponseTime: 1.6, stabilized: 6, deceased: 1, ROSC: 3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'medication-errors':
@@ -488,9 +561,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Medication Error Report',
           description: 'Track medication administration errors',
           type: 'table',
-          data: generateMedicationErrorData(),
+          data: useApiData ? reportData : [],
           columns: ['Date', 'Patient', 'Medication', 'Error Type', 'Administered By', 'Severity', 'Action Taken', 'Status'],
-          summary: { totalErrors: 6, minor: 4, moderate: 2, major: 0, preventable: 5 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // QUALITY & COMPLIANCE REPORTS
@@ -499,9 +572,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'NABH Compliance Report',
           description: 'Accreditation standards adherence',
           type: 'chart-table',
-          data: generateNABHComplianceData(),
+          data: useApiData ? reportData : [],
           columns: ['Standard', 'Total Criteria', 'Met', 'Partially Met', 'Not Met', 'Compliance %', 'Action Plan'],
-          summary: { totalStandards: 24, overallCompliance: 92.5, criticalGaps: 3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'audit-trail':
@@ -509,9 +582,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Clinical Audit Trail',
           description: 'System access and activity log',
           type: 'table',
-          data: generateAuditTrailData(),
+          data: useApiData ? reportData : [],
           columns: ['Date/Time', 'User', 'Role', 'Action', 'Module', 'Patient ID', 'IP Address', 'Status'],
-          summary: { totalActivities: 2456, uniqueUsers: 89, flaggedActions: 3 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'consent-tracking':
@@ -519,9 +592,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Consent Form Tracking',
           description: 'Patient consent documentation',
           type: 'table',
-          data: generateConsentData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Consent Type', 'Procedure', 'Obtained Date', 'Obtained By', 'Witness', 'Status', 'Expiry'],
-          summary: { totalConsents: 245, pending: 8, expired: 2, valid: 235 }
+          summary: useApiData ? reportSummary : {}
         };
 
       // PANEL / INSURANCE REPORTS
@@ -530,9 +603,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Panel Wise Admissions Report',
           description: 'Track admissions by insurance provider',
           type: 'chart-table',
-          data: generatePanelAdmissionsData(),
+          data: useApiData ? reportData : [],
           columns: ['Panel Name', 'Total Admissions', 'Emergency', 'Planned', 'Avg LOS', 'Active Patients'],
-          summary: { totalPanels: 12, totalAdmissions: 456, cashPatients: 145, insurancePatients: 311 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'panel-billing':
@@ -540,9 +613,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Panel Wise Billing Summary',
           description: 'Billing breakdown by insurance panels',
           type: 'chart-table',
-          data: generatePanelBillingData(),
+          data: useApiData ? reportData : [],
           columns: ['Panel Name', 'Total Billing', 'Approved Amount', 'Pending Amount', 'Rejected Amount', 'Collection %'],
-          summary: { totalBilling: 12450000, approvedAmount: 10850000, pendingAmount: 950000, rejectedAmount: 650000 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'claim-status':
@@ -550,9 +623,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Insurance Claim Status Report',
           description: 'Track insurance claim approvals and rejections',
           type: 'table',
-          data: generateClaimStatusData(),
+          data: useApiData ? reportData : [],
           columns: ['Claim ID', 'Patient', 'Panel', 'Claim Amount', 'Approved Amount', 'Status', 'Submission Date', 'TAT'],
-          summary: { totalClaims: 234, approved: 189, pending: 28, rejected: 17, avgTAT: 12 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'pre-auth-comparison':
@@ -560,9 +633,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Pre-Authorization vs Final Bill',
           description: 'Compare approved amounts vs actual billing',
           type: 'table',
-          data: generatePreAuthComparisonData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Panel', 'Pre-Auth Amount', 'Final Bill', 'Variance', 'Variance %', 'Status', 'Reason'],
-          summary: { totalCases: 145, avgVariance: 8.5, exceedances: 23, underUtilization: 45 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'discharge-summary-status':
@@ -570,9 +643,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Discharge Summary Status',
           description: 'Completion status of discharge summaries',
           type: 'table',
-          data: generateDischargeSummaryStatusData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Discharge Date', 'Summary Status', 'Prepared By', 'Days Pending', 'Approved By', 'Delivered'],
-          summary: { totalDischarges: 238, completed: 220, pending: 18, avgCompletionTime: 2.5 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'documentation-quality':
@@ -580,9 +653,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Documentation Quality Report',
           description: 'Medical records completeness audit',
           type: 'chart-table',
-          data: generateDocumentationQualityData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Admission Date', 'Required Docs', 'Completed', 'Incomplete', 'Quality Score %', 'Audited By'],
-          summary: { totalRecords: 245, avgQuality: 88.5, incomplete: 28 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'tat-monitoring':
@@ -590,9 +663,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'Turnaround Time (TAT) Monitoring',
           description: 'Service delivery time tracking',
           type: 'chart-table',
-          data: generateTATData(),
+          data: useApiData ? reportData : [],
           columns: ['Service Type', 'Total Requests', 'Within TAT', 'Delayed', 'Avg TAT', 'Target TAT', 'Compliance %'],
-          summary: { totalServices: 1256, withinTAT: 1140, compliance: 90.8 }
+          summary: useApiData ? reportSummary : {}
         };
       
       case 'dnr-status':
@@ -600,9 +673,9 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
           title: 'DNR (Do Not Resuscitate) Status Report',
           description: 'Patient resuscitation directives',
           type: 'table',
-          data: generateDNRData(),
+          data: useApiData ? reportData : [],
           columns: ['Patient', 'Age', 'Ward', 'DNR Status', 'Order Date', 'Ordered By', 'Family Consent', 'Review Date'],
-          summary: { totalDNR: 8, fullCode: 237, dnrComfort: 5, dnrMedical: 3 }
+          summary: useApiData ? reportSummary : {}
         };
 
       default:
@@ -661,7 +734,15 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
   };
 
   const renderChart = () => {
-    if (!reportConfig.data || reportConfig.data.length === 0) return null;
+    if (!reportConfig.data || reportConfig.data.length === 0) {
+      // Don't show chart if no data - empty state is handled in renderTable
+      return (
+        <div className="text-center py-8 text-gray-400">
+          <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No data available to display chart</p>
+        </div>
+      );
+    }
 
     const chartData = reportConfig.data.slice(0, 10);
 
@@ -727,10 +808,30 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
 
   const renderTable = () => {
     if (!reportConfig.data || reportConfig.data.length === 0) {
+      const hasApiEndpoint = !!REPORT_API_MAP[reportId];
+      let message = 'No data available for this report';
+      let subMessage = '';
+      
+      if (apiError) {
+        message = 'Error loading report data';
+        subMessage = apiError;
+      } else if (hasApiEndpoint && apiCalled) {
+        message = 'No data available for the selected date range';
+        subMessage = 'Try adjusting the date filters or check back later';
+      } else if (!hasApiEndpoint) {
+        message = 'This report is not yet implemented';
+        subMessage = 'This report requires additional database tables or features';
+      }
+      
       return (
         <div className="text-center py-12 text-gray-500">
-          <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p>No data available for this report</p>
+          {apiError ? (
+            <AlertCircle className="w-16 h-16 text-red-300 mx-auto mb-4" />
+          ) : (
+            <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          )}
+          <p className="text-lg font-medium mb-2">{message}</p>
+          {subMessage && <p className="text-sm text-gray-400">{subMessage}</p>}
         </div>
       );
     }
@@ -941,13 +1042,25 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
         </CardContent>
       </Card>
 
+      {/* Loading Indicator */}
+      {loading && (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-12 text-center">
+            <RefreshCw className="w-12 h-12 text-[#2F80ED] animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Loading report data...</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {renderSummaryCards()}
-      </div>
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {renderSummaryCards()}
+        </div>
+      )}
 
       {/* Chart */}
-      {(reportConfig.type === 'chart-table' || reportConfig.type === 'table-chart') && (
+      {!loading && (reportConfig.type === 'chart-table' || reportConfig.type === 'table-chart') && (
         <Card className="border-0 shadow-sm">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2">
@@ -962,37 +1075,41 @@ export default function IpdReportDetail({ reportId, reportName, onBack }: Report
       )}
 
       {/* Data Table */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="border-b">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-[#2F80ED]" />
-              Detailed Data
-            </div>
-            <Badge variant="outline">{reportConfig.data?.length || 0} Records</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {renderTable()}
-        </CardContent>
-      </Card>
+      {!loading && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#2F80ED]" />
+                Detailed Data
+              </div>
+              <Badge variant="outline">{reportConfig.data?.length || 0} Records</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {renderTable()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Footer Actions */}
-      <div className="flex items-center justify-between py-4">
-        <p className="text-sm text-gray-600">
-          Report generated on {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
-        </p>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Share2 className="w-4 h-4 mr-2" />
-            Share
-          </Button>
-          <Button variant="outline" size="sm">
-            <Mail className="w-4 h-4 mr-2" />
-            Email
-          </Button>
+      {!loading && (
+        <div className="flex items-center justify-between py-4">
+          <p className="text-sm text-gray-600">
+            Report generated on {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              <Share2 className="w-4 h-4 mr-2" />
+              Share
+            </Button>
+            <Button variant="outline" size="sm">
+              <Mail className="w-4 h-4 mr-2" />
+              Email
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

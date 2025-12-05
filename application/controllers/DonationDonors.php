@@ -31,6 +31,11 @@ class DonationDonors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing donation donors
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -40,6 +45,10 @@ class DonationDonors extends Api {
                 $donors = $this->DonationDonor_model->get_all($filters);
                 $this->success($donors);
             } elseif ($method === 'POST') {
+                // Check permission for creating donation donors
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -66,6 +75,11 @@ class DonationDonors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing donation donors
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $donor = $this->DonationDonor_model->get_by_id($id);
                 
                 if (!$donor) {
@@ -75,8 +89,16 @@ class DonationDonors extends Api {
 
                 $this->success($donor);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating donation donors
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting donation donors
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -109,9 +131,18 @@ class DonationDonors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing donation payments
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $payments = $this->DonationDonor_model->get_payments($id);
                 $this->success($payments);
             } elseif ($method === 'POST') {
+                // Check permission for adding donation payments
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->add_payment($id);
             } else {
                 $this->error('Method not allowed', 405);

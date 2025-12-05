@@ -30,6 +30,11 @@ class Emergency extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing emergency visits
+                if (!$this->requirePermission('emergency_consultant')) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -50,6 +55,10 @@ class Emergency extends Api {
                 $this->success($formatted_visits);
                 
             } elseif ($method === 'POST') {
+                // Check permission for creating emergency visits
+                if (!$this->requirePermission('emergency_consultant')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);

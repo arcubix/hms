@@ -26,8 +26,16 @@ class Message_templates extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing message templates
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
             $this->list_templates();
         } elseif ($method === 'POST') {
+            // Check permission for creating message templates
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -189,6 +197,11 @@ class Message_templates extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing message templates
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $template = $this->get_template_by_id($id);
                 if ($template) {
                     $this->success($template);
@@ -196,8 +209,16 @@ class Message_templates extends Api {
                     $this->error('Template not found', 404);
                 }
             } elseif ($method === 'PUT') {
+                // Check permission for updating message templates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting message templates
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -308,6 +329,11 @@ class Message_templates extends Api {
      */
     public function duplicate($id = null) {
         try {
+            // Check permission for duplicating message templates
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
+            
             if (!$id) {
                 $this->error('Template ID is required', 400);
                 return;
@@ -352,6 +378,11 @@ class Message_templates extends Api {
      */
     public function toggle_status($id = null) {
         try {
+            // Check permission for toggling message template status
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
+            
             if (!$id) {
                 $this->error('Template ID is required', 400);
                 return;
@@ -383,6 +414,11 @@ class Message_templates extends Api {
      */
     public function test($id = null) {
         try {
+            // Check permission for testing message templates
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
+            
             if (!$id) {
                 $this->error('Template ID is required', 400);
                 return;

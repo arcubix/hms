@@ -23,6 +23,11 @@ class Shifts extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing shifts
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('cashier_id')) {
@@ -57,6 +62,10 @@ class Shifts extends Api {
             $this->success($shifts);
             
         } elseif ($method === 'POST') {
+            // Check permission for opening shifts
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->open();
         } else {
             $this->error('Method not allowed', 405);

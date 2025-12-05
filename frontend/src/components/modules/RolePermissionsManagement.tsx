@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -7,7 +7,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { api, RolePermission } from '../../services/api';
-import { Search, Save, RefreshCw } from 'lucide-react';
+import { Search, Save, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface RolePermissionsManagementProps {
   onBack?: () => void;
@@ -22,6 +22,7 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
   const [rolePermissionMappings, setRolePermissionMappings] = useState<Record<string, string[]>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   // Load available roles
   useEffect(() => {
@@ -85,6 +86,44 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     loadRolePermissions();
   }, [selectedRole]);
 
+  // Category display names mapping
+  const categoryDisplayNames: Record<string, string> = {
+    'admin': 'Admin & System',
+    'doctor': 'Doctor',
+    'doctors': 'Doctor Management',
+    'lab_manager': 'Laboratory Manager',
+    'lab_technician': 'Laboratory Technician',
+    'radiology_manager': 'Radiology Manager',
+    'radiology_technician': 'Radiology Technician',
+    'pharmacy': 'Pharmacy',
+    'pharmacist': 'Pharmacy',
+    'nurse': 'Nursing',
+    'staff': 'Staff',
+    'patient': 'Patient',
+    'invoice': 'Billing & Invoices',
+    'health_record': 'Health Records',
+    'appointment': 'Appointments',
+    'treatment': 'Treatment',
+    'communication': 'Communication',
+    'reports': 'Reports & Analytics',
+    'modules': 'Modules Access',
+    'inventory': 'Inventory Management',
+    'expenses': 'Expenses',
+    'shares': 'Shares & Consumption',
+    'leads': 'Leads',
+    'discharge': 'Discharge & Transfer',
+    'blood_bank': 'Blood Bank',
+    'laboratory': 'Laboratory',
+    'radiology': 'Radiology',
+    'charges': 'Charges',
+    'users': 'User Management',
+    'nursing': 'Nursing',
+    'blood_bank_manager': 'Blood Bank Manager',
+    'inventory_manager': 'Inventory Manager',
+    'accountant': 'Accountant',
+    'lab_receptionist': 'Lab Receptionist',
+  };
+
   // Filter permissions based on search and remove duplicates
   const filteredPermissions = permissionDefinitions.filter(perm => {
     if (!searchTerm) return true;
@@ -92,7 +131,8 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
     return (
       perm.permission_name.toLowerCase().includes(searchLower) ||
       perm.permission_key.toLowerCase().includes(searchLower) ||
-      (perm.description && perm.description.toLowerCase().includes(searchLower))
+      (perm.description && perm.description.toLowerCase().includes(searchLower)) ||
+      (perm.category && perm.category.toLowerCase().includes(searchLower))
     );
   });
 
@@ -100,6 +140,60 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
   const uniquePermissions = filteredPermissions.filter((perm, index, self) =>
     index === self.findIndex(p => p.permission_key === perm.permission_key)
   );
+
+  // Group permissions by category
+  const permissionsByCategory = useMemo(() => {
+    const grouped: Record<string, RolePermission[]> = {};
+    
+    uniquePermissions.forEach(perm => {
+      const category = perm.category || 'other';
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+      grouped[category].push(perm);
+    });
+
+    // Sort categories by display name
+    const sortedCategories = Object.keys(grouped).sort((a, b) => {
+      const nameA = categoryDisplayNames[a] || a;
+      const nameB = categoryDisplayNames[b] || b;
+      return nameA.localeCompare(nameB);
+    });
+
+    // Sort permissions within each category by name
+    sortedCategories.forEach(category => {
+      grouped[category].sort((a, b) => 
+        a.permission_name.localeCompare(b.permission_name)
+      );
+    });
+
+    return { grouped, sortedCategories };
+  }, [uniquePermissions]);
+
+  // Initialize expanded categories - expand all by default
+  useEffect(() => {
+    if (permissionsByCategory.sortedCategories.length > 0 && Object.keys(expandedCategories).length === 0) {
+      const initialExpanded: Record<string, boolean> = {};
+      permissionsByCategory.sortedCategories.forEach(cat => {
+        initialExpanded[cat] = true;
+      });
+      setExpandedCategories(initialExpanded);
+    }
+  }, [permissionsByCategory.sortedCategories]);
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  const getCategorySelectedCount = (category: string) => {
+    if (!selectedRole) return 0;
+    const categoryPerms = permissionsByCategory.grouped[category] || [];
+    const selectedPerms = rolePermissions[selectedRole] || [];
+    return categoryPerms.filter(perm => selectedPerms.includes(perm.permission_key)).length;
+  };
 
   const handleTogglePermission = (permissionKey: string) => {
     if (!selectedRole) return;
@@ -285,42 +379,77 @@ export function RolePermissionsManagement({ onBack }: RolePermissionsManagementP
                   <p className="mt-2 text-gray-600">Loading permissions...</p>
                 </div>
               ) : (
-                <Card>
-                  <CardContent className="pt-6">
-                    {uniquePermissions.length === 0 ? (
-                      <div className="py-8 text-center text-gray-500">
+                <div className="space-y-4">
+                  {permissionsByCategory.sortedCategories.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8 text-center text-gray-500">
                         No permissions found matching your search criteria.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {uniquePermissions.map(perm => (
-                          <div
-                            key={perm.permission_key}
-                            className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded"
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    permissionsByCategory.sortedCategories.map(category => {
+                      const categoryPerms = permissionsByCategory.grouped[category] || [];
+                      const categoryName = categoryDisplayNames[category] || category;
+                      const selectedCount = getCategorySelectedCount(category);
+                      const isExpanded = expandedCategories[category] !== false;
+
+                      return (
+                        <Card key={category} className="overflow-hidden">
+                          <CardHeader 
+                            className="cursor-pointer hover:bg-gray-50 transition-colors"
+                            onClick={() => toggleCategory(category)}
                           >
-                            <Checkbox
-                              id={perm.permission_key}
-                              checked={isPermissionSelected(perm.permission_key)}
-                              onCheckedChange={() => handleTogglePermission(perm.permission_key)}
-                              className="mt-1"
-                            />
-                            <Label
-                              htmlFor={perm.permission_key}
-                              className="font-normal cursor-pointer text-sm flex-1"
-                            >
-                              <div className="font-medium">{perm.permission_name}</div>
-                              {perm.description && (
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  {perm.description}
-                                </div>
-                              )}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {isExpanded ? (
+                                  <ChevronUp className="w-5 h-5 text-gray-500" />
+                                ) : (
+                                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                                )}
+                                <CardTitle className="text-lg">
+                                  {categoryName}
+                                </CardTitle>
+                                <Badge variant="secondary" className="text-xs">
+                                  {selectedCount} / {categoryPerms.length} selected
+                                </Badge>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          {isExpanded && (
+                            <CardContent className="pt-0">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {categoryPerms.map(perm => (
+                                  <div
+                                    key={perm.permission_key}
+                                    className="flex items-start space-x-2 p-2 hover:bg-gray-50 rounded"
+                                  >
+                                    <Checkbox
+                                      id={perm.permission_key}
+                                      checked={isPermissionSelected(perm.permission_key)}
+                                      onCheckedChange={() => handleTogglePermission(perm.permission_key)}
+                                      className="mt-1"
+                                    />
+                                    <Label
+                                      htmlFor={perm.permission_key}
+                                      className="font-normal cursor-pointer text-sm flex-1"
+                                    >
+                                      <div className="font-medium">{perm.permission_name}</div>
+                                      {perm.description && (
+                                        <div className="text-xs text-gray-500 mt-0.5">
+                                          {perm.description}
+                                        </div>
+                                      )}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })
+                  )}
+                </div>
               )}
         </>
       )}

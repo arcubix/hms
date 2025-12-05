@@ -31,6 +31,11 @@ class Departments extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing departments
+                if (!$this->requirePermission('admin.view_users')) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -41,6 +46,10 @@ class Departments extends Api {
                 $departments = $this->Department_model->get_all($filters);
                 $this->success($departments);
             } elseif ($method === 'POST') {
+                // Check permission for creating departments
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -67,6 +76,11 @@ class Departments extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing department details
+                if (!$this->requirePermission('admin.view_users')) {
+                    return;
+                }
+                
                 $department = $this->Department_model->get_by_id($id);
                 
                 if (!$department) {
@@ -76,8 +90,16 @@ class Departments extends Api {
 
                 $this->success($department);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating departments
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting departments
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

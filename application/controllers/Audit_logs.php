@@ -20,24 +20,10 @@ class Audit_logs extends Api {
             return;
         }
         
-        // Check admin permission for audit logs (only admins can view)
-        if (!$this->checkAdminPermission()) {
-            $this->error('Access denied. Admin role required.', 403);
+        // Check permission for audit logs (admin only)
+        if (!$this->requirePermission('admin.view_users')) {
             return;
         }
-    }
-
-    /**
-     * Check if user has admin permission
-     * @return bool
-     */
-    private function checkAdminPermission() {
-        if (!$this->user) {
-            return false;
-        }
-        
-        $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-        return $user_role === 'admin' || $user_role === 'Admin';
     }
 
     /**

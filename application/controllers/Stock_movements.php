@@ -23,6 +23,11 @@ class Stock_movements extends Api {
             return;
         }
         
+        // Check permission for viewing stock movements
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         $filters = array();
         
         if ($this->input->get('medicine_id')) {
@@ -70,6 +75,11 @@ class Stock_movements extends Api {
             return;
         }
         
+        // Check permission for viewing stock movements
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         $medicine_id = $this->input->get('medicine_id');
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
@@ -84,6 +94,11 @@ class Stock_movements extends Api {
     public function medicine($medicine_id = null) {
         if (!$medicine_id) {
             $this->error('Medicine ID required', 400);
+            return;
+        }
+        
+        // Check permission for viewing stock movements
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
             return;
         }
         

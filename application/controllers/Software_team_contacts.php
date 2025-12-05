@@ -21,18 +21,6 @@ class Software_team_contacts extends Api {
         }
     }
 
-    /**
-     * Check if user has admin permission
-     * @return bool
-     */
-    private function checkAdminPermission() {
-        if (!$this->user) {
-            return false;
-        }
-        
-        $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-        return $user_role === 'admin';
-    }
 
     /**
      * Get all contacts or create new contact
@@ -74,17 +62,15 @@ class Software_team_contacts extends Api {
                     ]);
                 }
             } elseif ($method === 'POST') {
-                // Create new contact (admin only)
-                if (!$this->checkAdminPermission()) {
-                    $this->error('Access denied. Admin role required.', 403);
+                // Check permission for creating contacts
+                if (!$this->requirePermission('admin.edit_users')) {
                     return;
                 }
                 
                 $this->create_contact();
             } elseif ($method === 'PUT' || $method === 'PATCH') {
-                // Update contact (admin only)
-                if (!$this->checkAdminPermission()) {
-                    $this->error('Access denied. Admin role required.', 403);
+                // Check permission for updating contacts
+                if (!$this->requirePermission('admin.edit_users')) {
                     return;
                 }
                 
@@ -95,9 +81,8 @@ class Software_team_contacts extends Api {
                 
                 $this->update_contact($id);
             } elseif ($method === 'DELETE') {
-                // Delete contact (admin only)
-                if (!$this->checkAdminPermission()) {
-                    $this->error('Access denied. Admin role required.', 403);
+                // Check permission for deleting contacts
+                if (!$this->requirePermission('admin.delete_users')) {
                     return;
                 }
                 

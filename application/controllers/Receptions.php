@@ -32,6 +32,11 @@ class Receptions extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing receptions
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -43,6 +48,10 @@ class Receptions extends Api {
                 $receptions = $this->Reception_model->get_all($filters);
                 $this->success($receptions);
             } elseif ($method === 'POST') {
+                // Check permission for creating receptions
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -69,6 +78,11 @@ class Receptions extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing receptions
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $reception = $this->Reception_model->get_by_id($id);
                 
                 if (!$reception) {
@@ -78,8 +92,16 @@ class Receptions extends Api {
 
                 $this->success($reception);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating receptions
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting receptions
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

@@ -8,27 +8,11 @@ class System_settings extends Api {
     public function __construct() {
         parent::__construct();
         $this->load->model('System_settings_model');
-    }
-    
-    /**
-     * Check authentication and authorization
-     */
-    private function checkAuth() {
+        
         // Verify token for all requests
         if (!$this->verify_token()) {
-            return false;
+            return;
         }
-        
-        // Check if user has admin permission
-        if (isset($this->user) && $this->user) {
-            $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-            if ($user_role && $user_role !== 'admin') {
-                $this->error('Access denied. Admin role required.', 403);
-                return false;
-            }
-        }
-        
-        return true;
     }
 
     /**
@@ -36,17 +20,22 @@ class System_settings extends Api {
      * PUT /api/system-settings - Update settings (bulk)
      */
     public function index() {
-        if (!$this->checkAuth()) {
-            return;
-        }
-        
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing system settings
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             // Get all settings grouped by category
             $settings = $this->System_settings_model->get_settings();
             $this->success($settings);
         } elseif ($method === 'PUT') {
+            // Check permission for updating system settings
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
             // Handle bulk update
             $this->update_bulk();
         } else {
@@ -98,7 +87,8 @@ class System_settings extends Api {
                 $this->error('Setting not found', 404);
             }
         } elseif ($method === 'PUT' || $method === 'PATCH') {
-            if (!$this->checkAuth()) {
+            // Check permission for updating system settings
+            if (!$this->requirePermission('admin.view_users')) {
                 return;
             }
             $this->update_setting($key);
@@ -123,7 +113,8 @@ class System_settings extends Api {
             $mode = $this->System_settings_model->get_room_mode();
             $this->success(array('mode' => $mode));
         } elseif ($method === 'PUT' || $method === 'PATCH') {
-            if (!$this->checkAuth()) {
+            // Check permission for updating system settings
+            if (!$this->requirePermission('admin.view_users')) {
                 return;
             }
             $data = json_decode($this->input->raw_input_stream, true);

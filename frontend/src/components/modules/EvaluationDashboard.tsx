@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -41,7 +41,8 @@ import {
   Filter,
   RefreshCw,
   Eye,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import {
   LineChart as RechartsLine,
@@ -66,15 +67,38 @@ import {
   Radar,
   ComposedChart
 } from 'recharts';
+import { api } from '../../services/api';
 
 const COLORS = ['#2F80ED', '#27AE60', '#F2994A', '#EB5757', '#9B51E0', '#F2C94C'];
 
 export function EvaluationDashboard() {
   const [timeRange, setTimeRange] = useState('30days');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [evaluationData, setEvaluationData] = useState<any>(null);
 
-  // AI Predictions & Analytics Data
-  const aiPredictions = {
+  // Fetch evaluation dashboard data
+  useEffect(() => {
+    const fetchEvaluationData = async () => {
+      setLoading(true);
+      try {
+        const data = await api.getEvaluationDashboard({
+          time_range: timeRange,
+          department: selectedDepartment
+        });
+        setEvaluationData(data);
+      } catch (error) {
+        console.error('Error fetching evaluation dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvaluationData();
+  }, [timeRange, selectedDepartment]);
+
+  // AI Predictions & Analytics Data (use API data if available, fallback to dummy)
+  const aiPredictions = evaluationData?.aiPredictions || {
     patientFlow: {
       today: 145,
       predicted: 168,
@@ -105,8 +129,8 @@ export function EvaluationDashboard() {
     }
   };
 
-  // Overall Hospital KPIs
-  const hospitalKPIs = [
+  // Overall Hospital KPIs (use API data if available, fallback to dummy)
+  const hospitalKPIs = evaluationData?.hospitalKPIs || [
     {
       label: 'Total Patients',
       value: '2,847',
@@ -149,8 +173,8 @@ export function EvaluationDashboard() {
     }
   ];
 
-  // Department Performance
-  const departmentPerformance = [
+  // Department Performance (use API data if available, fallback to dummy)
+  const departmentPerformance = evaluationData?.departmentPerformance || [
     {
       department: 'Emergency',
       patients: 1247,
@@ -219,8 +243,8 @@ export function EvaluationDashboard() {
     }
   ];
 
-  // Doctor Performance Metrics
-  const doctorMetrics = [
+  // Doctor Performance Metrics (use API data if available, fallback to dummy)
+  const doctorMetrics = evaluationData?.doctorMetrics || [
     {
       id: 'D001',
       name: 'Dr. Ahmed Khan',
@@ -275,8 +299,8 @@ export function EvaluationDashboard() {
     }
   ];
 
-  // Patient Analytics
-  const patientTrends = [
+  // Patient Analytics (use API data if available, fallback to dummy)
+  const patientTrends = evaluationData?.patientTrends || [
     { month: 'Jan', opd: 2840, ipd: 680, emergency: 420, total: 3940 },
     { month: 'Feb', opd: 3120, ipd: 720, emergency: 460, total: 4300 },
     { month: 'Mar', opd: 3350, ipd: 780, emergency: 490, total: 4620 },
@@ -285,8 +309,8 @@ export function EvaluationDashboard() {
     { month: 'Jun', opd: 4150, ipd: 890, emergency: 610, total: 5650 }
   ];
 
-  // Revenue Breakdown
-  const revenueData = [
+  // Revenue Breakdown (use API data if available, fallback to dummy)
+  const revenueData = evaluationData?.revenueBreakdown || [
     { category: 'OPD Consultations', value: 3250000, percentage: 26 },
     { category: 'IPD Services', value: 4150000, percentage: 33 },
     { category: 'Emergency', value: 2840000, percentage: 23 },
@@ -295,8 +319,8 @@ export function EvaluationDashboard() {
     { category: 'Radiology', value: 1420000, percentage: 11 }
   ];
 
-  // Disease Pattern Analysis
-  const diseasePatterns = [
+  // Disease Pattern Analysis (use API data if available, fallback to dummy)
+  const diseasePatterns = evaluationData?.diseasePatterns || [
     { disease: 'Hypertension', cases: 487, trend: 5.2, severity: 'moderate' },
     { disease: 'Diabetes Type 2', cases: 423, trend: 8.1, severity: 'high' },
     { disease: 'Respiratory Infections', cases: 356, trend: -3.5, severity: 'low' },
@@ -305,8 +329,8 @@ export function EvaluationDashboard() {
     { disease: 'Neurological', cases: 189, trend: 6.7, severity: 'high' }
   ];
 
-  // Operational Efficiency
-  const efficiencyMetrics = [
+  // Operational Efficiency (use API data if available, fallback to dummy)
+  const efficiencyMetrics = evaluationData?.efficiencyMetrics || [
     { metric: 'Avg. Wait Time', value: '18 min', target: '15 min', score: 83, status: 'good' },
     { metric: 'Bed Turnover', value: '4.2 days', target: '3.5 days', score: 78, status: 'fair' },
     { metric: 'ER Response', value: '8 min', target: '10 min', score: 95, status: 'excellent' },
@@ -315,8 +339,8 @@ export function EvaluationDashboard() {
     { metric: 'Readmission Rate', value: '8%', target: '5%', score: 72, status: 'fair' }
   ];
 
-  // Financial Health Indicators
-  const financialTrends = [
+  // Financial Health Indicators (use API data if available, fallback to dummy)
+  const financialTrends = evaluationData?.financialTrends || [
     { month: 'Jan', revenue: 9800000, expenses: 7200000, profit: 2600000 },
     { month: 'Feb', revenue: 10500000, expenses: 7500000, profit: 3000000 },
     { month: 'Mar', revenue: 11200000, expenses: 7800000, profit: 3400000 },
@@ -345,6 +369,14 @@ export function EvaluationDashboard() {
     <div className="p-6 space-y-6 bg-gray-50">
       {/* Header */}
       <div className="flex items-center justify-between">
+        {loading && (
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+            <div className="text-center">
+              <Loader2 className="w-12 h-12 text-[#2F80ED] animate-spin mx-auto mb-4" />
+              <p className="text-gray-600">Loading evaluation dashboard...</p>
+            </div>
+          </div>
+        )}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <Brain className="w-8 h-8 text-blue-600" />

@@ -23,6 +23,11 @@ class Cash_drawers extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing cash drawers
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('status')) {
@@ -33,6 +38,10 @@ class Cash_drawers extends Api {
             $this->success($drawers);
             
         } elseif ($method === 'POST') {
+            // Check permission for opening cash drawers
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->open();
         } else {
             $this->error('Method not allowed', 405);

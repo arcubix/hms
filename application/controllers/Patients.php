@@ -32,6 +32,11 @@ class Patients extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing patients
+                if (!$this->requireAnyPermission(['view_all_patients', 'search_view_patients'])) {
+                    return;
+                }
+                
                 // Check if model is loaded
                 if (!isset($this->Patient_model)) {
                     log_message('error', 'Patient_model not loaded');
@@ -60,6 +65,10 @@ class Patients extends Api {
                 
                 $this->success($patients);
             } elseif ($method === 'POST') {
+                // Check permission for creating patients
+                if (!$this->requireAnyPermission(['view_all_patients', 'search_view_patients'])) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -91,6 +100,11 @@ class Patients extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing patient details
+                if (!$this->requireAnyPermission(['view_patient_profiles', 'view_all_patients'])) {
+                    return;
+                }
+                
                 // Check if ID is numeric (database ID) or string (patient_id like P001)
                 $patient = null;
                 if (is_numeric($id)) {
@@ -108,8 +122,16 @@ class Patients extends Api {
 
                 $this->success($patient);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating patients
+                if (!$this->requireAnyPermission(['view_all_patients', 'search_view_patients'])) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting patients
+                if (!$this->requirePermission('delete_patient')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

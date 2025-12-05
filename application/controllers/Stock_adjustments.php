@@ -24,6 +24,11 @@ class Stock_adjustments extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing stock adjustments
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('medicine_id')) {
@@ -58,6 +63,10 @@ class Stock_adjustments extends Api {
             $this->success($adjustments);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating stock adjustments
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);

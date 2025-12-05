@@ -31,6 +31,11 @@ class Floors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing floors
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -41,6 +46,10 @@ class Floors extends Api {
                 $floors = $this->Floor_model->get_all($filters);
                 $this->success($floors);
             } elseif ($method === 'POST') {
+                // Check permission for creating floors
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -67,6 +76,11 @@ class Floors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing floors
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $floor = $this->Floor_model->get_by_id($id);
                 
                 if (!$floor) {
@@ -76,8 +90,16 @@ class Floors extends Api {
 
                 $this->success($floor);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating floors
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting floors
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -94,6 +116,11 @@ class Floors extends Api {
      */
     public function buildings() {
         try {
+            // Check permission for viewing buildings
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $buildings = $this->Floor_model->get_buildings();
             $this->success($buildings);
         } catch (Exception $e) {

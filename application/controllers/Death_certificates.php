@@ -30,6 +30,11 @@ class Death_certificates extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing death certificates
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 if ($id) {
                     // Get single certificate
                     $certificate = $this->Death_certificate_model->get_by_id($id);
@@ -56,14 +61,26 @@ class Death_certificates extends Api {
                     ));
                 }
             } elseif ($method === 'POST') {
+                // Check permission for creating death certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create_certificate();
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating death certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 if (!$id) {
                     $this->error('Certificate ID is required', 400);
                     return;
                 }
                 $this->update_certificate($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting death certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 if (!$id) {
                     $this->error('Certificate ID is required', 400);
                     return;

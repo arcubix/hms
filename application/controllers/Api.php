@@ -8,6 +8,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class Api extends CI_Controller {
 
     protected $user = null;
+    protected $user_permissions = array();
 
     public function __construct() {
         // CORS is now handled by CodeIgniter hooks (application/hooks/Cors_hook.php)
@@ -176,7 +177,173 @@ class Api extends CI_Controller {
         }
 
         $this->user = $user;
+        
+        // Load user permissions after authentication
+        $this->load_user_permissions();
+        
         return true;
+    }
+
+    /**
+     * Load user permissions from database
+     * Caches permissions for the duration of the request
+     */
+    protected function load_user_permissions() {
+        if (!$this->user) {
+            $this->user_permissions = array();
+            return;
+        }
+        
+        $user_id = is_object($this->user) ? $this->user->id : (is_array($this->user) ? $this->user['id'] : null);
+        
+        if ($user_id) {
+            $this->load->model('User_model');
+            $permissions = $this->User_model->get_user_permissions($user_id);
+            
+            // Convert to associative array for faster lookups
+            $this->user_permissions = array();
+            foreach ($permissions as $perm) {
+                $this->user_permissions[$perm] = true;
+            }
+        }
+    }
+
+    /**
+     * Check if current user has admin role
+     * @return bool True if user has admin role, false otherwise
+     */
+    protected function isAdmin() {
+        if (!$this->user) {
+            return false;
+        }
+        
+        $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
+        
+        // Check for admin role (case-insensitive)
+        return $user_role === 'admin' || $user_role === 'Admin' || strtolower($user_role) === 'admin';
+    }
+
+    /**
+     * Check if current user has a specific permission
+     * @param string $permission_key Permission key to check
+     * @return bool True if user has permission, false otherwise
+     */
+    protected function hasPermission($permission_key) {
+        return isset($this->user_permissions[$permission_key]) && $this->user_permissions[$permission_key] === true;
+    }
+
+    /**
+     * Check if current user has any of the specified permissions
+     * @param array $permission_keys Array of permission keys
+     * @return bool True if user has at least one permission, false otherwise
+     */
+    protected function hasAnyPermission($permission_keys) {
+        if (empty($permission_keys)) {
+            return false;
+        }
+        
+        foreach ($permission_keys as $perm) {
+            if ($this->hasPermission($perm)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check if current user has all of the specified permissions
+     * @param array $permission_keys Array of permission keys
+     * @return bool True if user has all permissions, false otherwise
+     */
+    protected function hasAllPermissions($permission_keys) {
+        if (empty($permission_keys)) {
+            return false;
+        }
+        
+        foreach ($permission_keys as $perm) {
+            if (!$this->hasPermission($perm)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Require a specific permission (sends error response if missing)
+     * Admin role is allowed by default
+     * @param string $permission_key Permission key required
+     * @param string $error_message Custom error message
+     * @return bool True if permission exists or user is admin, otherwise sends error response and returns false
+     */
+    protected function requirePermission($permission_key, $error_message = null) {
+        // Allow admin role by default
+        if ($this->isAdmin()) {
+            return true;
+        }
+        
+        if ($this->hasPermission($permission_key)) {
+            return true;
+        }
+        
+        $message = $error_message ?: "Access denied. Required permission: {$permission_key}";
+        $this->error($message, 403);
+        return false;
+    }
+
+    /**
+     * Require any of the specified permissions
+     * Admin role is allowed by default
+     * @param array $permission_keys Array of permission keys
+     * @param string $error_message Custom error message
+     * @return bool True if user has at least one permission or is admin, otherwise sends error response
+     */
+    protected function requireAnyPermission($permission_keys, $error_message = null) {
+        // Allow admin role by default
+        if ($this->isAdmin()) {
+            return true;
+        }
+        
+        if ($this->hasAnyPermission($permission_keys)) {
+            return true;
+        }
+        
+        $perms_list = implode(', ', $permission_keys);
+        $message = $error_message ?: "Access denied. Required permission (any): {$perms_list}";
+        $this->error($message, 403);
+        return false;
+    }
+
+    /**
+     * Require all of the specified permissions
+     * Admin role is allowed by default
+     * @param array $permission_keys Array of permission keys
+     * @param string $error_message Custom error message
+     * @return bool True if user has all permissions or is admin, otherwise sends error response
+     */
+    protected function requireAllPermissions($permission_keys, $error_message = null) {
+        // Allow admin role by default
+        if ($this->isAdmin()) {
+            return true;
+        }
+        
+        if ($this->hasAllPermissions($permission_keys)) {
+            return true;
+        }
+        
+        $perms_list = implode(', ', $permission_keys);
+        $message = $error_message ?: "Access denied. Required permissions (all): {$perms_list}";
+        $this->error($message, 403);
+        return false;
+    }
+
+    /**
+     * Get current user's permissions array
+     * @return array Array of permission keys
+     */
+    protected function getPermissions() {
+        return array_keys($this->user_permissions);
     }
 
     /**

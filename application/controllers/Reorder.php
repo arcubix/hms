@@ -21,6 +21,11 @@ class Reorder extends Api {
      * GET /api/pharmacy/reorder/alerts - Get low stock alerts
      */
     public function index() {
+        // Check permission for viewing reorder levels
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         $filters = array();
         
         if ($this->input->get('auto_reorder')) {
@@ -35,6 +40,11 @@ class Reorder extends Api {
      * GET /api/pharmacy/reorder/alerts - Get low stock alerts
      */
     public function alerts() {
+        // Check permission for viewing reorder alerts
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         $auto_reorder_only = $this->input->get('auto_reorder_only') === 'true';
         $alerts = $this->Reorder_model->get_low_stock_alerts($auto_reorder_only);
         $this->success($alerts);
@@ -53,6 +63,11 @@ class Reorder extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing reorder levels
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $reorder_level = $this->Reorder_model->get_by_medicine_id($medicine_id);
             
             if ($reorder_level) {
@@ -62,6 +77,10 @@ class Reorder extends Api {
             }
             
         } elseif ($method === 'POST' || $method === 'PUT') {
+            // Check permission for setting reorder levels
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->set_reorder_level($medicine_id);
         } else {
             $this->error('Method not allowed', 405);

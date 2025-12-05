@@ -13,16 +13,6 @@ class Gst_rates extends Api {
             return;
         }
         
-        // Check if user has permission (admin or pharmacy manager)
-        // User is set by verify_token() in parent constructor
-        if (isset($this->user) && $this->user) {
-            $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
-            if ($user_role && !in_array($user_role, array('admin', 'pharmacy'))) {
-                $this->error('Access denied. Admin or Pharmacy role required.', 403);
-                return;
-            }
-        }
-        
         // Load model after authentication checks
         try {
             $this->load->model('Gst_rate_model');
@@ -41,6 +31,11 @@ class Gst_rates extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing GST rates
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             try {
                 $filters = array();
                 
@@ -60,6 +55,10 @@ class Gst_rates extends Api {
             }
             
         } elseif ($method === 'POST') {
+            // Check permission for creating GST rates
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -183,6 +182,11 @@ class Gst_rates extends Api {
             return;
         }
         
+        // Check permission for updating GST rates
+        if (!$this->requirePermission('admin.edit_users')) {
+            return;
+        }
+        
         if (!$id) {
             $this->error('GST rate ID is required', 400);
             return;
@@ -223,6 +227,11 @@ class Gst_rates extends Api {
     public function delete($id = null) {
         if ($this->input->server('REQUEST_METHOD') !== 'DELETE') {
             $this->error('Method not allowed', 405);
+            return;
+        }
+        
+        // Check permission for deleting GST rates
+        if (!$this->requirePermission('admin.edit_users')) {
             return;
         }
         

@@ -23,6 +23,11 @@ class Suppliers extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing suppliers
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('search')) {
@@ -45,6 +50,10 @@ class Suppliers extends Api {
             $this->success($suppliers);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating suppliers
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -108,6 +117,11 @@ class Suppliers extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing supplier details
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $supplier = $this->Supplier_model->get_by_id($id);
             
             if ($supplier) {
@@ -122,6 +136,10 @@ class Suppliers extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating suppliers
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->update($id);
         } else {
             $this->error('Method not allowed', 405);

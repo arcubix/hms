@@ -23,6 +23,11 @@ class Prescriptions extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing prescriptions
+            if (!$this->requirePermission('view_patient_profiles')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('patient_id')) {
@@ -45,6 +50,10 @@ class Prescriptions extends Api {
             $this->success($prescriptions);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating prescriptions
+            if (!$this->requirePermission('view_patient_profiles')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -100,6 +109,11 @@ class Prescriptions extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing prescription details
+            if (!$this->requirePermission('view_patient_profiles')) {
+                return;
+            }
+            
             $prescription = $this->Prescription_model->get_by_id($id);
             
             if ($prescription) {
@@ -109,6 +123,10 @@ class Prescriptions extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating prescriptions
+            if (!$this->requirePermission('view_patient_profiles')) {
+                return;
+            }
             $this->update($id);
         } else {
             $this->error('Method not allowed', 405);

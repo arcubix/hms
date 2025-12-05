@@ -20,6 +20,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/sales-summary - Get sales summary report
      */
     public function sales_summary() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
         
@@ -31,6 +36,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/daily-sales - Get daily sales report
      */
     public function daily_sales() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
         
@@ -42,6 +52,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/payment-method - Get payment method breakdown
      */
     public function payment_method() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
         
@@ -53,6 +68,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/top-selling - Get top selling products
      */
     public function top_selling() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $limit = (int)($this->input->get('limit') ?? 10);
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
@@ -65,6 +85,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/cashier-performance - Get cashier performance report
      */
     public function cashier_performance() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
         $cashier_id = $this->input->get('cashier_id') ? (int)$this->input->get('cashier_id') : null;
@@ -77,6 +102,11 @@ class Pharmacy_reports extends Api {
      * GET /api/pharmacy/reports/shift-summary - Get shift summary report
      */
     public function shift_summary() {
+        // Check permission for viewing pharmacy reports
+        if (!$this->requireAnyPermission(['admin.view_financial_reports', 'admin.view_other_reports'])) {
+            return;
+        }
+        
         $start_date = $this->input->get('start_date');
         $end_date = $this->input->get('end_date');
         $shift_id = $this->input->get('shift_id') ? (int)$this->input->get('shift_id') : null;

@@ -41,6 +41,9 @@ import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { api, SoftwareTeamContact, CreateSoftwareTeamContactData } from '../../services/api';
 import { toast } from 'sonner';
+import { usePermissions } from '../../contexts/PermissionContext';
+import { PermissionGuard } from '../common/PermissionGuard';
+import { PermissionButton } from '../common/PermissionButton';
 
 interface ContactPerson {
   id: number;
@@ -128,17 +131,9 @@ export function Contacts({ onClose, user }: ContactsProps) {
   const [specializationInput, setSpecializationInput] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Check if user is admin
-  const isAdmin = user?.role === 'admin' || 
-                 user?.role === 'Admin' || 
-                 (Array.isArray(user?.roles) && (user.roles.includes('admin') || user.roles.includes('Admin')));
-
-  // Debug: Log user info to help troubleshoot
-  useEffect(() => {
-    if (user) {
-      console.log('Contacts - User info:', { role: user.role, roles: user.roles, isAdmin });
-    }
-  }, [user, isAdmin]);
+  // Check permissions
+  const { hasPermission } = usePermissions();
+  const canManageContacts = hasPermission('admin.edit_users');
 
   // Load contacts on mount
   useEffect(() => {
@@ -372,10 +367,15 @@ export function Contacts({ onClose, user }: ContactsProps) {
               <p className="text-sm text-gray-500 mt-1">Get in touch with our support team for assistance</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={handleAddClick} className="bg-blue-600 hover:bg-blue-700">
+              <PermissionButton 
+                permission="admin.edit_users"
+                tooltipMessage="You need permission to add contacts"
+                onClick={handleAddClick} 
+                className="bg-blue-600 hover:bg-blue-700"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Contact
-              </Button>
+              </PermissionButton>
             {onClose && (
               <Button variant="ghost" size="sm" onClick={onClose}>
                 <X className="w-5 h-5" />
@@ -493,24 +493,30 @@ export function Contacts({ onClose, user }: ContactsProps) {
                       <span className="truncate">{contact.department}</span>
                     </div>
                   </div>
-                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditClick(contact)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteClick(contact)}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <PermissionGuard permission="admin.edit_users">
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <PermissionButton
+                            permission="admin.edit_users"
+                            tooltipMessage="You need permission to edit contacts"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditClick(contact)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </PermissionButton>
+                          <PermissionButton
+                            permission="admin.delete_users"
+                            tooltipMessage="You need permission to delete contacts"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClick(contact)}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </PermissionButton>
+                        </div>
+                      </PermissionGuard>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">

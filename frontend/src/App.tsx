@@ -8,6 +8,7 @@ import { LabDashboard } from './components/dashboards/LabDashboard';
 import { PharmacyDashboard } from './components/dashboards/PharmacyDashboard';
 import { FinanceDashboard } from './components/dashboards/FinanceDashboard';
 import { Toaster } from './components/ui/sonner';
+import { PermissionProvider } from './contexts/PermissionContext';
 
 export type UserRole = 'admin' | 'doctor' | 'patient' | 'nurse' | 'lab' | 'pharmacy' | 'finance';
 
@@ -109,9 +110,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {renderDashboard()}
-      <Toaster position="top-right" richColors />
-    </div>
+    <PermissionProvider user={user}>
+      <div className="min-h-screen bg-gray-50">
+        {renderDashboard()}
+        <Toaster position="top-right" richColors />
+      </div>
+    </PermissionProvider>
   );
 }

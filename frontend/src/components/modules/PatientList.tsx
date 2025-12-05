@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { api, Patient } from '../../services/api';
 import { HealthRecords } from './HealthRecords';
+import { usePermissions } from '../../contexts/PermissionContext';
+import { PermissionButton } from '../common/PermissionButton';
 
 interface PatientListProps {
   onViewProfile?: (patientId: string) => void;
@@ -31,6 +33,7 @@ interface PatientListProps {
 }
 
 export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddHealthRecord, isFromAdmin = false }: PatientListProps = {}) {
+  const { hasPermission } = usePermissions();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Critical' | 'Inactive'>('All');
@@ -158,10 +161,15 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddH
     <div className="p-6 space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Patient Management</h2>
-        <Button onClick={onAddPatient || (() => {})} className="bg-blue-600 hover:bg-blue-700">
+        <PermissionButton 
+          permission="create_patients"
+          tooltipMessage="You need permission to create patients"
+          onClick={onAddPatient || (() => {})} 
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add Patient
-        </Button>
+        </PermissionButton>
       </div>
 
       <div className="space-y-3">
@@ -347,7 +355,9 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddH
                             >
                               <FileText className="w-4 h-4 text-gray-600" />
                             </Button>
-                            <Button
+                            <PermissionButton
+                              permission="edit_patients"
+                              tooltipMessage="You need permission to edit patients"
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
@@ -355,8 +365,10 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddH
                               title="Edit"
                             >
                               <Edit className="w-4 h-4 text-gray-600" />
-                            </Button>
-                            <Button
+                            </PermissionButton>
+                            <PermissionButton
+                              permission="delete_patients"
+                              tooltipMessage="You need permission to delete patients"
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
@@ -364,7 +376,7 @@ export function PatientList({ onViewProfile, onAddPatient, onEditPatient, onAddH
                               title="Delete"
                             >
                               <Trash2 className="w-4 h-4 text-red-600" />
-                            </Button>
+                            </PermissionButton>
                             <Button
                               variant="ghost"
                               size="sm"

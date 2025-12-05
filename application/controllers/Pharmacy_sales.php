@@ -26,6 +26,11 @@ class Pharmacy_sales extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing pharmacy sales
+            if (!$this->requirePermission('admin.view_billing')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('customer_id')) {
@@ -72,6 +77,10 @@ class Pharmacy_sales extends Api {
             $this->success($sales);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating pharmacy sales
+            if (!$this->requirePermission('admin.view_billing')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -184,6 +193,11 @@ class Pharmacy_sales extends Api {
      * GET /api/pharmacy/sales/search/:query - Search sales by partial invoice number
      */
     public function get($id = null) {
+        // Check permission for viewing pharmacy sales
+        if (!$this->requirePermission('admin.view_billing')) {
+            return;
+        }
+        
         if (!$id) {
             $this->error('Sale ID required', 400);
             return;

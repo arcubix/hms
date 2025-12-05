@@ -61,6 +61,9 @@ import {
   SupportTicketStats,
   CreateSupportTicketData
 } from '../../services/api';
+import { usePermissions } from '../../contexts/PermissionContext';
+import { PermissionGuard } from '../common/PermissionGuard';
+import { PermissionButton } from '../common/PermissionButton';
 
 const modules = [
   'Patients',
@@ -135,10 +138,9 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
   // Comment form state
   const [commentText, setCommentText] = useState('');
 
-  // Check if user is admin
-  const isAdmin = user?.role === 'admin' || 
-                 user?.role === 'Admin' || 
-                 (Array.isArray(user?.roles) && (user.roles.includes('admin') || user.roles.includes('Admin')));
+  // Check permissions
+  const { hasPermission } = usePermissions();
+  const canManageTickets = hasPermission('manage_support_tickets');
 
   // Load tickets on mount and when filters change
   useEffect(() => {
@@ -297,8 +299,8 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
   };
 
   const handleStatusChange = async (newStatus: string) => {
-    if (!selectedTicket || !isAdmin) {
-      toast.error('Only admins can change ticket status');
+    if (!selectedTicket || !canManageTickets) {
+      toast.error('You do not have permission to change ticket status');
       return;
     }
 
@@ -315,8 +317,8 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
   };
 
   const handlePriorityChange = async (newPriority: string) => {
-    if (!selectedTicket || !isAdmin) {
-      toast.error('Only admins can change ticket priority');
+    if (!selectedTicket || !canManageTickets) {
+      toast.error('You do not have permission to change ticket priority');
       return;
     }
 
@@ -333,8 +335,8 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
   };
 
   const handleDeleteTicket = async (ticketId: number) => {
-    if (!isAdmin) {
-      toast.error('Only admins can delete tickets');
+    if (!canManageTickets) {
+      toast.error('You do not have permission to delete tickets');
       return;
     }
 
@@ -637,7 +639,7 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
                 </div>
               </div>
               <div className="flex gap-3">
-                {isAdmin && (
+                <PermissionGuard permission="manage_support_tickets">
                   <Select 
                     value={selectedTicket.status} 
                     onValueChange={handleStatusChange}
@@ -652,7 +654,7 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
                     <SelectItem value="closed">Closed</SelectItem>
                   </SelectContent>
                 </Select>
-                )}
+                </PermissionGuard>
                 {onClose && (
                   <Button variant="ghost" size="sm" onClick={onClose}>
                     <X className="w-5 h-5" />
@@ -703,7 +705,7 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
                             >
                               <Download className="w-4 h-4 text-gray-400" />
                             </Button>
-                            {(isAdmin || attachment.uploaded_by_user_id === parseInt(user?.id as string)) && (
+                            {(canManageTickets || attachment.uploaded_by_user_id === parseInt(user?.id as string)) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -922,21 +924,21 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
               </Card>
 
               {/* Actions Card */}
-              {isAdmin && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
+              <PermissionGuard permission="manage_support_tickets">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
                     <Button 
                       variant="outline" 
                       className="w-full justify-start"
                       onClick={() => handleStatusChange('resolved')}
                       disabled={selectedTicket.status === 'resolved'}
                     >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Mark as Resolved
-                  </Button>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Mark as Resolved
+                    </Button>
                     <Button 
                       variant="outline" 
                       className="w-full justify-start text-red-600 hover:text-red-700"
@@ -944,10 +946,10 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Delete Ticket
-                  </Button>
-                </CardContent>
-              </Card>
-              )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </PermissionGuard>
             </div>
           </div>
         </div>
@@ -1203,15 +1205,15 @@ export function SupportTickets({ onClose, user }: SupportTicketsProps) {
                         <MessageSquare className="w-4 h-4 mr-2" />
                         Add Comment
                       </DropdownMenuItem>
-                        {isAdmin && (
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteTicket(ticket.id)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete Ticket
-                      </DropdownMenuItem>
-                        )}
+                      <PermissionGuard permission="manage_support_tickets">
+                        <DropdownMenuItem 
+                          onClick={() => handleDeleteTicket(ticket.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Ticket
+                        </DropdownMenuItem>
+                      </PermissionGuard>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

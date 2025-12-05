@@ -22,6 +22,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { api, User, UserFilters } from '../../services/api';
 import { toast } from 'sonner';
+import { PermissionGuard } from '../common/PermissionGuard';
+import { PermissionButton } from '../common/PermissionButton';
 
 interface UserListProps {
   onAddUser: () => void;
@@ -102,10 +104,14 @@ export function UserList({ onAddUser, onViewUser, onEditUser }: UserListProps) {
             {users.length} users • Manage user profiles, roles, and permissions
           </p>
         </div>
-        <Button onClick={onAddUser}>
+        <PermissionButton
+          permission="admin.create_users"
+          tooltipMessage="You need create users permission to add new users"
+          onClick={onAddUser}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add New User
-        </Button>
+        </PermissionButton>
       </div>
 
       {/* Search and Filters */}
@@ -211,16 +217,20 @@ export function UserList({ onAddUser, onViewUser, onEditUser }: UserListProps) {
                 )}
 
                 <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onViewUser(user.id)}
-                    className="flex-1"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View
-                  </Button>
-                  <Button
+                  <PermissionGuard permission="admin.view_users">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewUser(user.id)}
+                      className="flex-1"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View
+                    </Button>
+                  </PermissionGuard>
+                  <PermissionButton
+                    permission="admin.edit_users"
+                    tooltipMessage="You need edit users permission to edit this user"
                     variant="outline"
                     size="sm"
                     onClick={() => onEditUser(user.id)}
@@ -228,15 +238,17 @@ export function UserList({ onAddUser, onViewUser, onEditUser }: UserListProps) {
                   >
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
-                  </Button>
-                  <Button
+                  </PermissionButton>
+                  <PermissionButton
+                    permission="admin.delete_users"
+                    tooltipMessage="You need delete users permission to delete this user"
                     variant="outline"
                     size="sm"
                     onClick={() => handleDelete(user.id)}
                     className="text-red-600 hover:text-red-700"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </Button>
+                  </PermissionButton>
                 </div>
               </CardContent>
             </Card>

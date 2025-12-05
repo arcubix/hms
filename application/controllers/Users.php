@@ -31,6 +31,11 @@ class Users extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing users
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -41,6 +46,10 @@ class Users extends Api {
                 $users = $this->User_model->get_all($filters);
                 $this->success($users);
             } elseif ($method === 'POST') {
+                // Check permission for creating users
+                if (!$this->requirePermission('admin.create_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -67,6 +76,11 @@ class Users extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing user details
+                if (!$this->requirePermission('admin.view_users')) {
+                    return;
+                }
+                
                 $user = $this->User_model->get_user_with_details($id);
                 
                 if (!$user) {
@@ -76,8 +90,16 @@ class Users extends Api {
 
                 $this->success($user);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating users
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting users
+                if (!$this->requirePermission('admin.delete_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -104,6 +126,12 @@ class Users extends Api {
             $user = $this->User_model->get_user_by_id($id);
             if (!$user) {
                 $this->error('User not found', 404);
+                return;
+            }
+
+            // Allow admin role by default, or check permission for managing user permissions
+            if (!$this->isAdmin() && !$this->hasPermission('admin.edit_users')) {
+                $this->error('Access denied. Admin role or admin.edit_users permission required.', 403);
                 return;
             }
 
@@ -162,6 +190,11 @@ class Users extends Api {
                 return;
             }
 
+            // Check permission for managing user settings
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
+
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
@@ -199,6 +232,12 @@ class Users extends Api {
      */
     public function roles() {
         try {
+            // Allow admin role by default, or check permission for viewing roles
+            if (!$this->isAdmin() && !$this->hasPermission('admin.view_users')) {
+                $this->error('Access denied. Admin role or admin.view_users permission required.', 403);
+                return;
+            }
+            
             $roles = $this->User_model->get_available_roles();
             $this->success($roles);
         } catch (Exception $e) {
@@ -213,6 +252,12 @@ class Users extends Api {
      */
     public function permission_definitions() {
         try {
+            // Allow admin role by default, or check permission for viewing permission definitions
+            if (!$this->isAdmin() && !$this->hasPermission('admin.view_users')) {
+                $this->error('Access denied. Admin role or admin.view_users permission required.', 403);
+                return;
+            }
+            
             $category = $this->input->get('category');
             $definitions = $this->User_model->get_permission_definitions($category);
             $this->success($definitions);
@@ -228,6 +273,12 @@ class Users extends Api {
      */
     public function role_mappings() {
         try {
+            // Allow admin role by default, or check permission for viewing role mappings
+            if (!$this->isAdmin() && !$this->hasPermission('admin.view_users')) {
+                $this->error('Access denied. Admin role or admin.view_users permission required.', 403);
+                return;
+            }
+            
             $mappings = $this->User_model->get_all_role_permissions();
             $this->success($mappings);
         } catch (Exception $e) {
@@ -250,6 +301,12 @@ class Users extends Api {
 
             // Decode URL-encoded role name (handles spaces like "Radiology Receptionist")
             $role = urldecode($role);
+
+            // Allow admin role by default, or check permission for managing role permissions
+            if (!$this->isAdmin() && !$this->hasPermission('admin.edit_users')) {
+                $this->error('Access denied. Admin role or admin.edit_users permission required.', 403);
+                return;
+            }
 
             $method = $this->input->server('REQUEST_METHOD');
             

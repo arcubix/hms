@@ -854,5 +854,103 @@ class User_model extends CI_Model {
         
         return true;
     }
+
+    /**
+     * Get user's priority modules with full module details
+     * Returns modules joined with modules table, ordered by position
+     */
+    public function get_user_priority_modules($user_id) {
+        $this->db->select('m.*, upm.position');
+        $this->db->from('user_priority_modules upm');
+        $this->db->join('modules m', 'upm.module_id = m.module_id', 'inner');
+        $this->db->where('upm.user_id', $user_id);
+        $this->db->order_by('upm.position', 'ASC');
+        $query = $this->db->get();
+        
+        return $query->result_array();
+    }
+
+    /**
+     * Get user's priority module IDs only (ordered by position)
+     */
+    public function get_user_priority_module_ids($user_id) {
+        $this->db->select('module_id');
+        $this->db->from('user_priority_modules');
+        $this->db->where('user_id', $user_id);
+        $this->db->order_by('position', 'ASC');
+        $query = $this->db->get();
+        
+        $module_ids = array();
+        foreach ($query->result_array() as $row) {
+            $module_ids[] = $row['module_id'];
+        }
+        
+        return $module_ids;
+    }
+
+    /**
+     * Save/update user's priority modules
+     * Replaces all existing priority modules for the user
+     * 
+     * @param int $user_id User ID
+     * @param array $module_ids Array of module IDs (max 7)
+     * @return bool Success status
+     */
+    public function save_user_priority_modules($user_id, $module_ids) {
+        // Validate module IDs exist
+        $this->load->model('Modules_model');
+        $valid_module_ids = $this->Modules_model->validate_module_ids($module_ids);
+        
+        if (count($valid_module_ids) !== count($module_ids)) {
+            // Some module IDs are invalid
+            return false;
+        }
+        
+        // Validate maximum 7 modules
+        if (count($module_ids) > 7) {
+            return false;
+        }
+        
+        // Start transaction
+        $this->db->trans_start();
+        
+        // Delete existing priority modules for this user
+        $this->db->where('user_id', $user_id);
+        $this->db->delete('user_priority_modules');
+        
+        // Insert new priority modules
+        $position = 1;
+        foreach ($module_ids as $module_id) {
+            $data = array(
+                'user_id' => $user_id,
+                'module_id' => $module_id,
+                'position' => $position
+            );
+            $this->db->insert('user_priority_modules', $data);
+            $position++;
+        }
+        
+        // Complete transaction
+        $this->db->trans_complete();
+        
+        return $this->db->trans_status() !== false;
+    }
+
+    /**
+     * Delete a specific priority module for a user
+     */
+    public function delete_user_priority_modules($user_id, $module_id) {
+        $this->db->where('user_id', $user_id);
+        $this->db->where('module_id', $module_id);
+        $this->db->delete('user_priority_modules');
+        
+        // Reorder remaining modules
+        $remaining = $this->get_user_priority_module_ids($user_id);
+        if (!empty($remaining)) {
+            $this->save_user_priority_modules($user_id, $remaining);
+        }
+        
+        return $this->db->affected_rows() > 0;
+    }
 }
 

@@ -27,6 +27,7 @@ interface DoctorListProps {
 }
 
 export function DoctorList({ onViewDoctor, onAddDoctor, onEditDoctor }: DoctorListProps) {
+  const { hasPermission } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -137,13 +138,15 @@ export function DoctorList({ onViewDoctor, onAddDoctor, onEditDoctor }: DoctorLi
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl text-gray-900">Doctor Management</h1>
-        <Button 
+        <PermissionButton 
+          permission="create_doctors"
+          tooltipMessage="You need permission to create doctors"
           className="bg-blue-500 hover:bg-blue-600"
           onClick={handleAdd}
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Doctor
-        </Button>
+        </PermissionButton>
       </div>
 
       {/* Search and Filter */}
@@ -287,7 +290,9 @@ export function DoctorList({ onViewDoctor, onAddDoctor, onEditDoctor }: DoctorLi
                     <Eye className="w-3 h-3 mr-1" />
                     View
                   </Button>
-                  <Button 
+                  <PermissionButton 
+                    permission="edit_doctors"
+                    tooltipMessage="You need permission to edit doctors"
                     variant="outline" 
                     size="sm" 
                     className="flex-1"
@@ -295,7 +300,7 @@ export function DoctorList({ onViewDoctor, onAddDoctor, onEditDoctor }: DoctorLi
                   >
                     <Edit className="w-3 h-3 mr-1" />
                     Edit
-                  </Button>
+                  </PermissionButton>
                   <Button 
                     variant="outline" 
                     size="sm" 

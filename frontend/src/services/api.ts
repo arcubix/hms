@@ -149,6 +149,67 @@ class ApiService {
     }
   }
 
+  // Module endpoints
+  async getAllModules() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        module_id: string;
+        label: string;
+        description: string;
+        category: string;
+        icon_name: string;
+        color_from: string;
+        color_to: string;
+        is_active: boolean;
+        display_order: number;
+      }>;
+    }>('/api/modules');
+    return data.data || [];
+  }
+
+  async getPriorityModules() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        module_id: string;
+        label: string;
+        description: string;
+        category: string;
+        icon_name: string;
+        color_from: string;
+        color_to: string;
+        is_active: boolean;
+        display_order: number;
+        position: number;
+      }>;
+    }>('/api/priority-modules');
+    return data.data || [];
+  }
+
+  async savePriorityModules(modules: string[]) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+      data: Array<{
+        module_id: string;
+        label: string;
+        description: string;
+        category: string;
+        icon_name: string;
+        color_from: string;
+        color_to: string;
+        is_active: boolean;
+        display_order: number;
+        position: number;
+      }>;
+    }>('/api/priority-modules', {
+      method: 'POST',
+      body: JSON.stringify({ modules }),
+    });
+    return data.data || [];
+  }
+
   // Patient endpoints
   async getPatients(filters?: { search?: string; phone?: string }) {
     const params = new URLSearchParams();
@@ -3966,6 +4027,157 @@ class ApiService {
     return data.data;
   }
 
+  // Hospital Dashboard
+  async getDashboardOverview() {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        totalPatients: number;
+        activeDoctors: number;
+        onDutyDoctors: number;
+        todayAppointments: number;
+        completedAppointments: number;
+        pendingAppointments: number;
+        monthlyRevenue: number;
+        bedOccupancy: number;
+        pendingLabs: number;
+        urgentLabs: number;
+        medicineStock: number;
+        satisfaction: number;
+        aiPredictions: {
+          patientFlow: number;
+          revenueForecast: number;
+          bedOccupancy: number;
+        };
+      };
+    }>('/api/dashboard/overview');
+    return data.data;
+  }
+
+  async getPatientTrends(filters?: { date_from?: string; date_to?: string; group_by?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.group_by) params.append('group_by', filters.group_by);
+
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        month: string;
+        opd: number;
+        ipd: number;
+        emergency: number;
+        total: number;
+      }>;
+    }>(`/api/dashboard/patient-trends${query ? '?' + query : ''}`);
+    return data.data;
+  }
+
+  async getRevenueTrends(filters?: { date_from?: string; date_to?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        month: string;
+        revenue: number;
+        expenses: number;
+        profit: number;
+      }>;
+    }>(`/api/dashboard/revenue-trends${query ? '?' + query : ''}`);
+    return data.data;
+  }
+
+  async getDepartmentStats() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        name: string;
+        value: number;
+        color: string;
+        patients: number;
+      }>;
+    }>('/api/dashboard/department-stats');
+    return data.data;
+  }
+
+  async getRecentActivities(limit?: number) {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', String(limit));
+
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        id: string;
+        type: string;
+        patient: string;
+        doctor?: string;
+        department?: string;
+        test?: string;
+        time: string;
+        status: string;
+      }>;
+    }>(`/api/dashboard/recent-activities${query ? '?' + query : ''}`);
+    return data.data;
+  }
+
+  async getUpcomingAppointments(limit?: number) {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', String(limit));
+
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        time: string;
+        patient: string;
+        doctor: string;
+        type: string;
+        department: string;
+      }>;
+    }>(`/api/dashboard/upcoming-appointments${query ? '?' + query : ''}`);
+    return data.data;
+  }
+
+  async getDashboardAlerts() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{
+        type: string;
+        message: string;
+        severity: string;
+        time: string;
+      }>;
+    }>('/api/dashboard/alerts');
+    return data.data;
+  }
+
+  async getEvaluationDashboard(filters?: { time_range?: string; department?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.time_range) params.append('time_range', filters.time_range);
+    if (filters?.department) params.append('department', filters.department);
+
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        departmentPerformance: Array<any>;
+        doctorMetrics: Array<any>;
+        patientTrends: Array<any>;
+        revenueBreakdown: Array<any>;
+        diseasePatterns: Array<any>;
+        financialTrends: Array<any>;
+        efficiencyMetrics: Array<any>;
+      };
+    }>(`/api/dashboard/evaluation${query ? '?' + query : ''}`);
+    return data.data;
+  }
+
   // Admissions
   async getIPDAdmissions(filters?: {
     search?: string;
@@ -5547,6 +5759,40 @@ class ApiService {
       data: any[];
     }>(`/api/ipd/admissions/${admissionId}/files`);
     return data.data || [];
+  }
+
+  // IPD Reports
+  async getIPDReport(reportId: string, filters?: {
+    date_from?: string;
+    date_to?: string;
+    ward_id?: number;
+    department?: string;
+    consultant_id?: number;
+    panel_id?: string;
+    admission_type?: string;
+    status?: string;
+    group_by?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.ward_id) params.append('ward_id', String(filters.ward_id));
+    if (filters?.department) params.append('department', filters.department);
+    if (filters?.consultant_id) params.append('consultant_id', String(filters.consultant_id));
+    if (filters?.panel_id) params.append('panel_id', filters.panel_id);
+    if (filters?.admission_type) params.append('admission_type', filters.admission_type);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.group_by) params.append('group_by', filters.group_by);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        data: any[];
+        summary: any;
+      };
+    }>(`/api/ipd/reports/${reportId}${query ? '?' + query : ''}`);
+    return data.data || { data: [], summary: {} };
   }
 
   async uploadIPDFile(admissionId: number, formData: FormData) {

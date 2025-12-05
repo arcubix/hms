@@ -30,6 +30,11 @@ class Birth_certificates extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing birth certificates
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 if ($id) {
                     // Get single certificate
                     $certificate = $this->Birth_certificate_model->get_by_id($id);
@@ -56,14 +61,26 @@ class Birth_certificates extends Api {
                     ));
                 }
             } elseif ($method === 'POST') {
+                // Check permission for creating birth certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create_certificate();
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating birth certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 if (!$id) {
                     $this->error('Certificate ID is required', 400);
                     return;
                 }
                 $this->update_certificate($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting birth certificates
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 if (!$id) {
                     $this->error('Certificate ID is required', 400);
                     return;

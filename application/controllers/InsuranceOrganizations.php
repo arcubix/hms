@@ -36,6 +36,11 @@ class InsuranceOrganizations extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing insurance organizations
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -46,6 +51,10 @@ class InsuranceOrganizations extends Api {
                 $organizations = $this->InsuranceOrganization_model->get_all($filters);
                 $this->success($organizations);
             } elseif ($method === 'POST') {
+                // Check permission for creating insurance organizations
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -72,6 +81,11 @@ class InsuranceOrganizations extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing insurance organization details
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $organization = $this->InsuranceOrganization_model->get_by_id($id);
                 
                 if (!$organization) {
@@ -81,8 +95,16 @@ class InsuranceOrganizations extends Api {
 
                 $this->success($organization);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating insurance organizations
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting insurance organizations
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

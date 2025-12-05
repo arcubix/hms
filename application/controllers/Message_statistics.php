@@ -23,6 +23,11 @@ class Message_statistics extends Api {
      */
     public function index() {
         try {
+            // Check permission for viewing message statistics
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.view_other_reports'])) {
+                return;
+            }
+            
             $period = $this->input->get('period') ?: 'weekly'; // daily, weekly, monthly
             
             $stats = array(
@@ -128,6 +133,11 @@ class Message_statistics extends Api {
      */
     public function daily() {
         try {
+            // Check permission for viewing message statistics
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.view_other_reports'])) {
+                return;
+            }
+            
             $stats = array(
                 'sms' => $this->get_platform_stats('sms', 'daily'),
                 'email' => $this->get_platform_stats('email', 'daily'),
@@ -148,6 +158,11 @@ class Message_statistics extends Api {
      */
     public function weekly() {
         try {
+            // Check permission for viewing message statistics
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.view_other_reports'])) {
+                return;
+            }
+            
             $stats = array(
                 'sms' => $this->get_platform_stats('sms', 'weekly'),
                 'email' => $this->get_platform_stats('email', 'weekly'),
@@ -168,6 +183,11 @@ class Message_statistics extends Api {
      */
     public function by_platform() {
         try {
+            // Check permission for viewing message statistics
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.view_other_reports'])) {
+                return;
+            }
+            
             $platform = $this->input->get('platform'); // sms, email, whatsapp
             $period = $this->input->get('period') ?: 'weekly';
             

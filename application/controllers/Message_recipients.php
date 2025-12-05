@@ -26,6 +26,11 @@ class Message_recipients extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing message recipients
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $type = $this->input->get('type'); // doctor, staff, admin
             $this->list_recipients($type);
         } else {
@@ -147,6 +152,10 @@ class Message_recipients extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'PUT') {
+                // Check permission for updating message recipient preferences
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } else {
                 $this->error('Method not allowed', 405);
@@ -230,6 +239,11 @@ class Message_recipients extends Api {
      */
     public function bulk() {
         try {
+            // Check permission for bulk updating message recipients
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
+            
             $data = $this->get_request_data();
             
             if (empty($data['updates']) || !is_array($data['updates'])) {

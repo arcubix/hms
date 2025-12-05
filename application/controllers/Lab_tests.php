@@ -23,6 +23,11 @@ class Lab_tests extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing lab tests
+            if (!$this->requireAnyPermission(['lab_manager.view_lab_reports', 'lab_technician.view_lab_reports'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('search')) {
@@ -45,6 +50,10 @@ class Lab_tests extends Api {
             $this->success($tests);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating lab tests
+            if (!$this->requireAnyPermission(['lab_technician.create_lab_reports', 'lab_manager.create_lab_invoice'])) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -97,6 +106,11 @@ class Lab_tests extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing lab test details
+            if (!$this->requireAnyPermission(['lab_manager.view_lab_reports', 'lab_technician.view_lab_reports'])) {
+                return;
+            }
+            
             $test = $this->Lab_test_model->get_by_id($id);
             
             if ($test) {
@@ -106,6 +120,10 @@ class Lab_tests extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating lab tests
+            if (!$this->requireAnyPermission(['lab_technician.edit_lab_reports', 'lab_manager.edit_lab_reports'])) {
+                return;
+            }
             $this->update($id);
         } else {
             $this->error('Method not allowed', 405);

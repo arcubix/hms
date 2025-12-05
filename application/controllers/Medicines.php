@@ -23,6 +23,11 @@ class Medicines extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing medicines
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('search')) {
@@ -41,6 +46,10 @@ class Medicines extends Api {
             $this->success($medicines);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating medicines
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -93,6 +102,11 @@ class Medicines extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing medicine details
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $medicine = $this->Medicine_model->get_by_id($id);
             
             if ($medicine) {
@@ -102,6 +116,10 @@ class Medicines extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating medicines
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->update($id);
         } else {
             $this->error('Method not allowed', 405);

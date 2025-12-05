@@ -25,6 +25,11 @@ class Pharmacy_stock extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing pharmacy stock
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('medicine_id')) {
@@ -59,6 +64,10 @@ class Pharmacy_stock extends Api {
             $this->success($stock);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating stock
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);

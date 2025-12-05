@@ -32,6 +32,11 @@ class Rooms extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing rooms
+                if (!$this->requirePermission('admin.view_users')) {
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -44,6 +49,10 @@ class Rooms extends Api {
                 $rooms = $this->Room_model->get_all($filters);
                 $this->success($rooms);
             } elseif ($method === 'POST') {
+                // Check permission for creating rooms
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -70,6 +79,11 @@ class Rooms extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing room details
+                if (!$this->requirePermission('admin.view_users')) {
+                    return;
+                }
+                
                 $room = $this->Room_model->get_by_id($id);
                 
                 if (!$room) {
@@ -79,8 +93,16 @@ class Rooms extends Api {
 
                 $this->success($room);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating rooms
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Check permission for deleting rooms
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

@@ -26,6 +26,11 @@ class Doctor_slot_rooms extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing doctor slot room assignments
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('doctor_id')) {
@@ -64,6 +69,10 @@ class Doctor_slot_rooms extends Api {
             $this->success($assignments);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating doctor slot room assignments
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -74,6 +83,11 @@ class Doctor_slot_rooms extends Api {
      * GET /api/doctor-slot-rooms/doctor/:doctor_id/date/:date - Get doctor's rooms for date
      */
     public function doctor($doctor_id = null, $date = null) {
+        // Check permission for viewing doctor slot room assignments
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$doctor_id) {
             $this->error('Doctor ID is required', 400);
             return;
@@ -91,6 +105,11 @@ class Doctor_slot_rooms extends Api {
      * POST /api/doctor-slot-rooms/bulk - Bulk create assignments for date range
      */
     public function bulk() {
+        // Check permission for bulk creating doctor slot room assignments
+        if (!$this->requirePermission('admin.edit_users')) {
+            return;
+        }
+        
         $data = json_decode($this->input->raw_input_stream, true);
         
         if (empty($data)) {
@@ -158,6 +177,11 @@ class Doctor_slot_rooms extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing doctor slot room assignments
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $assignment = $this->Doctor_slot_room_model->get_by_id($id);
             
             if ($assignment) {
@@ -167,9 +191,17 @@ class Doctor_slot_rooms extends Api {
             }
             
         } elseif ($method === 'PUT' || $method === 'PATCH') {
+            // Check permission for updating doctor slot room assignments
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->update($id);
             
         } elseif ($method === 'DELETE') {
+            // Check permission for deleting doctor slot room assignments
+            if (!$this->requirePermission('admin.delete_users')) {
+                return;
+            }
             $this->delete($id);
             
         } else {

@@ -24,6 +24,11 @@ class Purchase_orders extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing purchase orders
+            if (!$this->requirePermission('admin.view_users')) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('supplier_id')) {
@@ -58,6 +63,10 @@ class Purchase_orders extends Api {
             $this->success($pos);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating purchase orders
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);

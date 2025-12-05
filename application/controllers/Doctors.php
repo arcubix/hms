@@ -30,6 +30,12 @@ class Doctors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Allow admin role by default, or check permission for viewing doctors
+                if (!$this->isAdmin() && !$this->hasPermission('view_doctors') && !$this->hasPermission('admin.view_users')) {
+                    $this->error('Access denied. Admin role or view_doctors permission required.', 403);
+                    return;
+                }
+                
                 // Get query parameters for filtering
                 $filters = array(
                     'search' => $this->input->get('search'),
@@ -40,6 +46,11 @@ class Doctors extends Api {
                 $doctors = $this->Doctor_model->get_all($filters);
                 $this->success($doctors);
             } elseif ($method === 'POST') {
+                // Allow admin role by default, or check permission for creating doctors
+                if (!$this->isAdmin() && !$this->hasPermission('create_doctors') && !$this->hasPermission('admin.create_users')) {
+                    $this->error('Access denied. Admin role or create_doctors permission required.', 403);
+                    return;
+                }
                 $this->create();
             } else {
                 $this->error('Method not allowed', 405);
@@ -66,6 +77,12 @@ class Doctors extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Allow admin role by default, or check permission for viewing doctor details
+                if (!$this->isAdmin() && !$this->hasPermission('view_doctors') && !$this->hasPermission('admin.view_users')) {
+                    $this->error('Access denied. Admin role or view_doctors permission required.', 403);
+                    return;
+                }
+                
                 $doctor = $this->Doctor_model->get_by_id($id);
                 
                 if (!$doctor) {
@@ -75,8 +92,18 @@ class Doctors extends Api {
 
                 $this->success($doctor);
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Allow admin role by default, or check permission for updating doctors
+                if (!$this->isAdmin() && !$this->hasPermission('edit_doctors') && !$this->hasPermission('admin.edit_users')) {
+                    $this->error('Access denied. Admin role or edit_doctors permission required.', 403);
+                    return;
+                }
                 $this->update($id);
             } elseif ($method === 'DELETE') {
+                // Allow admin role by default, or check permission for deleting doctors
+                if (!$this->isAdmin() && !$this->hasPermission('delete_doctors') && !$this->hasPermission('admin.delete_users')) {
+                    $this->error('Access denied. Admin role or delete_doctors permission required.', 403);
+                    return;
+                }
                 $this->delete($id);
             } else {
                 $this->error('Method not allowed', 405);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../common/DashboardLayout';
 import { TopNavigation, NavigationItem } from '../common/TopNavigation';
 import { StatsCard } from '../common/StatsCard';
@@ -40,6 +40,8 @@ import {
 import { api } from '../../services/api';
 import { filterMenuItems } from '../../utils/permissions';
 import { User } from '../../App';
+import { getModuleIcon } from '../../config/modules';
+import { Loader2 } from 'lucide-react';
 import { PatientList } from '../modules/PatientList';
 import { DoctorList } from '../modules/DoctorList';
 import { PatientProfile } from '../modules/PatientProfile';
@@ -86,23 +88,8 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-// All menu items from all dashboards consolidated with grouping
-const allNavigationItems: NavigationItem[] = [
-  // Common
-  { icon: <BarChart3 className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
-  { icon: <Activity className="w-5 h-5" />, label: 'Analytics', id: 'analytics' },
-  
-  // Admin/Management
-  { icon: <Ambulance className="w-5 h-5" />, label: 'Emergency', id: 'emergency', badge: '3' },
-  { icon: <Users className="w-5 h-5" />, label: 'Patients', id: 'patients', badge: '12' },
-  // { icon: <Stethoscope className="w-5 h-5" />, label: 'Doctors', id: 'doctors' },
-  { icon: <UserCheck className="w-5 h-5" />, label: 'Users', id: 'users' },
-  { icon: <Calendar className="w-5 h-5" />, label: 'Appointments', id: 'appointments', badge: '5' },
-  { icon: <Activity className="w-5 h-5" />, label: 'OPD', id: 'opd' },
-  { icon: <Hospital className="w-5 h-5" />, label: 'IPD Management', id: 'ipd', badge: '80' },
-  { icon: <Bed className="w-5 h-5" />, label: 'Bed Management', id: 'beds' },
-  { icon: <FileText className="w-5 h-5" />, label: 'Health Records', id: 'healthrecords' },
-  
+// Static navigation items with children (groups) - these are not in modules table
+const staticNavigationItems: NavigationItem[] = [
   // Pharmacy Group
   {
     icon: <Pill className="w-5 h-5" />,
@@ -136,9 +123,6 @@ const allNavigationItems: NavigationItem[] = [
     ]
   },
   
-  // Radiology
-  { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology', badge: '8' },
-  
   // Finance/Billing Group
   {
     icon: <DollarSign className="w-5 h-5" />,
@@ -153,25 +137,6 @@ const allNavigationItems: NavigationItem[] = [
       { icon: <AlertCircle className="w-4 h-4" />, label: 'Outstanding Bills', id: 'outstanding', badge: '8' },
     ]
   },
-  
-  // Doctor specific
-  { icon: <Calendar className="w-5 h-5" />, label: 'My Schedule', id: 'schedule', badge: '8' },
-  { icon: <Video className="w-5 h-5" />, label: 'Telemedicine', id: 'telemedicine' },
-  { icon: <FileText className="w-5 h-5" />, label: 'Patient Records', id: 'records' },
-  
-  // Nurse specific
-  { icon: <Bed className="w-5 h-5" />, label: 'Ward Management', id: 'ward', badge: '3' },
-  { icon: <Users className="w-5 h-5" />, label: 'Patient Monitoring', id: 'monitoring' },
-  { icon: <Pill className="w-5 h-5" />, label: 'Medication', id: 'medication' },
-  { icon: <Clock className="w-5 h-5" />, label: 'Shift Schedule', id: 'nurse-schedule' },
-  { icon: <AlertTriangle className="w-5 h-5" />, label: 'Alerts', id: 'alerts', badge: '5' },
-  
-  // Patient specific
-  { icon: <Heart className="w-5 h-5" />, label: 'My Profile', id: 'profile' },
-  
-  // Settings
-  { icon: <UserCheck className="w-5 h-5" />, label: 'Role Permissions', id: 'role-permissions' },
-  { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' }
 ];
 
 // Mock data for charts
@@ -197,6 +162,9 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean>>({});
   const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [modulesLoading, setModulesLoading] = useState(true);
+  const [allNavigationItems, setAllNavigationItems] = useState<NavigationItem[]>([]);
+  const [priorityModuleIds, setPriorityModuleIds] = useState<string[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatientName, setSelectedPatientName] = useState<string | null>(null);
   const [patientView, setPatientView] = useState<'list' | 'profile' | 'health' | 'files' | 'invoice' | 'add-health' | 'add' | 'edit' | 'view'>('list');
@@ -204,6 +172,87 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [doctorView, setDoctorView] = useState<'list' | 'add' | 'edit' | 'view'>('list');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [userView, setUserView] = useState<'list' | 'add' | 'edit' | 'settings'>('list');
+
+  // Fetch modules and priority modules on mount
+  useEffect(() => {
+    const fetchModules = async () => {
+      try {
+        setModulesLoading(true);
+        
+        // Fetch all available modules
+        const modulesData = await api.getAllModules();
+        
+        // Fetch user's priority modules
+        const priorityModulesData = await api.getPriorityModules();
+        
+        console.log('All modules from API:', modulesData.map(m => m.module_id));
+        console.log('Priority modules from API:', priorityModulesData);
+        
+        // Build navigation items from API modules
+        const moduleNavItems: NavigationItem[] = modulesData.map((module) => {
+          const IconComponent = getModuleIcon(module.icon_name);
+          return {
+            icon: <IconComponent className="w-5 h-5" />,
+            label: module.label,
+            id: module.module_id,
+          };
+        });
+        
+        // Combine with static navigation items (groups)
+        const allItems = [...moduleNavItems, ...staticNavigationItems];
+        setAllNavigationItems(allItems);
+        
+        // Set priority module IDs (already ordered by position from API)
+        const priorityIds = priorityModulesData
+          .sort((a, b) => (a.position || 0) - (b.position || 0)) // Ensure sorted by position
+          .map((pm) => pm.module_id);
+        
+        console.log('Priority module IDs (ordered):', priorityIds);
+        console.log('All navigation item IDs:', allItems.map(item => item.id));
+        
+        setPriorityModuleIds(priorityIds.length > 0 ? priorityIds : ['dashboard', 'opd', 'emergency', 'patients', 'appointments', 'laboratory', 'pharmacy']);
+        
+      } catch (error) {
+        console.error('Error fetching modules:', error);
+        // Fallback to default modules
+        const fallbackItems: NavigationItem[] = [
+          { icon: <BarChart3 className="w-5 h-5" />, label: 'Dashboard', id: 'dashboard' },
+          { icon: <Activity className="w-5 h-5" />, label: 'Analytics', id: 'analytics' },
+          { icon: <Ambulance className="w-5 h-5" />, label: 'Emergency', id: 'emergency' },
+          { icon: <Users className="w-5 h-5" />, label: 'Patients', id: 'patients' },
+          { icon: <Calendar className="w-5 h-5" />, label: 'Appointments', id: 'appointments' },
+          { icon: <Activity className="w-5 h-5" />, label: 'OPD', id: 'opd' },
+          { icon: <Hospital className="w-5 h-5" />, label: 'IPD Management', id: 'ipd' },
+          { icon: <Bed className="w-5 h-5" />, label: 'Bed Management', id: 'beds' },
+          { icon: <FileText className="w-5 h-5" />, label: 'Health Records', id: 'healthrecords' },
+          { icon: <FlaskConical className="w-5 h-5" />, label: 'Laboratory', id: 'laboratory' },
+          { icon: <Pill className="w-5 h-5" />, label: 'Pharmacy', id: 'pharmacy' },
+          { icon: <DollarSign className="w-5 h-5" />, label: 'Billing', id: 'billing' },
+          { icon: <Scan className="w-5 h-5" />, label: 'Radiology', id: 'radiology' },
+          { icon: <Settings className="w-5 h-5" />, label: 'Settings', id: 'settings' },
+          ...staticNavigationItems
+        ];
+        setAllNavigationItems(fallbackItems);
+        setPriorityModuleIds(['dashboard', 'opd', 'emergency', 'patients', 'appointments', 'laboratory', 'pharmacy']);
+      } finally {
+        setModulesLoading(false);
+      }
+    };
+
+    fetchModules();
+
+    // Listen for priority modules updates
+    const handlePriorityModulesUpdate = () => {
+      console.log('Priority modules updated, refreshing...');
+      fetchModules();
+    };
+
+    window.addEventListener('priority-modules-updated', handlePriorityModulesUpdate);
+
+    return () => {
+      window.removeEventListener('priority-modules-updated', handlePriorityModulesUpdate);
+    };
+  }, []);
 
   // Fetch user permissions on mount
   useEffect(() => {
@@ -232,8 +281,53 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     fetchPermissions();
   }, [user.id]);
 
-  // Filter menu items based on permissions and roles
-  const navigationItems = filterMenuItems(allNavigationItems, user, userPermissions);
+  // Filter menu items based on permissions and roles, then filter by priority
+  const filteredItems = filterMenuItems(allNavigationItems, user, userPermissions);
+  
+  // Filter and order navigation items by priority
+  const navigationItems = React.useMemo(() => {
+    if (priorityModuleIds.length === 0 || allNavigationItems.length === 0) {
+      // If no priority modules or navigation items loaded yet, return empty
+      return [];
+    }
+
+    // Create a map of priority positions for ordering
+    const priorityPositionMap: Record<string, number> = {};
+    priorityModuleIds.forEach((moduleId, index) => {
+      priorityPositionMap[moduleId] = index + 1;
+    });
+
+    // Filter and sort items
+    const priorityItems: NavigationItem[] = [];
+    const groupItems: NavigationItem[] = [];
+
+    filteredItems.forEach(item => {
+      // Include if it's a priority module
+      if (priorityModuleIds.includes(item.id)) {
+        priorityItems.push(item);
+      }
+      // Include if it has children (groups)
+      else if (item.children && item.children.length > 0) {
+        groupItems.push(item);
+      }
+    });
+
+    // Sort priority items by their position in priorityModuleIds
+    priorityItems.sort((a, b) => {
+      const posA = priorityPositionMap[a.id] || 999;
+      const posB = priorityPositionMap[b.id] || 999;
+      return posA - posB;
+    });
+
+    console.log('Filtered navigation items:', {
+      priorityItems: priorityItems.map(i => i.id),
+      groupItems: groupItems.map(i => i.id),
+      priorityModuleIds
+    });
+
+    // Combine: priority items first, then groups
+    return [...priorityItems, ...groupItems];
+  }, [filteredItems, priorityModuleIds, allNavigationItems]);
 
   const handleViewProfile = (patientId: string) => {
     setSelectedPatientId(patientId);
@@ -615,6 +709,20 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         );
   };
 
+  // Show loading state while fetching modules
+  if (modulesLoading || permissionsLoading) {
+    return (
+      <DashboardLayout user={user} onLogout={onLogout}>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       user={user}
@@ -622,6 +730,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
       navigationItems={
         <TopNavigation
           items={navigationItems}
+          allItems={filteredItems}
           activeItem={activeSection}
           onItemClick={setActiveSection}
         />

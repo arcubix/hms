@@ -73,6 +73,11 @@ class Ipd extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing IPD admissions
+                if (!$this->requirePermission('doctor.view_all_patients')) {
+                    return;
+                }
+                
                 if ($id) {
                     // Get single admission
                     $admission = $this->Ipd_admission_model->get_by_id($id);
@@ -105,8 +110,17 @@ class Ipd extends Api {
                     $this->success($admissions);
                 }
             } elseif ($method === 'POST') {
+                // Check permission for creating IPD admissions
+                if (!$this->requirePermission('doctor.view_all_patients')) {
+                    return;
+                }
                 $this->create_admission();
             } elseif ($method === 'PUT' || $method === 'PATCH') {
+                // Check permission for updating IPD admissions
+                if (!$this->requirePermission('doctor.view_all_patients')) {
+                    return;
+                }
+                
                 if (!$id) {
                     $this->error('Admission ID is required', 400);
                     return;

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -24,7 +25,8 @@ import {
   Building,
   Target,
   Zap,
-  Eye
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 import {
   LineChart,
@@ -42,11 +44,55 @@ import {
   Pie,
   Cell
 } from 'recharts';
+import { api } from '../../services/api';
 
 const COLORS = ['#2F80ED', '#27AE60', '#F2994A', '#EB5757', '#9B51E0', '#F2C94C'];
 
 export function EnhancedAdminDashboard() {
-  const patientVisitsData = [
+  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<any>(null);
+  const [patientVisitsData, setPatientVisitsData] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [departmentStats, setDepartmentStats] = useState<any[]>([]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [criticalAlerts, setCriticalAlerts] = useState<any[]>([]);
+
+  // Fetch all dashboard data
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        // Fetch all data in parallel
+        const [overviewData, trendsData, revenueTrendsData, deptStatsData, activitiesData, appointmentsData, alertsData] = await Promise.all([
+          api.getDashboardOverview().catch(() => null),
+          api.getPatientTrends({ date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], group_by: 'month' }).catch(() => []),
+          api.getRevenueTrends({ date_from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }).catch(() => []),
+          api.getDepartmentStats().catch(() => []),
+          api.getRecentActivities(10).catch(() => []),
+          api.getUpcomingAppointments(10).catch(() => []),
+          api.getDashboardAlerts().catch(() => [])
+        ]);
+
+        if (overviewData) setOverview(overviewData);
+        if (trendsData.length > 0) setPatientVisitsData(trendsData);
+        if (revenueTrendsData.length > 0) setRevenueData(revenueTrendsData);
+        if (deptStatsData.length > 0) setDepartmentStats(deptStatsData);
+        if (activitiesData.length > 0) setRecentActivities(activitiesData);
+        if (appointmentsData.length > 0) setUpcomingAppointments(appointmentsData);
+        if (alertsData.length > 0) setCriticalAlerts(alertsData);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Fallback dummy data
+  const dummyPatientVisitsData = [
     { month: 'Jan', visits: 820, opd: 580, ipd: 240 },
     { month: 'Feb', visits: 890, opd: 620, ipd: 270 },
     { month: 'Mar', visits: 950, opd: 670, ipd: 280 },
@@ -55,7 +101,7 @@ export function EnhancedAdminDashboard() {
     { month: 'Jun', visits: 1250, opd: 890, ipd: 360 }
   ];
 
-  const revenueData = [
+  const dummyRevenueData = [
     { month: 'Jan', revenue: 980000, expenses: 720000 },
     { month: 'Feb', revenue: 1050000, expenses: 750000 },
     { month: 'Mar', revenue: 1120000, expenses: 780000 },
@@ -64,91 +110,17 @@ export function EnhancedAdminDashboard() {
     { month: 'Jun', revenue: 1250000, expenses: 860000 }
   ];
 
-  const departmentStats = [
+  const dummyDepartmentStats = [
     { name: 'Emergency', value: 23, color: '#EB5757' },
     { name: 'OPD', value: 35, color: '#2F80ED' },
     { name: 'IPD', value: 28, color: '#27AE60' },
     { name: 'ICU', value: 14, color: '#F2994A' }
   ];
 
-  const recentActivities = [
-    {
-      id: 1,
-      type: 'appointment',
-      patient: 'Ahmed Khan',
-      doctor: 'Dr. Sarah Williams',
-      time: '10 minutes ago',
-      status: 'completed'
-    },
-    {
-      id: 2,
-      type: 'admission',
-      patient: 'Fatima Ali',
-      department: 'Cardiology',
-      time: '25 minutes ago',
-      status: 'active'
-    },
-    {
-      id: 3,
-      type: 'lab',
-      patient: 'Hassan Malik',
-      test: 'Blood Test',
-      time: '1 hour ago',
-      status: 'pending'
-    },
-    {
-      id: 4,
-      type: 'discharge',
-      patient: 'Aisha Khan',
-      time: '2 hours ago',
-      status: 'completed'
-    }
-  ];
-
-  const upcomingAppointments = [
-    {
-      time: '10:00 AM',
-      patient: 'John Smith',
-      doctor: 'Dr. Ahmed Khan',
-      type: 'Follow-up',
-      department: 'Cardiology'
-    },
-    {
-      time: '11:30 AM',
-      patient: 'Sarah Johnson',
-      doctor: 'Dr. Michael Chen',
-      type: 'Consultation',
-      department: 'Neurology'
-    },
-    {
-      time: '02:00 PM',
-      patient: 'Ali Hassan',
-      doctor: 'Dr. Fatima Ali',
-      type: 'Check-up',
-      department: 'General'
-    }
-  ];
-
-  const criticalAlerts = [
-    {
-      type: 'bed',
-      message: 'ICU beds at 95% capacity',
-      severity: 'high',
-      time: '5 min ago'
-    },
-    {
-      type: 'stock',
-      message: '3 medicines below minimum stock',
-      severity: 'medium',
-      time: '15 min ago'
-    },
-    {
-      type: 'lab',
-      message: '12 urgent lab results pending',
-      severity: 'high',
-      time: '20 min ago'
-    }
-  ];
+  // Use API data if available, otherwise fallback to dummy data
+  const displayPatientVisits = patientVisitsData.length > 0 ? patientVisitsData : dummyPatientVisitsData;
+  const displayRevenue = revenueData.length > 0 ? revenueData : dummyRevenueData;
+  const displayDeptStats = departmentStats.length > 0 ? departmentStats : dummyDepartmentStats;
 
   return (
     <div className="p-6 space-y-6 bg-gray-50">
@@ -172,67 +144,78 @@ export function EnhancedAdminDashboard() {
         </div>
       </div>
 
-      {/* AI Predictions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-              <Badge className="bg-white/20 text-white border-0">AI</Badge>
-            </div>
-            <h3 className="text-sm font-medium text-blue-100 mb-1">Today's Patient Flow</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold">168</span>
-              <span className="text-sm text-blue-100">expected</span>
-            </div>
-            <p className="text-xs text-blue-100 mt-3 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              15% increase from yesterday
-            </p>
+      {loading && (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-6 text-center">
+            <RefreshCw className="w-12 h-12 text-[#2F80ED] animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Loading dashboard data...</p>
           </CardContent>
         </Card>
+      )}
 
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-green-600 to-green-700 text-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <DollarSign className="w-6 h-6" />
-              </div>
-              <Badge className="bg-white/20 text-white border-0">AI</Badge>
-            </div>
-            <h3 className="text-sm font-medium text-green-100 mb-1">Revenue Forecast</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold">PKR 1.42M</span>
-            </div>
-            <p className="text-xs text-green-100 mt-3 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              This week's projection
-            </p>
-          </CardContent>
-        </Card>
+      {!loading && (
+        <>
+          {/* AI Predictions */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-white/20 text-white border-0">AI</Badge>
+                </div>
+                <h3 className="text-sm font-medium text-blue-100 mb-1">Today's Patient Flow</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">{overview?.aiPredictions?.patientFlow || 168}</span>
+                  <span className="text-sm text-blue-100">expected</span>
+                </div>
+                <p className="text-xs text-blue-100 mt-3 flex items-center gap-1">
+                  <Zap className="w-3 h-3" />
+                  15% increase from yesterday
+                </p>
+              </CardContent>
+            </Card>
 
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-600 to-purple-700 text-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Bed className="w-6 h-6" />
-              </div>
-              <Badge className="bg-white/20 text-white border-0">AI</Badge>
-            </div>
-            <h3 className="text-sm font-medium text-purple-100 mb-1">Bed Occupancy</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold">85%</span>
-              <span className="text-sm text-purple-100">tomorrow</span>
-            </div>
-            <p className="text-xs text-purple-100 mt-3 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              Prepare 12 additional beds
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-green-600 to-green-700 text-white">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <DollarSign className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-white/20 text-white border-0">AI</Badge>
+                </div>
+                <h3 className="text-sm font-medium text-green-100 mb-1">Revenue Forecast</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">PKR {overview?.aiPredictions?.revenueForecast ? (overview.aiPredictions.revenueForecast / 1000000).toFixed(2) + 'M' : '1.42M'}</span>
+                </div>
+                <p className="text-xs text-green-100 mt-3 flex items-center gap-1">
+                  <Zap className="w-3 h-3" />
+                  This week's projection
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-600 to-purple-700 text-white">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Bed className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-white/20 text-white border-0">AI</Badge>
+                </div>
+                <h3 className="text-sm font-medium text-purple-100 mb-1">Bed Occupancy</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">{overview?.aiPredictions?.bedOccupancy || 85}%</span>
+                  <span className="text-sm text-purple-100">tomorrow</span>
+                </div>
+                <p className="text-xs text-purple-100 mt-3 flex items-center gap-1">
+                  <Zap className="w-3 h-3" />
+                  Prepare 12 additional beds
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
       {/* Main KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -248,13 +231,13 @@ export function EnhancedAdminDashboard() {
               </div>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Total Patients</h3>
-            <p className="text-3xl font-bold text-gray-900 mb-3">2,847</p>
+            <p className="text-3xl font-bold text-gray-900 mb-3">{overview?.totalPatients?.toLocaleString() || '2,847'}</p>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <span>Target: 3,000</span>
-                <span>94.9%</span>
+                <span>{overview?.totalPatients ? Math.round((overview.totalPatients / 3000) * 100 * 10) / 10 : 94.9}%</span>
               </div>
-              <Progress value={94.9} className="h-2" />
+              <Progress value={overview?.totalPatients ? (overview.totalPatients / 3000) * 100 : 94.9} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -271,9 +254,9 @@ export function EnhancedAdminDashboard() {
               </div>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Active Doctors</h3>
-            <p className="text-3xl font-bold text-gray-900 mb-3">48</p>
+            <p className="text-3xl font-bold text-gray-900 mb-3">{overview?.activeDoctors || 48}</p>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">35 On-duty</span>
+              <span className="text-gray-500">{overview?.onDutyDoctors || 35} On-duty</span>
               <Badge className="bg-green-100 text-green-800 text-xs">All staffed</Badge>
             </div>
           </CardContent>
@@ -291,10 +274,10 @@ export function EnhancedAdminDashboard() {
               </div>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Today's Appointments</h3>
-            <p className="text-3xl font-bold text-gray-900 mb-3">127</p>
+            <p className="text-3xl font-bold text-gray-900 mb-3">{overview?.todayAppointments || 127}</p>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-green-600">89 Completed</span>
-              <span className="text-yellow-600">38 Pending</span>
+              <span className="text-green-600">{overview?.completedAppointments || 89} Completed</span>
+              <span className="text-yellow-600">{overview?.pendingAppointments || 38} Pending</span>
             </div>
           </CardContent>
         </Card>
@@ -311,13 +294,13 @@ export function EnhancedAdminDashboard() {
               </div>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Monthly Revenue</h3>
-            <p className="text-3xl font-bold text-gray-900 mb-3">PKR 12.5M</p>
+            <p className="text-3xl font-bold text-gray-900 mb-3">PKR {overview?.monthlyRevenue ? (overview.monthlyRevenue / 1000000).toFixed(1) + 'M' : '12.5M'}</p>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <span>Target: PKR 15M</span>
-                <span>83.3%</span>
+                <span>{overview?.monthlyRevenue ? Math.round((overview.monthlyRevenue / 15000000) * 100 * 10) / 10 : 83.3}%</span>
               </div>
-              <Progress value={83.3} className="h-2" />
+              <Progress value={overview?.monthlyRevenue ? (overview.monthlyRevenue / 15000000) * 100 : 83.3} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -333,10 +316,10 @@ export function EnhancedAdminDashboard() {
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-600">Bed Occupancy</p>
-                <p className="text-2xl font-bold text-gray-900">78%</p>
+                <p className="text-2xl font-bold text-gray-900">{overview?.bedOccupancy || 78}%</p>
               </div>
             </div>
-            <Progress value={78} className="h-2" />
+            <Progress value={overview?.bedOccupancy || 78} className="h-2" />
           </CardContent>
         </Card>
 
@@ -348,10 +331,10 @@ export function EnhancedAdminDashboard() {
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-600">Pending Labs</p>
-                <p className="text-2xl font-bold text-gray-900">23</p>
+                <p className="text-2xl font-bold text-gray-900">{overview?.pendingLabs || 23}</p>
               </div>
             </div>
-            <Badge className="bg-red-100 text-red-800">12 Urgent</Badge>
+            <Badge className="bg-red-100 text-red-800">{overview?.urgentLabs || 12} Urgent</Badge>
           </CardContent>
         </Card>
 
@@ -363,10 +346,10 @@ export function EnhancedAdminDashboard() {
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-600">Medicine Stock</p>
-                <p className="text-2xl font-bold text-gray-900">98%</p>
+                <p className="text-2xl font-bold text-gray-900">{overview?.medicineStock || 98}%</p>
               </div>
             </div>
-            <Progress value={98} className="h-2" />
+            <Progress value={overview?.medicineStock || 98} className="h-2" />
           </CardContent>
         </Card>
 
@@ -378,7 +361,7 @@ export function EnhancedAdminDashboard() {
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-600">Satisfaction</p>
-                <p className="text-2xl font-bold text-gray-900">4.7/5</p>
+                <p className="text-2xl font-bold text-gray-900">{overview?.satisfaction || 4.7}/5</p>
               </div>
             </div>
             <Badge className="bg-green-100 text-green-800">Excellent</Badge>
@@ -404,7 +387,7 @@ export function EnhancedAdminDashboard() {
           </CardHeader>
           <CardContent className="p-6">
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={patientVisitsData}>
+              <AreaChart data={displayPatientVisits}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />
@@ -425,7 +408,7 @@ export function EnhancedAdminDashboard() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={departmentStats}
+                  data={displayDeptStats}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -434,7 +417,7 @@ export function EnhancedAdminDashboard() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {departmentStats.map((entry, index) => (
+                  {displayDeptStats.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -454,16 +437,16 @@ export function EnhancedAdminDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
-              <Tooltip formatter={(value: number) => `PKR ${(value / 1000000).toFixed(2)}M`} />
-              <Bar dataKey="revenue" fill="#27AE60" name="Revenue" />
-              <Bar dataKey="expenses" fill="#EB5757" name="Expenses" />
-            </BarChart>
-          </ResponsiveContainer>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={displayRevenue}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Tooltip formatter={(value: number) => `PKR ${(value / 1000000).toFixed(2)}M`} />
+                <Bar dataKey="revenue" fill="#27AE60" name="Revenue" />
+                <Bar dataKey="expenses" fill="#EB5757" name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
         </CardContent>
       </Card>
 
@@ -574,6 +557,8 @@ export function EnhancedAdminDashboard() {
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }

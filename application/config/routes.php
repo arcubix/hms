@@ -308,6 +308,11 @@ $route['api/donation-donors/(:num)/payments'] = 'donationdonors/payments/$1'; //
 $route['api/donation-donors'] = 'donationdonors/index';
 $route['api/donation-donors/(:num)'] = 'donationdonors/get/$1';
 
+// Priority Modules Routes
+$route['api/modules'] = 'prioritymodules/index';
+$route['api/priority-modules'] = 'prioritymodules/get_priority_modules';
+$route['api/priority-modules/(:any)'] = 'prioritymodules/delete_priority_module/$1';
+
 // System Settings Routes (order matters - more specific routes first)
 $route['api/system-settings/room-mode'] = 'system_settings/room_mode';
 $route['api/system-settings/category/(:any)'] = 'system_settings/category/$1';
@@ -370,6 +375,16 @@ $route['api/message-statistics/by-platform'] = 'message_statistics/by_platform';
 // IPD Management Routes
 // Dashboard
 $route['api/ipd/dashboard'] = 'ipd/dashboard';
+
+// Hospital Dashboard
+$route['api/dashboard/overview'] = 'dashboard/overview';
+$route['api/dashboard/patient-trends'] = 'dashboard/patient_trends';
+$route['api/dashboard/revenue-trends'] = 'dashboard/revenue_trends';
+$route['api/dashboard/department-stats'] = 'dashboard/department_stats';
+$route['api/dashboard/recent-activities'] = 'dashboard/recent_activities';
+$route['api/dashboard/upcoming-appointments'] = 'dashboard/upcoming_appointments';
+$route['api/dashboard/alerts'] = 'dashboard/alerts';
+$route['api/dashboard/evaluation'] = 'dashboard/evaluation';
 $route['api/ipd/stats'] = 'ipd/stats';
 
 // Admissions
@@ -443,6 +458,42 @@ $route['api/ipd/admission-requests'] = 'ipd/admission_requests';
 $route['api/ipd/admission-requests/(:num)'] = 'ipd/admission_requests/$1';
 $route['api/ipd/admission-requests/(:num)/approve'] = 'ipd/approve_admission_request/$1';
 $route['api/ipd/admission-requests/(:num)/reject'] = 'ipd/reject_admission_request/$1';
+
+// IPD Reports Routes
+$route['api/ipd/reports/daily-admissions'] = 'ipd_reports/daily_admissions';
+$route['api/ipd/reports/daily-discharges'] = 'ipd_reports/daily_discharges';
+$route['api/ipd/reports/alos'] = 'ipd_reports/alos';
+$route['api/ipd/reports/transfers'] = 'ipd_reports/transfers';
+$route['api/ipd/reports/bed-occupancy'] = 'ipd_reports/bed_occupancy';
+$route['api/ipd/reports/bed-turnover'] = 'ipd_reports/bed_turnover';
+$route['api/ipd/reports/census'] = 'ipd_reports/census';
+$route['api/ipd/reports/revenue'] = 'ipd_reports/revenue';
+$route['api/ipd/reports/consultant-revenue'] = 'ipd_reports/consultant_revenue';
+$route['api/ipd/reports/billing-summary'] = 'ipd_reports/billing_summary';
+$route['api/ipd/reports/advance-received'] = 'ipd_reports/advance_received';
+$route['api/ipd/reports/pending-bills'] = 'ipd_reports/pending_bills';
+$route['api/ipd/reports/bill-comparison'] = 'ipd_reports/bill_comparison';
+$route['api/ipd/reports/panel-billing'] = 'ipd_reports/panel_billing';
+$route['api/ipd/reports/diagnosis-wise'] = 'ipd_reports/diagnosis_wise';
+$route['api/ipd/reports/procedure-wise'] = 'ipd_reports/procedure_wise';
+$route['api/ipd/reports/doctor-patient-load'] = 'ipd_reports/doctor_patient_load';
+$route['api/ipd/reports/medication-chart'] = 'ipd_reports/medication_chart';
+$route['api/ipd/reports/vital-monitoring'] = 'ipd_reports/vital_monitoring';
+$route['api/ipd/reports/nursing-care'] = 'ipd_reports/nursing_care';
+$route['api/ipd/reports/realtime-occupancy'] = 'ipd_reports/realtime_occupancy';
+$route['api/ipd/reports/ward-saturation'] = 'ipd_reports/ward_saturation';
+$route['api/ipd/reports/room-type-usage'] = 'ipd_reports/room_type_usage';
+$route['api/ipd/reports/bed-allocation'] = 'ipd_reports/bed_allocation';
+$route['api/ipd/reports/bed-blocking'] = 'ipd_reports/bed_blocking';
+$route['api/ipd/reports/medication-consumption'] = 'ipd_reports/medication_consumption';
+$route['api/ipd/reports/lab-utilization'] = 'ipd_reports/lab_utilization';
+$route['api/ipd/reports/delayed-lab-reports'] = 'ipd_reports/delayed_lab_reports';
+$route['api/ipd/reports/critical-lab-results'] = 'ipd_reports/critical_lab_results';
+$route['api/ipd/reports/radiology-usage'] = 'ipd_reports/radiology_usage';
+$route['api/ipd/reports/panel-admissions'] = 'ipd_reports/panel_admissions';
+$route['api/ipd/reports/panel-billing-summary'] = 'ipd_reports/panel_billing_summary';
+$route['api/ipd/reports/claim-status'] = 'ipd_reports/claim_status';
+$route['api/ipd/reports/pre-auth-comparison'] = 'ipd_reports/pre_auth_comparison';
 
 // Birth Certificates
 $route['api/birth-certificates'] = 'birth_certificates/index';

@@ -15,6 +15,8 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { Info, Save, Loader2, AlertCircle } from 'lucide-react';
 import { api, UserSettings, RolePermission, UserSettingsFormData } from '../../services/api';
 import { toast } from 'sonner';
+import { usePermissions } from '../../contexts/PermissionContext';
+import { PermissionButton } from '../common/PermissionButton';
 
 interface UserSettingsProps {
   userId: number;
@@ -711,7 +713,12 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                 Discard Changes
               </Button>
             )}
-            <Button onClick={handleSave} disabled={saving || loadingSettings}>
+            <PermissionButton 
+              permission="admin.edit_users"
+              tooltipMessage="You need permission to edit user settings"
+              onClick={handleSave} 
+              disabled={saving || loadingSettings}
+            >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -723,7 +730,7 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                   Save Settings
                 </>
               )}
-            </Button>
+            </PermissionButton>
           </div>
         </CardContent>
       </Card>

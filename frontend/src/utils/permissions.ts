@@ -134,6 +134,69 @@ export function filterMenuItems(
     .filter((item): item is NavigationItem => item !== null);
 }
 
+/**
+ * Check if user has a specific permission
+ * @param permission Permission key to check
+ * @param userPermissions Optional permissions object (if not provided, returns false)
+ * @returns True if user has the permission
+ */
+export function hasPermission(
+  permission: string,
+  userPermissions?: Record<string, boolean>
+): boolean {
+  if (!userPermissions) {
+    return false;
+  }
+  return userPermissions[permission] === true;
+}
+
+/**
+ * Check if user has any of the specified permissions
+ * @param permissions Array of permission keys
+ * @param userPermissions Optional permissions object
+ * @returns True if user has at least one permission
+ */
+export function hasAnyPermission(
+  permissions: string[],
+  userPermissions?: Record<string, boolean>
+): boolean {
+  if (!userPermissions || permissions.length === 0) {
+    return false;
+  }
+  return permissions.some(perm => hasPermission(perm, userPermissions));
+}
+
+/**
+ * Check if user has all of the specified permissions
+ * @param permissions Array of permission keys
+ * @param userPermissions Optional permissions object
+ * @returns True if user has all permissions
+ */
+export function hasAllPermissions(
+  permissions: string[],
+  userPermissions?: Record<string, boolean>
+): boolean {
+  if (!userPermissions || permissions.length === 0) {
+    return false;
+  }
+  return permissions.every(perm => hasPermission(perm, userPermissions));
+}
+
+/**
+ * Require a specific permission (throws error if missing)
+ * @param permission Permission key required
+ * @param userPermissions Optional permissions object
+ * @throws Error if permission is missing
+ */
+export function requirePermission(
+  permission: string,
+  userPermissions?: Record<string, boolean>
+): void {
+  if (!hasPermission(permission, userPermissions)) {
+    throw new Error(`Permission denied: ${permission} is required`);
+  }
+}
+
 // Re-export NavigationItem type for convenience
 import type { NavigationItem } from '../components/common/TopNavigation';
 export type { NavigationItem };

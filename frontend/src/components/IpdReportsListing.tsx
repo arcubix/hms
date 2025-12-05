@@ -17,14 +17,87 @@ import {
   Building2,
   Users,
   Download,
-  Filter
+  Filter,
+  CheckCircle,
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 
 interface Report {
   id: string;
   name: string;
   description: string;
+  status?: 'implemented' | 'partial' | 'not-implemented';
 }
+
+// Report implementation status mapping
+const REPORT_STATUS: Record<string, 'implemented' | 'partial' | 'not-implemented'> = {
+  // Fully Implemented (Green)
+  'daily-admission': 'implemented',
+  'discharge-summary': 'implemented',
+  'alos-report': 'implemented',
+  'transfer-report': 'implemented',
+  'occupancy-report': 'implemented',
+  'bed-turnover': 'implemented',
+  'census-report': 'implemented',
+  'revenue-report': 'implemented',
+  'collection-report': 'implemented',
+  'billing-summary': 'implemented',
+  'insurance-claims': 'implemented',
+  'credit-debtors': 'implemented',
+  'package-wise': 'implemented',
+  'discount-concession': 'implemented',
+  'mortality-report': 'implemented',
+  'complication-tracking': 'implemented',
+  'infection-rate': 'implemented',
+  'critical-care': 'implemented',
+  'realtime-occupancy': 'implemented',
+  'ward-saturation': 'implemented',
+  'room-type-usage': 'implemented',
+  'bed-allocation': 'implemented',
+  'bed-blocking': 'implemented',
+  'panel-admissions': 'implemented',
+  'panel-billing': 'implemented',
+  'claim-status': 'implemented',
+  'pre-auth-comparison': 'implemented',
+  
+  // Partially Implemented (Yellow/Orange)
+  'medication-consumption': 'partial',
+  'lab-utilization': 'partial',
+  'delayed-reports': 'partial',
+  'critical-results': 'partial',
+  'radiology-usage': 'partial',
+  'readmission-rate': 'partial',
+  'treatment-outcome': 'partial',
+  'adverse-events': 'partial',
+  'medication-errors': 'partial',
+  'nursing-workload': 'partial',
+  'staff-efficiency': 'partial',
+  'handover-report': 'partial',
+  'discharge-summary-status': 'partial',
+  'documentation-quality': 'partial',
+  'tat-monitoring': 'partial',
+  'dnr-status': 'partial',
+  
+  // Not Implemented (Red)
+  'surgery-roster': 'not-implemented',
+  'surgical-outcome': 'not-implemented',
+  'surgery-type-frequency': 'not-implemented',
+  'ot-utilization': 'not-implemented',
+  'anesthesia-report': 'not-implemented',
+  'high-cost-drugs': 'not-implemented',
+  'ward-inventory': 'not-implemented',
+  'consumables-implants': 'not-implemented',
+  'patient-complaints': 'not-implemented',
+  'audit-trail': 'not-implemented',
+  'nabh-compliance': 'not-implemented',
+  'code-blue': 'not-implemented',
+  'consent-tracking': 'not-implemented',
+  'discharge-summary-status': 'not-implemented',
+  'documentation-quality': 'not-implemented',
+  'tat-monitoring': 'not-implemented',
+  'dnr-status': 'not-implemented'
+};
 
 interface ReportCategory {
   id: string;
@@ -350,28 +423,90 @@ export default function IpdReportsListing() {
                 {/* Reports List */}
                 <div className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {category.reports.map((report) => (
-                      <button
-                        key={report.id}
-                        onClick={() => handleReportClick(report.id, report.name)}
-                        className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:border-[#2F80ED] hover:shadow-md transition-all text-left group"
-                      >
-                        <div className="flex-shrink-0 mt-1">
-                          <div className="w-10 h-10 rounded-lg bg-gray-50 group-hover:bg-[#2F80ED] transition-colors flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                    {category.reports.map((report) => {
+                      const status = REPORT_STATUS[report.id] || 'not-implemented';
+                      const statusConfig = {
+                        'implemented': {
+                          color: 'bg-green-100 text-green-800 border-green-200',
+                          icon: CheckCircle,
+                          label: 'Implemented',
+                          iconColor: 'text-green-600'
+                        },
+                        'partial': {
+                          color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                          icon: AlertCircle,
+                          label: 'Partial',
+                          iconColor: 'text-yellow-600'
+                        },
+                        'not-implemented': {
+                          color: 'bg-red-100 text-red-800 border-red-200',
+                          icon: XCircle,
+                          label: 'Not Implemented',
+                          iconColor: 'text-red-600'
+                        }
+                      };
+                      const config = statusConfig[status];
+                      const StatusIcon = config.icon;
+                      
+                      return (
+                        <button
+                          key={report.id}
+                          onClick={() => handleReportClick(report.id, report.name)}
+                          className={`flex items-start gap-4 p-4 border rounded-lg hover:shadow-md transition-all text-left group relative ${
+                            status === 'implemented' 
+                              ? 'border-green-200 hover:border-green-300 bg-green-50/30' 
+                              : status === 'partial'
+                              ? 'border-yellow-200 hover:border-yellow-300 bg-yellow-50/30'
+                              : 'border-red-200 hover:border-red-300 bg-red-50/30'
+                          }`}
+                        >
+                          {/* Status Badge */}
+                          <div className={`absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+                            <StatusIcon className={`w-3 h-3 ${config.iconColor}`} />
+                            <span>{config.label}</span>
                           </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-gray-900 mb-1 group-hover:text-[#2F80ED] transition-colors">
-                            {report.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 line-clamp-2">{report.description}</p>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <Download className="w-5 h-5 text-gray-400 group-hover:text-[#2F80ED] transition-colors" />
-                        </div>
-                      </button>
-                    ))}
+                          
+                          <div className="flex-shrink-0 mt-1">
+                            <div className={`w-10 h-10 rounded-lg transition-colors flex items-center justify-center ${
+                              status === 'implemented'
+                                ? 'bg-green-50 group-hover:bg-green-100'
+                                : status === 'partial'
+                                ? 'bg-yellow-50 group-hover:bg-yellow-100'
+                                : 'bg-red-50 group-hover:bg-red-100'
+                            }`}>
+                              <TrendingUp className={`w-5 h-5 transition-colors ${
+                                status === 'implemented'
+                                  ? 'text-green-600'
+                                  : status === 'partial'
+                                  ? 'text-yellow-600'
+                                  : 'text-red-600'
+                              }`} />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0 pr-16">
+                            <h3 className={`mb-1 transition-colors ${
+                              status === 'implemented'
+                                ? 'text-gray-900 group-hover:text-green-700'
+                                : status === 'partial'
+                                ? 'text-gray-900 group-hover:text-yellow-700'
+                                : 'text-gray-700 group-hover:text-red-700'
+                            }`}>
+                              {report.name}
+                            </h3>
+                            <p className="text-sm text-gray-600 line-clamp-2">{report.description}</p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <Download className={`w-5 h-5 transition-colors ${
+                              status === 'implemented'
+                                ? 'text-green-600 group-hover:text-green-700'
+                                : status === 'partial'
+                                ? 'text-yellow-600 group-hover:text-yellow-700'
+                                : 'text-red-600 group-hover:text-red-700'
+                            }`} />
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -381,7 +516,7 @@ export default function IpdReportsListing() {
 
         {/* Footer Stats */}
         <div className="mt-8 bg-white rounded-xl shadow-sm p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div className="text-center">
               <div className="text-gray-900 mb-1">{reportCategories.length}</div>
               <p className="text-sm text-gray-600">Report Categories</p>
@@ -401,6 +536,37 @@ export default function IpdReportsListing() {
                 {filteredCategories.reduce((sum, cat) => sum + cat.reports.length, 0)}
               </div>
               <p className="text-sm text-gray-600">Matching Reports</p>
+            </div>
+          </div>
+          
+          {/* Status Legend */}
+          <div className="border-t pt-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Implementation Status</h3>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-green-100 border-2 border-green-300 flex items-center justify-center">
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                </div>
+                <span className="text-sm text-gray-600">
+                  <span className="font-medium text-green-700">Implemented</span> - Fully functional with real data
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-yellow-100 border-2 border-yellow-300 flex items-center justify-center">
+                  <AlertCircle className="w-3 h-3 text-yellow-600" />
+                </div>
+                <span className="text-sm text-gray-600">
+                  <span className="font-medium text-yellow-700">Partial</span> - Basic implementation, needs verification
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-red-100 border-2 border-red-300 flex items-center justify-center">
+                  <XCircle className="w-3 h-3 text-red-600" />
+                </div>
+                <span className="text-sm text-gray-600">
+                  <span className="font-medium text-red-700">Not Implemented</span> - Shows dummy data, needs development
+                </span>
+              </div>
             </div>
           </div>
         </div>

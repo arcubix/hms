@@ -23,6 +23,11 @@ class Message_platforms extends Api {
      */
     public function index() {
         try {
+            // Check permission for viewing message platform settings
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $this->db->select('*');
             $this->db->from('message_platform_settings');
             $this->db->order_by('platform', 'ASC');
@@ -65,6 +70,11 @@ class Message_platforms extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Check permission for viewing message platform settings
+                if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                    return;
+                }
+                
                 $platform = $this->get_platform_by_type($type);
                 if ($platform) {
                     // Hide sensitive data
@@ -82,6 +92,10 @@ class Message_platforms extends Api {
                     $this->error('Platform not found', 404);
                 }
             } elseif ($method === 'PUT') {
+                // Check permission for updating message platform settings
+                if (!$this->requirePermission('admin.edit_users')) {
+                    return;
+                }
                 $this->update($type);
             } else {
                 $this->error('Method not allowed', 405);

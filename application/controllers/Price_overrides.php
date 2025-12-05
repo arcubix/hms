@@ -23,6 +23,11 @@ class Price_overrides extends Api {
         $method = $this->input->server('REQUEST_METHOD');
         
         if ($method === 'GET') {
+            // Check permission for viewing price overrides
+            if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+                return;
+            }
+            
             $filters = array();
             
             if ($this->input->get('status')) {
@@ -45,6 +50,10 @@ class Price_overrides extends Api {
             $this->success($overrides);
             
         } elseif ($method === 'POST') {
+            // Check permission for creating price overrides
+            if (!$this->requirePermission('admin.edit_users')) {
+                return;
+            }
             $this->create();
         } else {
             $this->error('Method not allowed', 405);
@@ -125,9 +134,8 @@ class Price_overrides extends Api {
             return;
         }
         
-        // Check if user has manager role (you can customize this)
-        if (!isset($this->user['role']) || $this->user['role'] !== 'manager') {
-            $this->error('Manager authorization required', 403);
+        // Check permission for approving price overrides
+        if (!$this->requirePermission('admin.edit_users')) {
             return;
         }
         
@@ -161,9 +169,8 @@ class Price_overrides extends Api {
             return;
         }
         
-        // Check if user has manager role
-        if (!isset($this->user['role']) || $this->user['role'] !== 'manager') {
-            $this->error('Manager authorization required', 403);
+        // Check permission for rejecting price overrides
+        if (!$this->requirePermission('admin.edit_users')) {
             return;
         }
         
@@ -187,6 +194,11 @@ class Price_overrides extends Api {
      * GET /api/pharmacy/price-overrides/pending - Get pending overrides
      */
     public function pending() {
+        // Check permission for viewing pending price overrides
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         $overrides = $this->Price_override_model->get_pending();
         $this->success($overrides);
     }

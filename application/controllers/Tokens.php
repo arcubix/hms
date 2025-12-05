@@ -20,6 +20,11 @@ class Tokens extends Api {
      * GET /api/tokens/reception/:reception_id - Get tokens for reception
      */
     public function reception($reception_id = null) {
+        // Check permission for viewing tokens
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$reception_id) {
             $this->error('Reception ID is required', 400);
             return;
@@ -36,6 +41,11 @@ class Tokens extends Api {
      * GET /api/tokens/floor/:floor_id - Get tokens for floor
      */
     public function floor($floor_id = null) {
+        // Check permission for viewing tokens
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$floor_id) {
             $this->error('Floor ID is required', 400);
             return;
@@ -52,6 +62,11 @@ class Tokens extends Api {
      * GET /api/tokens/doctor/:doctor_id - Get tokens for doctor
      */
     public function doctor($doctor_id = null) {
+        // Check permission for viewing tokens
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$doctor_id) {
             $this->error('Doctor ID is required', 400);
             return;
@@ -68,6 +83,11 @@ class Tokens extends Api {
      * GET /api/tokens/queue/:reception_id - Get waiting queue for reception
      */
     public function queue($reception_id = null) {
+        // Check permission for viewing token queue
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$reception_id) {
             $this->error('Reception ID is required', 400);
             return;
@@ -83,6 +103,11 @@ class Tokens extends Api {
      * PUT /api/tokens/:id/status - Update token status
      */
     public function update_status($id = null) {
+        // Check permission for updating token status
+        if (!$this->requirePermission('admin.edit_users')) {
+            return;
+        }
+        
         if (!$id) {
             $this->error('Token ID is required', 400);
             return;
@@ -118,6 +143,11 @@ class Tokens extends Api {
      * GET /api/tokens/:id - Get single token
      */
     public function get($id = null) {
+        // Check permission for viewing tokens
+        if (!$this->requireAnyPermission(['admin.view_users', 'admin.edit_users'])) {
+            return;
+        }
+        
         if (!$id) {
             $this->error('Token ID is required', 400);
             return;
