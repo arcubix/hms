@@ -25,6 +25,11 @@ class Ipd extends Api {
         $this->load->model('Ipd_rehabilitation_request_model');
         $this->load->model('Ipd_admission_request_model');
         $this->load->model('Ipd_duty_roster_model');
+        $this->load->model('Ipd_ot_schedule_model');
+        $this->load->model('Ipd_surgery_charges_model');
+        $this->load->model('Ipd_surgery_consumables_model');
+        $this->load->model('Ipd_pre_op_checklist_model');
+        $this->load->library('PaymentProcessor');
         
         // Verify token for all requests (except OPTIONS which already exited)
         if (!$this->verify_token()) {
@@ -845,6 +850,37 @@ class Ipd extends Api {
             }
         } catch (Exception $e) {
             log_message('error', 'IPD discharge error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get all discharges
+     * GET /api/ipd/discharges
+     */
+    public function discharges() {
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                // Check permission for viewing IPD discharges
+                if (!$this->requirePermission('doctor.view_all_patients')) {
+                    return;
+                }
+                
+                $filters = array(
+                    'search' => $this->input->get('search'),
+                    'date_from' => $this->input->get('date_from'),
+                    'date_to' => $this->input->get('date_to')
+                );
+                
+                $discharges = $this->Ipd_discharge_model->get_all($filters);
+                $this->success($discharges);
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD discharges list error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }
@@ -1749,11 +1785,21 @@ class Ipd extends Api {
             $method = $this->input->server('REQUEST_METHOD');
             
             if ($method === 'GET') {
+                // Get from unified lab_orders table
+                $this->load->model('Lab_order_model');
+                $orders = $this->Lab_order_model->get_all(array(
+                    'order_type' => 'IPD',
+                    'order_source_id' => $admission_id
+                ));
+                
+                // Also get from legacy ipd_lab_orders for backward compatibility
                 $this->db->where('admission_id', $admission_id);
                 $this->db->order_by('order_date', 'DESC');
                 $this->db->order_by('order_time', 'DESC');
                 $query = $this->db->get('ipd_lab_orders');
-                $orders = $query->result_array();
+                $legacy_orders = $query->result_array();
+                
+                // Merge results (prefer unified orders)
                 $this->success($orders);
             } elseif ($method === 'POST') {
                 $data = json_decode($this->input->raw_input_stream, true);
@@ -1767,14 +1813,67 @@ class Ipd extends Api {
                     return;
                 }
                 
-                $data['admission_id'] = $admission_id;
-                $data['patient_id'] = $admission['patient_id'];
-                $data['created_at'] = date('Y-m-d H:i:s');
-                $data['updated_at'] = date('Y-m-d H:i:s');
+                // Create unified lab order
+                $this->load->model('Lab_order_model');
+                $this->load->model('Lab_test_model');
                 
-                if ($this->db->insert('ipd_lab_orders', $data)) {
-                    $order_id = $this->db->insert_id();
-                    $order = $this->db->get_where('ipd_lab_orders', array('id' => $order_id))->row_array();
+                // Prepare lab order data
+                $order_data = array(
+                    'patient_id' => $admission['patient_id'],
+                    'order_type' => 'IPD',
+                    'order_source_id' => $admission_id,
+                    'ordered_by_user_id' => $this->user && isset($this->user['id']) ? $this->user['id'] : null,
+                    'priority' => isset($data['priority']) ? $data['priority'] : 'routine',
+                    'notes' => isset($data['notes']) ? $data['notes'] : null,
+                    'organization_id' => $this->user && isset($this->user['organization_id']) ? $this->user['organization_id'] : null
+                );
+                
+                // Prepare tests array
+                $test_name = isset($data['test_name']) ? $data['test_name'] : 'Lab Test';
+                $test_type = isset($data['test_type']) ? $data['test_type'] : null;
+                
+                // Get test price if lab_test_id provided
+                $test_price = 0.00;
+                $test_code = null;
+                if (!empty($data['lab_test_id'])) {
+                    $lab_test = $this->Lab_test_model->get_by_id($data['lab_test_id']);
+                    if ($lab_test) {
+                        $test_price = isset($lab_test['price']) ? $lab_test['price'] : 0.00;
+                        $test_code = $lab_test['test_code'];
+                    }
+                }
+                
+                $order_data['tests'] = array(array(
+                    'lab_test_id' => isset($data['lab_test_id']) ? $data['lab_test_id'] : null,
+                    'test_name' => $test_name,
+                    'test_code' => $test_code,
+                    'price' => $test_price,
+                    'priority' => $order_data['priority'],
+                    'instructions' => isset($data['instructions']) ? $data['instructions'] : null
+                ));
+                
+                // Create unified lab order
+                $lab_order_id = $this->Lab_order_model->create($order_data);
+                
+                if ($lab_order_id) {
+                    // Also create in ipd_lab_orders for backward compatibility
+                    $ipd_order_data = array(
+                        'admission_id' => $admission_id,
+                        'patient_id' => $admission['patient_id'],
+                        'order_date' => date('Y-m-d'),
+                        'order_time' => date('H:i:s'),
+                        'ordered_by_user_id' => $order_data['ordered_by_user_id'],
+                        'test_name' => $test_name,
+                        'test_type' => $test_type,
+                        'priority' => $order_data['priority'],
+                        'status' => 'ordered',
+                        'notes' => $order_data['notes']
+                    );
+                    
+                    $this->db->insert('ipd_lab_orders', $ipd_order_data);
+                    
+                    // Return unified order
+                    $order = $this->Lab_order_model->get_by_id($lab_order_id);
                     $this->success($order, 'Lab order created successfully');
                 } else {
                     $this->error('Failed to create lab order', 400);
@@ -2937,6 +3036,546 @@ class Ipd extends Api {
             }
         } catch (Exception $e) {
             log_message('error', 'IPD files update error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * OT Schedules
+     * GET /api/ipd/ot-schedules
+     * POST /api/ipd/ot-schedules
+     */
+    public function ot_schedules($id = null) {
+        try {
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                if ($id) {
+                    // Get single OT schedule
+                    $schedule = $this->Ipd_ot_schedule_model->get_by_id($id);
+                    if ($schedule) {
+                        $this->success($schedule);
+                    } else {
+                        $this->error('OT schedule not found', 404);
+                    }
+                } else {
+                    // Get all OT schedules with filters
+                    $filters = array();
+                    if ($this->input->get('date')) $filters['date'] = $this->input->get('date');
+                    if ($this->input->get('ot_number')) $filters['ot_number'] = $this->input->get('ot_number');
+                    if ($this->input->get('status')) $filters['status'] = $this->input->get('status');
+                    if ($this->input->get('surgeon_id')) $filters['surgeon_id'] = $this->input->get('surgeon_id');
+                    if ($this->input->get('patient_id')) $filters['patient_id'] = $this->input->get('patient_id');
+                    if ($this->input->get('admission_id')) $filters['admission_id'] = $this->input->get('admission_id');
+                    
+                    $schedules = $this->Ipd_ot_schedule_model->get_all($filters);
+                    $this->success($schedules);
+                }
+            } elseif ($method === 'POST') {
+                // Create new OT schedule
+                $data = $this->get_request_data();
+                
+                // Get admission to get patient_id
+                $admission = $this->Ipd_admission_model->get_by_id($data['admission_id']);
+                if (!$admission) {
+                    $this->error('Admission not found', 404);
+                    return;
+                }
+                
+                $data['patient_id'] = $admission['patient_id'];
+                $data['created_by_user_id'] = $this->user ? $this->user['id'] : null;
+                
+                // Get surgeon/assistant/anesthetist names if user_ids provided
+                if (!empty($data['surgeon_user_id'])) {
+                    $surgeon = $this->db->get_where('users', array('id' => $data['surgeon_user_id']))->row_array();
+                    if ($surgeon) $data['surgeon_name'] = $surgeon['name'];
+                }
+                if (!empty($data['assistant_surgeon_user_id'])) {
+                    $assistant = $this->db->get_where('users', array('id' => $data['assistant_surgeon_user_id']))->row_array();
+                    if ($assistant) $data['assistant_surgeon_name'] = $assistant['name'];
+                }
+                if (!empty($data['anesthetist_user_id'])) {
+                    $anesthetist = $this->db->get_where('users', array('id' => $data['anesthetist_user_id']))->row_array();
+                    if ($anesthetist) $data['anesthetist_name'] = $anesthetist['name'];
+                }
+                
+                $schedule_id = $this->Ipd_ot_schedule_model->create($data);
+                if ($schedule_id) {
+                    $schedule = $this->Ipd_ot_schedule_model->get_by_id($schedule_id);
+                    $this->success($schedule, 'OT schedule created successfully');
+                } else {
+                    $this->error('Failed to create OT schedule', 400);
+                }
+            } elseif ($method === 'PUT') {
+                // Update OT schedule
+                if (!$id) {
+                    $this->error('Schedule ID is required', 400);
+                    return;
+                }
+                
+                $data = $this->get_request_data();
+                
+                // Get surgeon/assistant/anesthetist names if user_ids provided
+                if (!empty($data['surgeon_user_id'])) {
+                    $surgeon = $this->db->get_where('users', array('id' => $data['surgeon_user_id']))->row_array();
+                    if ($surgeon) $data['surgeon_name'] = $surgeon['name'];
+                }
+                if (!empty($data['assistant_surgeon_user_id'])) {
+                    $assistant = $this->db->get_where('users', array('id' => $data['assistant_surgeon_user_id']))->row_array();
+                    if ($assistant) $data['assistant_surgeon_name'] = $assistant['name'];
+                }
+                if (!empty($data['anesthetist_user_id'])) {
+                    $anesthetist = $this->db->get_where('users', array('id' => $data['anesthetist_user_id']))->row_array();
+                    if ($anesthetist) $data['anesthetist_name'] = $anesthetist['name'];
+                }
+                
+                if ($this->Ipd_ot_schedule_model->update($id, $data)) {
+                    $schedule = $this->Ipd_ot_schedule_model->get_by_id($id);
+                    $this->success($schedule, 'OT schedule updated successfully');
+                } else {
+                    $this->error('Failed to update OT schedule', 400);
+                }
+            } elseif ($method === 'DELETE') {
+                // Delete OT schedule
+                if (!$id) {
+                    $this->error('Schedule ID is required', 400);
+                    return;
+                }
+                
+                if ($this->Ipd_ot_schedule_model->delete($id)) {
+                    $this->success(null, 'OT schedule deleted successfully');
+                } else {
+                    $this->error('Failed to delete OT schedule', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD OT schedules error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Check OT Availability
+     * GET /api/ipd/ot-availability
+     */
+    public function ot_availability() {
+        try {
+            $ot_number = $this->input->get('ot_number');
+            $date = $this->input->get('date');
+            $start_time = $this->input->get('start_time');
+            $duration_minutes = $this->input->get('duration_minutes');
+            
+            if (!$ot_number || !$date || !$start_time || !$duration_minutes) {
+                $this->error('Missing required parameters: ot_number, date, start_time, duration_minutes', 400);
+                return;
+            }
+            
+            $availability = $this->Ipd_ot_schedule_model->check_availability(
+                $ot_number,
+                $date,
+                $start_time,
+                intval($duration_minutes)
+            );
+            
+            // Generate alternative slots if not available
+            $alternative_slots = array();
+            if (!$availability['available']) {
+                // Suggest next available slots (simplified - can be enhanced)
+                $current_time = strtotime($date . ' ' . $start_time);
+                for ($i = 1; $i <= 5; $i++) {
+                    $next_time = $current_time + ($i * 3600); // Add hours
+                    $alternative_slots[] = array(
+                        'date' => date('Y-m-d', $next_time),
+                        'time' => date('H:i:s', $next_time),
+                        'ot_number' => $ot_number
+                    );
+                }
+            }
+            
+            $this->success(array(
+                'available' => $availability['available'],
+                'conflicts' => $availability['conflicts'],
+                'alternative_slots' => $alternative_slots
+            ));
+        } catch (Exception $e) {
+            log_message('error', 'IPD OT availability check error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Start Surgery
+     * POST /api/ipd/ot-schedules/{id}/start
+     */
+    public function ot_schedule_start($id) {
+        try {
+            if (!$id) {
+                $this->error('Schedule ID is required', 400);
+                return;
+            }
+            
+            $data = $this->get_request_data();
+            $start_time = isset($data['start_time']) ? $data['start_time'] : null;
+            
+            if ($this->Ipd_ot_schedule_model->start_surgery($id, $start_time)) {
+                $schedule = $this->Ipd_ot_schedule_model->get_by_id($id);
+                $this->success($schedule, 'Surgery started successfully');
+            } else {
+                $this->error('Failed to start surgery', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD start surgery error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Complete Surgery
+     * POST /api/ipd/ot-schedules/{id}/complete
+     */
+    public function ot_schedule_complete($id) {
+        try {
+            if (!$id) {
+                $this->error('Schedule ID is required', 400);
+                return;
+            }
+            
+            $data = $this->get_request_data();
+            $end_time = isset($data['end_time']) ? $data['end_time'] : null;
+            $actual_duration_minutes = isset($data['actual_duration_minutes']) ? intval($data['actual_duration_minutes']) : null;
+            $complications = isset($data['complications']) ? $data['complications'] : null;
+            
+            // Update complications if provided
+            if ($complications !== null) {
+                $this->Ipd_ot_schedule_model->update($id, array('complications' => $complications));
+            }
+            
+            if ($this->Ipd_ot_schedule_model->complete_surgery($id, $end_time, $actual_duration_minutes)) {
+                $schedule = $this->Ipd_ot_schedule_model->get_by_id($id);
+                $this->success($schedule, 'Surgery completed successfully');
+            } else {
+                $this->error('Failed to complete surgery', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD complete surgery error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Cancel/Postpone Surgery
+     * POST /api/ipd/ot-schedules/{id}/cancel
+     */
+    public function ot_schedule_cancel($id) {
+        try {
+            if (!$id) {
+                $this->error('Schedule ID is required', 400);
+                return;
+            }
+            
+            $data = $this->get_request_data();
+            $reason = isset($data['reason']) ? $data['reason'] : 'Cancelled';
+            $reschedule_date = isset($data['reschedule_date']) ? $data['reschedule_date'] : null;
+            $reschedule_time = isset($data['reschedule_time']) ? $data['reschedule_time'] : null;
+            
+            $update_data = array(
+                'status' => $reschedule_date ? 'Postponed' : 'Cancelled',
+                'notes' => ($reason ? $reason . '. ' : '') . ($reschedule_date ? 'Rescheduled to ' . $reschedule_date . ' ' . $reschedule_time : '')
+            );
+            
+            // If rescheduling, update date and time
+            if ($reschedule_date) {
+                $update_data['scheduled_date'] = $reschedule_date;
+                if ($reschedule_time) {
+                    $update_data['scheduled_time'] = $reschedule_time;
+                }
+            }
+            
+            if ($this->Ipd_ot_schedule_model->update($id, $update_data)) {
+                $schedule = $this->Ipd_ot_schedule_model->get_by_id($id);
+                $this->success($schedule, 'Surgery ' . ($reschedule_date ? 'postponed' : 'cancelled') . ' successfully');
+            } else {
+                $this->error('Failed to cancel surgery', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD cancel surgery error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get Operation Theatres
+     * GET /api/ipd/operation-theatres
+     */
+    public function operation_theatres() {
+        try {
+            $theatres = $this->Ipd_ot_schedule_model->get_operation_theatres();
+            $this->success($theatres);
+        } catch (Exception $e) {
+            log_message('error', 'IPD operation theatres error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Surgery Charges
+     * GET /api/ipd/surgeries/{ot_schedule_id}/charges
+     * POST /api/ipd/surgeries/{ot_schedule_id}/charges
+     * PUT /api/ipd/surgeries/{ot_schedule_id}/charges
+     */
+    public function surgery_charges($ot_schedule_id) {
+        try {
+            if (!$ot_schedule_id) {
+                $this->error('OT schedule ID is required', 400);
+                return;
+            }
+            
+            // Verify OT schedule exists
+            $ot_schedule = $this->Ipd_ot_schedule_model->get_by_id($ot_schedule_id);
+            if (!$ot_schedule) {
+                $this->error('OT schedule not found', 404);
+                return;
+            }
+            
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                // Get surgery charges
+                $charges = $this->Ipd_surgery_charges_model->get_by_ot_schedule($ot_schedule_id);
+                if ($charges) {
+                    // Get consumables
+                    $charges['consumables'] = $this->Ipd_surgery_consumables_model->get_by_surgery_charges($charges['id']);
+                    $this->success($charges);
+                } else {
+                    $this->success(null, 'No charges found');
+                }
+            } elseif ($method === 'POST') {
+                // Create surgery charges
+                $data = $this->get_request_data();
+                $data['ot_schedule_id'] = $ot_schedule_id;
+                $data['admission_id'] = $ot_schedule['admission_id'];
+                $data['patient_id'] = $ot_schedule['patient_id'];
+                $data['created_by'] = $this->user ? $this->user['id'] : null;
+                
+                // Calculate OT charges based on actual duration if available
+                if (empty($data['ot_room_charge']) && $ot_schedule['actual_duration_minutes']) {
+                    // Get OT details
+                    $ot = $this->db->get_where('operation_theatres', array('ot_number' => $ot_schedule['ot_number']))->row_array();
+                    if ($ot) {
+                        $duration_hours = $ot_schedule['actual_duration_minutes'] / 60.0;
+                        $data['ot_duration_hours'] = $duration_hours;
+                        $data['ot_rate_per_hour'] = $ot['hourly_rate'];
+                        $data['ot_minimum_charge'] = $ot['minimum_charge_hours'] * $ot['hourly_rate'];
+                        
+                        // Calculate OT room charge
+                        $min_charge_hours = floatval($ot['minimum_charge_hours']);
+                        $charge_hours = max($duration_hours, $min_charge_hours);
+                        $data['ot_room_charge'] = $charge_hours * $ot['hourly_rate'];
+                        
+                        // Calculate overtime if exceeds estimated duration
+                        if ($ot_schedule['estimated_duration_minutes'] && 
+                            $ot_schedule['actual_duration_minutes'] > $ot_schedule['estimated_duration_minutes']) {
+                            $overtime_minutes = $ot_schedule['actual_duration_minutes'] - $ot_schedule['estimated_duration_minutes'];
+                            $overtime_hours = $overtime_minutes / 60.0;
+                            $data['ot_overtime_charge'] = $overtime_hours * $ot['hourly_rate'];
+                        }
+                    }
+                }
+                
+                $charges_id = $this->Ipd_surgery_charges_model->create($data);
+                if ($charges_id) {
+                    $charges = $this->Ipd_surgery_charges_model->get_by_id($charges_id);
+                    $this->success($charges, 'Surgery charges created successfully');
+                } else {
+                    $this->error('Failed to create surgery charges', 400);
+                }
+            } elseif ($method === 'PUT') {
+                // Update surgery charges
+                $charges = $this->Ipd_surgery_charges_model->get_by_ot_schedule($ot_schedule_id);
+                if (!$charges) {
+                    $this->error('Surgery charges not found', 404);
+                    return;
+                }
+                
+                $data = $this->get_request_data();
+                
+                if ($this->Ipd_surgery_charges_model->update($charges['id'], $data)) {
+                    $updated_charges = $this->Ipd_surgery_charges_model->get_by_id($charges['id']);
+                    $this->success($updated_charges, 'Surgery charges updated successfully');
+                } else {
+                    $this->error('Failed to update surgery charges', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD surgery charges error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Surgery Consumables
+     * GET /api/ipd/surgeries/{ot_schedule_id}/consumables
+     * POST /api/ipd/surgeries/{ot_schedule_id}/consumables
+     */
+    public function surgery_consumables($ot_schedule_id, $consumable_id = null) {
+        try {
+            if (!$ot_schedule_id) {
+                $this->error('OT schedule ID is required', 400);
+                return;
+            }
+            
+            // Verify OT schedule exists
+            $ot_schedule = $this->Ipd_ot_schedule_model->get_by_id($ot_schedule_id);
+            if (!$ot_schedule) {
+                $this->error('OT schedule not found', 404);
+                return;
+            }
+            
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                if ($consumable_id) {
+                    // Get single consumable
+                    $consumable = $this->Ipd_surgery_consumables_model->get_by_id($consumable_id);
+                    if ($consumable && $consumable['ot_schedule_id'] == $ot_schedule_id) {
+                        $this->success($consumable);
+                    } else {
+                        $this->error('Consumable not found', 404);
+                    }
+                } else {
+                    // Get all consumables for this OT schedule
+                    $consumables = $this->Ipd_surgery_consumables_model->get_by_ot_schedule($ot_schedule_id);
+                    $this->success($consumables);
+                }
+            } elseif ($method === 'POST') {
+                // Create consumable
+                $data = $this->get_request_data();
+                $data['ot_schedule_id'] = $ot_schedule_id;
+                
+                // Link to surgery charges if exists
+                $charges = $this->Ipd_surgery_charges_model->get_by_ot_schedule($ot_schedule_id);
+                if ($charges) {
+                    $data['surgery_charges_id'] = $charges['id'];
+                }
+                
+                $consumable_id = $this->Ipd_surgery_consumables_model->create($data);
+                if ($consumable_id) {
+                    $consumable = $this->Ipd_surgery_consumables_model->get_by_id($consumable_id);
+                    $this->success($consumable, 'Consumable added successfully');
+                } else {
+                    $this->error('Failed to add consumable', 400);
+                }
+            } elseif ($method === 'PUT') {
+                // Update consumable
+                if (!$consumable_id) {
+                    $this->error('Consumable ID is required', 400);
+                    return;
+                }
+                
+                $data = $this->get_request_data();
+                
+                if ($this->Ipd_surgery_consumables_model->update($consumable_id, $data)) {
+                    $consumable = $this->Ipd_surgery_consumables_model->get_by_id($consumable_id);
+                    $this->success($consumable, 'Consumable updated successfully');
+                } else {
+                    $this->error('Failed to update consumable', 400);
+                }
+            } elseif ($method === 'DELETE') {
+                // Delete consumable
+                if (!$consumable_id) {
+                    $this->error('Consumable ID is required', 400);
+                    return;
+                }
+                
+                if ($this->Ipd_surgery_consumables_model->delete($consumable_id)) {
+                    $this->success(null, 'Consumable deleted successfully');
+                } else {
+                    $this->error('Failed to delete consumable', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD surgery consumables error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Pre-Operative Checklist
+     * GET /api/ipd/ot-schedules/{id}/pre-op-checklist
+     * PUT /api/ipd/ot-schedules/{id}/pre-op-checklist
+     */
+    public function pre_op_checklist($ot_schedule_id) {
+        try {
+            if (!$ot_schedule_id) {
+                $this->error('OT schedule ID is required', 400);
+                return;
+            }
+            
+            // Verify OT schedule exists
+            $ot_schedule = $this->Ipd_ot_schedule_model->get_by_id($ot_schedule_id);
+            if (!$ot_schedule) {
+                $this->error('OT schedule not found', 404);
+                return;
+            }
+            
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'GET') {
+                // Get pre-op checklist
+                $checklist = $this->Ipd_pre_op_checklist_model->get_by_ot_schedule($ot_schedule_id);
+                if ($checklist) {
+                    $this->success($checklist);
+                } else {
+                    // Return empty checklist structure
+                    $this->success(array(
+                        'ot_schedule_id' => $ot_schedule_id,
+                        'admission_id' => $ot_schedule['admission_id'],
+                        'patient_id' => $ot_schedule['patient_id'],
+                        'npo_status' => false,
+                        'pre_op_medications_given' => false,
+                        'blood_work_completed' => false,
+                        'imaging_completed' => false,
+                        'consent_signed' => false,
+                        'patient_identified' => false,
+                        'instruments_ready' => false,
+                        'consumables_available' => false,
+                        'equipment_tested' => false,
+                        'implants_available' => false,
+                        'team_briefed' => false,
+                        'anesthesia_ready' => false,
+                        'checklist_completed' => false,
+                        'notes' => null
+                    ));
+                }
+            } elseif ($method === 'PUT') {
+                // Update pre-op checklist
+                $data = $this->get_request_data();
+                $data['ot_schedule_id'] = $ot_schedule_id;
+                $data['admission_id'] = $ot_schedule['admission_id'];
+                $data['patient_id'] = $ot_schedule['patient_id'];
+                
+                if (isset($data['checklist_completed']) && $data['checklist_completed']) {
+                    $data['completed_by_user_id'] = $this->user ? $this->user['id'] : null;
+                }
+                
+                $result = $this->Ipd_pre_op_checklist_model->create_or_update($ot_schedule_id, $data);
+                if ($result) {
+                    $checklist = $this->Ipd_pre_op_checklist_model->get_by_ot_schedule($ot_schedule_id);
+                    $this->success($checklist, 'Pre-op checklist updated successfully');
+                } else {
+                    $this->error('Failed to update pre-op checklist', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'IPD pre-op checklist error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }

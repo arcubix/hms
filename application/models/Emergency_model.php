@@ -787,6 +787,15 @@ class Emergency_model extends CI_Model {
             return false;
         }
 
+        // Get visit to get patient_id
+        $visit = $this->get_by_id($visit_id);
+        if (!$visit) {
+            return false;
+        }
+
+        $this->db->trans_start();
+
+        // Insert into emergency_investigation_orders
         $insert_data = array(
             'emergency_visit_id' => intval($visit_id),
             'investigation_type' => isset($data['investigation_type']) ? $data['investigation_type'] : 'lab',
@@ -800,13 +809,70 @@ class Emergency_model extends CI_Model {
             'notes' => isset($data['notes']) ? $data['notes'] : null
         );
 
-        if ($this->db->insert('emergency_investigation_orders', $insert_data)) {
-            return $this->db->insert_id();
-        } else {
+        if (!$this->db->insert('emergency_investigation_orders', $insert_data)) {
+            $this->db->trans_rollback();
             $error = $this->db->error();
             log_message('error', 'Failed to insert investigation order: ' . json_encode($error));
             return false;
         }
+        
+        $investigation_order_id = $this->db->insert_id();
+
+        // Create unified lab order if investigation type is 'lab'
+        if (isset($data['investigation_type']) && $data['investigation_type'] === 'lab') {
+            $this->load->model('Lab_order_model');
+            $this->load->model('Lab_test_model');
+            
+            // Map priority
+            $priority_map = array(
+                'normal' => 'routine',
+                'urgent' => 'urgent',
+                'stat' => 'stat'
+            );
+            $lab_priority = isset($priority_map[$insert_data['priority']]) ? $priority_map[$insert_data['priority']] : 'stat'; // Default to stat for emergency
+            
+            // Get test price
+            $test_price = 0.00;
+            $test_code = $insert_data['test_code'];
+            if (!empty($insert_data['lab_test_id'])) {
+                $lab_test = $this->Lab_test_model->get_by_id($insert_data['lab_test_id']);
+                if ($lab_test) {
+                    $test_price = isset($lab_test['price']) ? $lab_test['price'] : 0.00;
+                    $test_code = $lab_test['test_code'];
+                }
+            }
+            
+            $order_data = array(
+                'patient_id' => $visit['patient_id'],
+                'order_type' => 'Emergency',
+                'order_source_id' => $visit_id,
+                'ordered_by_user_id' => $insert_data['ordered_by'],
+                'priority' => $lab_priority,
+                'notes' => 'Created from emergency visit: ' . ($visit['er_number'] ?? ''),
+                'tests' => array(array(
+                    'lab_test_id' => $insert_data['lab_test_id'],
+                    'test_name' => $insert_data['test_name'],
+                    'test_code' => $test_code,
+                    'price' => $test_price,
+                    'priority' => $lab_priority,
+                    'instructions' => $insert_data['notes']
+                ))
+            );
+            
+            $lab_order_id = $this->Lab_order_model->create($order_data);
+            if (!$lab_order_id) {
+                log_message('error', 'Failed to create unified lab order for emergency investigation');
+                // Don't rollback - emergency_investigation_orders is more important
+            }
+        }
+
+        $this->db->trans_complete();
+        
+        if ($this->db->trans_status() === FALSE) {
+            return false;
+        }
+
+        return $investigation_order_id;
     }
 
     /**

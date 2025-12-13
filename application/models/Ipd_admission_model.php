@@ -51,7 +51,23 @@ class Ipd_admission_model extends CI_Model {
             iw.name as ward_name,
             ib.bed_number,
             ir.room_number,
-            u.name as admitted_by_name
+            u.name as admitted_by_name,
+            COALESCE(ibill.total_amount, 0) as billing_total_amount,
+            COALESCE(ibill.due_amount, 
+                GREATEST(0, 
+                    COALESCE(SUM(sc.total_amount), 0) - 
+                    COALESCE(ia.advance_payment, 0) - 
+                    COALESCE(ia.insurance_coverage_amount, 0)
+                )
+            ) as billing_due_amount,
+            COALESCE(ibill.payment_status, 
+                CASE 
+                    WHEN COALESCE(SUM(sc.total_amount), 0) - COALESCE(ia.advance_payment, 0) - COALESCE(ia.insurance_coverage_amount, 0) <= 0 THEN \'paid\'
+                    WHEN COALESCE(ia.advance_payment, 0) > 0 THEN \'partial\'
+                    ELSE \'pending\'
+                END
+            ) as billing_payment_status,
+            COALESCE(SUM(sc.total_amount), 0) as surgery_charges_total
         ');
         $this->db->from('ipd_admissions ia');
         $this->db->join('patients p', 'p.id = ia.patient_id', 'left');
@@ -60,6 +76,9 @@ class Ipd_admission_model extends CI_Model {
         $this->db->join('ipd_beds ib', 'ib.id = ia.bed_id', 'left');
         $this->db->join('ipd_rooms ir', 'ir.id = ia.room_id', 'left');
         $this->db->join('users u', 'u.id = ia.admitted_by_user_id', 'left');
+        $this->db->join('ipd_billing ibill', 'ibill.admission_id = ia.id', 'left');
+        $this->db->join('ipd_surgery_charges sc', 'sc.admission_id = ia.id', 'left');
+        $this->db->group_by('ia.id');
         
         // Apply filters
         if (!empty($filters['status'])) {

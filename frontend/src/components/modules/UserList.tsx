@@ -17,7 +17,8 @@ import {
   Trash2,
   Filter,
   Users as UsersIcon,
-  Phone
+  Phone,
+  Settings
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { api, User, UserFilters } from '../../services/api';
@@ -29,9 +30,10 @@ interface UserListProps {
   onAddUser: () => void;
   onViewUser: (userId: number) => void;
   onEditUser: (userId: number) => void;
+  onUserSettings?: (userId: number) => void;
 }
 
-export function UserList({ onAddUser, onViewUser, onEditUser }: UserListProps) {
+export function UserList({ onAddUser, onViewUser, onEditUser, onUserSettings }: UserListProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -239,6 +241,19 @@ export function UserList({ onAddUser, onViewUser, onEditUser }: UserListProps) {
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
                   </PermissionButton>
+                  {onUserSettings && (
+                    <PermissionButton
+                      permission="admin.edit_users"
+                      tooltipMessage="Configure consultation fees and other settings"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onUserSettings(user.id)}
+                      className="text-blue-600 hover:text-blue-700"
+                      title="Settings (Consultation Fee, etc.)"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </PermissionButton>
+                  )}
                   <PermissionButton
                     permission="admin.delete_users"
                     tooltipMessage="You need delete users permission to delete this user"

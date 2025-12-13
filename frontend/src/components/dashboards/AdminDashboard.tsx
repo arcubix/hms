@@ -71,6 +71,8 @@ import { LaboratoryManagement } from '../modules/LaboratoryManagement';
 import { IPDManagement } from '../modules/IPDManagement';
 import { RadiologyManagement } from '../modules/RadiologyManagement';
 import { RolePermissionsManagement } from '../modules/RolePermissionsManagement';
+import { SoftwareBilling } from '../modules/SoftwareBilling';
+import { PriorityModules } from '../modules/PriorityModules';
 import { AdvancedPOS } from '../pharmacy/AdvancedPOS';
 import { SettingsPage } from '../pages/SettingsPage';
 import { POSReports } from '../pharmacy/POSReports';
@@ -458,6 +460,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
               onAddUser={handleAddUser}
               onViewUser={handleViewUser}
               onEditUser={handleEditUser}
+              onUserSettings={handleUserSettings}
             />
           );
         }
@@ -483,6 +486,10 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         return <EvaluationDashboard />;
       case 'role-permissions':
         return <RolePermissionsManagement />;
+      case 'software-billing':
+        return <SoftwareBilling />;
+      case 'priority-modules':
+        return <PriorityModules userRole={user.role} />;
       case 'settings':
         return <SettingsPage />;
       // Doctor specific sections

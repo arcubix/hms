@@ -18,8 +18,9 @@ export interface FAQEntry {
 
 export interface ShareProcedure {
   procedure_name: string;
+  charges?: number; // The actual charge/price for the procedure
   share_type: 'percentage' | 'rupees';
-  share_value: number;
+  share_value: number; // Share percentage or amount
 }
 
 export interface UserFormData {

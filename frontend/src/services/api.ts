@@ -1,3 +1,19 @@
+// Import billing types
+import type {
+  Organization,
+  SubscriptionPlan,
+  OrganizationSubscription,
+  SubscriptionAddon,
+  Invoice,
+  InvoiceItem,
+  Payment,
+  BillingSettings,
+  CreateOrganizationData,
+  CreateSubscriptionData,
+  CreateInvoiceData,
+  CreatePaymentData,
+} from '../types/billing';
+
 // Try without index.php first, fallback to with index.php if needed
 // @ts-ignore - Vite environment variables
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://0neconnect.com/backendhospital' : 'http://localhost/hms');
@@ -652,6 +668,297 @@ class ApiService {
       success: boolean;
       data: LabTest;
     }>(`/api/lab-tests/${id}`);
+    return data.data;
+  }
+
+  async getLabTestCategories() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{ category: string }>;
+    }>('/api/lab-tests/categories');
+    return data.data || [];
+  }
+
+  async getLabTestTypes() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{ test_type: string }>;
+    }>('/api/lab-tests/types');
+    return data.data || [];
+  }
+
+  async getLabTestSampleTypes() {
+    const data = await this.request<{
+      success: boolean;
+      data: Array<{ sample_type: string }>;
+    }>('/api/lab-tests/sample-types');
+    return data.data || [];
+  }
+
+  // Laboratory Management endpoints
+  async getLaboratoryDashboard() {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        pending_orders: number;
+        samples_collected_today: number;
+        results_pending_verification: number;
+        critical_results: number;
+        orders_today: number;
+        completed_today: number;
+      };
+    }>('/api/laboratory/dashboard');
+    return data.data;
+  }
+
+  async getLabOrders(filters?: {
+    status?: string;
+    order_type?: 'OPD' | 'IPD' | 'Emergency' | 'Walk-in';
+    priority?: 'routine' | 'urgent' | 'stat';
+    patient_id?: number;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.order_type) params.append('order_type', filters.order_type);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.patient_id) params.append('patient_id', filters.patient_id.toString());
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/laboratory/orders?${queryString}` : '/api/laboratory/orders';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getLabOrder(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/laboratory/orders/${id}`);
+    return data.data;
+  }
+
+  async createLabOrder(orderData: {
+    patient_id: number;
+    order_type: 'OPD' | 'IPD' | 'Emergency' | 'Walk-in';
+    order_source_id?: number;
+    priority?: 'routine' | 'urgent' | 'stat';
+    tests: Array<{
+      lab_test_id?: number;
+      test_name: string;
+      test_code?: string;
+      price?: number;
+      priority?: 'routine' | 'urgent' | 'stat';
+      instructions?: string;
+    }>;
+    notes?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/laboratory/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+    return data.data;
+  }
+
+  async updateLabOrderStatus(id: number, status: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/orders/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return data.data;
+  }
+
+  async getLabSamples(filters?: {
+    status?: string;
+    order_id?: number;
+    collection_date?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.order_id) params.append('order_id', filters.order_id.toString());
+    if (filters?.collection_date) params.append('collection_date', filters.collection_date);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/laboratory/samples?${queryString}` : '/api/laboratory/samples';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getLabSampleByBarcode(barcode: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/laboratory/samples/${barcode}`);
+    return data.data;
+  }
+
+  async createLabSample(sampleData: {
+    order_id: number;
+    order_test_id: number;
+    patient_id: number;
+    test_id?: number;
+    sample_type?: string;
+    collection_date?: string;
+    collection_time?: string;
+    condition?: string;
+    remarks?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/laboratory/samples', {
+      method: 'POST',
+      body: JSON.stringify(sampleData),
+    });
+    return data.data;
+  }
+
+  async getLabResults(filters?: {
+    status?: string;
+    is_critical?: boolean;
+    is_abnormal?: boolean;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.is_critical !== undefined) params.append('is_critical', filters.is_critical.toString());
+    if (filters?.is_abnormal !== undefined) params.append('is_abnormal', filters.is_abnormal.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/laboratory/results?${queryString}` : '/api/laboratory/results';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getLabResult(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/laboratory/results/${id}`);
+    return data.data;
+  }
+
+  async createLabResult(resultData: {
+    order_id: number;
+    order_test_id: number;
+    sample_id?: number;
+    test_id?: number;
+    patient_id: number;
+    result_data?: any;
+    values?: Array<{
+      parameter_name: string;
+      result_value: string;
+      unit?: string;
+      normal_range?: string;
+      is_abnormal?: boolean;
+      is_critical?: boolean;
+    }>;
+    comments?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/laboratory/results', {
+      method: 'POST',
+      body: JSON.stringify(resultData),
+    });
+    return data.data;
+  }
+
+  async verifyLabResult(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/results/${id}/verify`, {
+      method: 'PUT',
+    });
+    return data.data;
+  }
+
+  async approveLabResult(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/results/${id}/approve`, {
+      method: 'PUT',
+    });
+    return data.data;
+  }
+
+  async generateLabReport(orderId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/reports/${orderId}`);
+    return data.data;
+  }
+
+  async getLabBilling(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/laboratory/billing/${id}`);
+    return data.data;
+  }
+
+  async createLabBilling(orderId: number, billingData: {
+    discount?: number;
+    tax?: number;
+    opd_bill_id?: number;
+    ipd_billing_id?: number;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/orders/${orderId}/billing`, {
+      method: 'POST',
+      body: JSON.stringify(billingData),
+    });
+    return data.data;
+  }
+
+  async recordLabPayment(billingId: number, paymentData: {
+    amount: number;
+    payment_method?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/laboratory/billing/${billingId}/payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
     return data.data;
   }
 
@@ -1976,6 +2283,187 @@ class ApiService {
       data: any[];
     }>(endpoint);
     return data.data || [];
+  }
+
+  // Expenses
+  async getExpenses(filters?: {
+    category_id?: number;
+    status?: string;
+    payment_method?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.category_id) params.append('category_id', filters.category_id.toString());
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.payment_method) params.append('payment_method', filters.payment_method);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/expenses?${queryString}` : '/api/pharmacy/expenses';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getExpense(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/pharmacy/expenses/${id}`);
+    return data.data;
+  }
+
+  async createExpense(expenseData: {
+    category_id: number;
+    expense_date: string;
+    description: string;
+    amount: number;
+    payment_method?: string;
+    reference_number?: string;
+    receipt_file?: string;
+    status?: string;
+    notes?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expenseData),
+    });
+    return data.data;
+  }
+
+  async updateExpense(id: number, expenseData: Partial<{
+    category_id: number;
+    expense_date: string;
+    description: string;
+    amount: number;
+    payment_method: string;
+    reference_number: string;
+    receipt_file: string;
+    status: string;
+    notes: string;
+  }>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expenseData),
+    });
+    return data.data;
+  }
+
+  async deleteExpense(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/pharmacy/expenses/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async getExpenseSummary(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/expenses/summary?${queryString}` : '/api/pharmacy/expenses/summary';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(endpoint);
+    return data.data;
+  }
+
+  // Expense Categories
+  async getExpenseCategories(filters?: {
+    status?: string;
+    search?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.search) params.append('search', filters.search);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/pharmacy/expense-categories?${queryString}` : '/api/pharmacy/expense-categories';
+    
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(endpoint);
+    return data.data || [];
+  }
+
+  async getExpenseCategory(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/pharmacy/expense-categories/${id}`);
+    return data.data;
+  }
+
+  async createExpenseCategory(categoryData: {
+    name: string;
+    description?: string;
+    color?: string;
+    icon?: string;
+    status?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>('/api/pharmacy/expense-categories', {
+      method: 'POST',
+      body: JSON.stringify(categoryData),
+    });
+    return data.data;
+  }
+
+  async updateExpenseCategory(id: number, categoryData: Partial<{
+    name: string;
+    description: string;
+    color: string;
+    icon: string;
+    status: string;
+  }>) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/pharmacy/expense-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(categoryData),
+    });
+    return data.data;
+  }
+
+  async deleteExpenseCategory(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/pharmacy/expense-categories/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
   }
 
   // Cash Drawer methods
@@ -4635,7 +5123,278 @@ class ApiService {
     return data.data;
   }
 
+  // Patient Payments
+  async recordPatientPayment(paymentData: CreatePatientPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: PatientPayment;
+      message: string;
+    }>('/api/patient-payments', {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    return data.data;
+  }
+
+  async getPatientPayments(filters?: PatientPaymentFilters) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: PatientPayment[];
+    }>(`/api/patient-payments${queryString ? `?${queryString}` : ''}`);
+    return data.data;
+  }
+
+  async getPatientPayment(paymentId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: PatientPayment;
+    }>(`/api/patient-payments/${paymentId}`);
+    return data.data;
+  }
+
+  async recordBillPayment(billType: string, billId: number, paymentData: CreatePatientPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: PatientPayment;
+      message: string;
+    }>('/api/patient-payments/bill-payment', {
+      method: 'POST',
+      body: JSON.stringify({
+        bill_type: billType,
+        bill_id: billId,
+        ...paymentData,
+      }),
+    });
+    return data.data;
+  }
+
+  async recordAdvancePayment(patientId: number, paymentData: CreatePatientPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: PatientPayment;
+      message: string;
+    }>('/api/patient-payments/advance', {
+      method: 'POST',
+      body: JSON.stringify({
+        patient_id: patientId,
+        ...paymentData,
+      }),
+    });
+    return data.data;
+  }
+
+  async getPatientPaymentHistory(patientId: number, filters?: PatientPaymentFilters) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        payments: PatientPayment[];
+        advance_balance: number;
+      };
+    }>(`/api/patient-payments/history/${patientId}${queryString ? `?${queryString}` : ''}`);
+    return data.data;
+  }
+
+  async getBillPayments(billType: string, billId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        payments: PatientPayment[];
+        total_paid: number;
+      };
+    }>(`/api/patient-payments/bill/${billType}/${billId}`);
+    return data.data;
+  }
+
+  async getPatientAdvanceBalance(patientId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        advance_balance: number;
+      };
+    }>(`/api/patient-payments/advance-balance/${patientId}`);
+    return data.data.advance_balance;
+  }
+
+  async applyAdvanceBalance(billType: string, billId: number, amount: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        success: boolean;
+        advance_applied: number;
+      };
+      message: string;
+    }>('/api/patient-payments/apply-advance', {
+      method: 'POST',
+      body: JSON.stringify({
+        bill_type: billType,
+        bill_id: billId,
+        amount: amount,
+      }),
+    });
+    return data.data;
+  }
+
+  async generatePaymentReceipt(paymentId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: PaymentReceipt;
+      message: string;
+    }>(`/api/patient-payments/generate-receipt/${paymentId}`, {
+      method: 'POST',
+    });
+    return data.data;
+  }
+
+  async getPaymentReceipt(receiptNumber: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: PaymentReceipt;
+    }>(`/api/patient-payments/receipt/${receiptNumber}`);
+    return data.data;
+  }
+
+  // OPD Billing
+  async createOpdBill(billData: CreateOpdBillData) {
+    const data = await this.request<{
+      success: boolean;
+      data: OpdBill;
+      message: string;
+    }>('/api/opd-billing', {
+      method: 'POST',
+      body: JSON.stringify(billData),
+    });
+    return data.data;
+  }
+
+  async getOpdBills(filters?: OpdBillFilters) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: OpdBill[];
+    }>(`/api/opd-billing${queryString ? `?${queryString}` : ''}`);
+    return data.data;
+  }
+
+  async getOpdBill(billId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: OpdBill;
+    }>(`/api/opd-billing/${billId}`);
+    return data.data;
+  }
+
+  async getOpdBillByAppointment(appointmentId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: OpdBill | null;
+    }>(`/api/opd-billing/appointment/${appointmentId}`);
+    // Return null if no bill found (instead of throwing error)
+    return data.data || null;
+  }
+
+  async collectOpdPayment(billId: number, paymentData: CreatePatientPaymentData) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        payment: PatientPayment;
+        bill: OpdBill;
+      };
+      message: string;
+    }>(`/api/opd-billing/payment/${billId}`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    return data.data;
+  }
+
+  async collectAppointmentPayment(appointmentId: number, paymentData: CreatePatientPaymentData & {
+    consultation_fee?: number;
+    lab_charges?: number;
+    radiology_charges?: number;
+    medication_charges?: number;
+    discount?: number;
+    discount_percentage?: number;
+    tax_rate?: number;
+    insurance_covered?: number;
+    bill_notes?: string;
+  }) {
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        payment: PatientPayment;
+        bill: OpdBill;
+        appointment: any;
+      };
+      message: string;
+    }>(`/api/appointments/${appointmentId}/payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    return data.data;
+  }
+
+  async getOpdBillsByPatient(patientId: number, filters?: OpdBillFilters) {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: OpdBill[];
+    }>(`/api/opd-billing/patient/${patientId}${queryString ? `?${queryString}` : ''}`);
+    return data.data;
+  }
+
   // Discharge
+  async getIPDDischarges(filters?: {
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    
+    const query = params.toString();
+    const data = await this.request<{
+      success: boolean;
+      data: IPDDischargeSummary[];
+    }>(`/api/ipd/discharges${query ? '?' + query : ''}`);
+    return data.data || [];
+  }
+
   async getIPDDischarge(admissionId: number) {
     const data = await this.request<{
       success: boolean;
@@ -5542,6 +6301,241 @@ class ApiService {
     return data;
   }
 
+  // OT Schedules
+  async getOTSchedules(filters?: {
+    date?: string;
+    ot_number?: string;
+    status?: string;
+    surgeon_id?: number;
+    patient_id?: number;
+    admission_id?: number;
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.date) params.append('date', filters.date);
+    if (filters?.ot_number) params.append('ot_number', filters.ot_number);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.surgeon_id) params.append('surgeon_id', filters.surgeon_id.toString());
+    if (filters?.patient_id) params.append('patient_id', filters.patient_id.toString());
+    if (filters?.admission_id) params.append('admission_id', filters.admission_id.toString());
+    
+    const queryString = params.toString();
+    const url = `/api/ipd/ot-schedules${queryString ? '?' + queryString : ''}`;
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule[];
+    }>(url);
+    return data.data || [];
+  }
+
+  async getOTSchedule(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+    }>(`/api/ipd/ot-schedules/${id}`);
+    return data.data;
+  }
+
+  async createOTSchedule(scheduleData: CreateOTScheduleData) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+      message: string;
+    }>(`/api/ipd/ot-schedules`, {
+      method: 'POST',
+      body: JSON.stringify(scheduleData),
+    });
+    return data.data;
+  }
+
+  async updateOTSchedule(id: number, scheduleData: Partial<CreateOTScheduleData>) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(scheduleData),
+    });
+    return data.data;
+  }
+
+  async deleteOTSchedule(id: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${id}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  async startSurgery(id: number, startTime?: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${id}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ start_time: startTime }),
+    });
+    return data.data;
+  }
+
+  async completeSurgery(id: number, endTime?: string, actualDurationMinutes?: number, complications?: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({
+        end_time: endTime,
+        actual_duration_minutes: actualDurationMinutes,
+        complications: complications,
+      }),
+    });
+    return data.data;
+  }
+
+  async cancelSurgery(id: number, reason: string, rescheduleDate?: string, rescheduleTime?: string) {
+    const data = await this.request<{
+      success: boolean;
+      data: OTSchedule;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: reason,
+        reschedule_date: rescheduleDate,
+        reschedule_time: rescheduleTime,
+      }),
+    });
+    return data.data;
+  }
+
+  async checkOTAvailability(otNumber: string, date: string, startTime: string, durationMinutes: number) {
+    const params = new URLSearchParams({
+      ot_number: otNumber,
+      date: date,
+      start_time: startTime,
+      duration_minutes: durationMinutes.toString(),
+    });
+    const data = await this.request<{
+      success: boolean;
+      data: {
+        available: boolean;
+        conflicts: OTSchedule[];
+        alternative_slots: Array<{ date: string; time: string; ot_number: string }>;
+      };
+    }>(`/api/ipd/ot-availability?${params.toString()}`);
+    return data.data;
+  }
+
+  async getOperationTheatres() {
+    const data = await this.request<{
+      success: boolean;
+      data: OperationTheatre[];
+    }>(`/api/ipd/operation-theatres`);
+    return data.data || [];
+  }
+
+  // Surgery Charges
+  async getSurgeryCharges(otScheduleId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/ipd/surgeries/${otScheduleId}/charges`);
+    return data.data;
+  }
+
+  async createSurgeryCharges(otScheduleId: number, chargesData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/surgeries/${otScheduleId}/charges`, {
+      method: 'POST',
+      body: JSON.stringify(chargesData),
+    });
+    return data.data;
+  }
+
+  async updateSurgeryCharges(otScheduleId: number, chargesData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/surgeries/${otScheduleId}/charges`, {
+      method: 'PUT',
+      body: JSON.stringify(chargesData),
+    });
+    return data.data;
+  }
+
+  // Surgery Consumables
+  async getSurgeryConsumables(otScheduleId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any[];
+    }>(`/api/ipd/surgeries/${otScheduleId}/consumables`);
+    return data.data || [];
+  }
+
+  async addSurgeryConsumable(otScheduleId: number, consumableData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/surgeries/${otScheduleId}/consumables`, {
+      method: 'POST',
+      body: JSON.stringify(consumableData),
+    });
+    return data.data;
+  }
+
+  async updateSurgeryConsumable(otScheduleId: number, consumableId: number, consumableData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/surgeries/${otScheduleId}/consumables/${consumableId}`, {
+      method: 'PUT',
+      body: JSON.stringify(consumableData),
+    });
+    return data.data;
+  }
+
+  async deleteSurgeryConsumable(otScheduleId: number, consumableId: number) {
+    const data = await this.request<{
+      success: boolean;
+      message: string;
+    }>(`/api/ipd/surgeries/${otScheduleId}/consumables/${consumableId}`, {
+      method: 'DELETE',
+    });
+    return data;
+  }
+
+  // Pre-Operative Checklist
+  async getPreOpChecklist(otScheduleId: number) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+    }>(`/api/ipd/ot-schedules/${otScheduleId}/pre-op-checklist`);
+    return data.data;
+  }
+
+  async updatePreOpChecklist(otScheduleId: number, checklistData: any) {
+    const data = await this.request<{
+      success: boolean;
+      data: any;
+      message: string;
+    }>(`/api/ipd/ot-schedules/${otScheduleId}/pre-op-checklist`, {
+      method: 'PUT',
+      body: JSON.stringify(checklistData),
+    });
+    return data.data;
+  }
+
   // Nutrition
   async getIPDNutrition(admissionId: number) {
     const data = await this.request<{
@@ -5955,6 +6949,160 @@ class ApiService {
     }>('/api/audit-logs/users-list');
     return data.data || [];
   }
+
+  // ============================================
+  // BILLING API METHODS
+  // ============================================
+
+  // Organizations
+  async getOrganizations(filters?: { search?: string; status?: string; subscription_status?: string; organization_type?: string }) {
+    const queryParams = new URLSearchParams();
+    if (filters?.search) queryParams.append('search', filters.search);
+    if (filters?.status) queryParams.append('status', filters.status);
+    if (filters?.subscription_status) queryParams.append('subscription_status', filters.subscription_status);
+    if (filters?.organization_type) queryParams.append('organization_type', filters.organization_type);
+    
+    return this.request<{ success: boolean; data: Organization[] }>(`/api/organizations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getOrganization(id: number) {
+    return this.request<{ success: boolean; data: Organization }>(`/api/organizations/${id}`);
+  }
+
+  async getCurrentOrganization() {
+    return this.request<{ success: boolean; data: Organization }>('/api/organizations/current');
+  }
+
+  async createOrganization(data: CreateOrganizationData) {
+    return this.request<{ success: boolean; data: Organization }>('/api/organizations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOrganization(id: number, data: Partial<CreateOrganizationData>) {
+    return this.request<{ success: boolean; data: Organization }>(`/api/organizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteOrganization(id: number) {
+    return this.request<{ success: boolean }>(`/api/organizations/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Subscription Plans
+  async getSubscriptionPlans(filters?: { plan_type?: string; billing_cycle?: string; is_active?: boolean }) {
+    const queryParams = new URLSearchParams();
+    if (filters?.plan_type) queryParams.append('plan_type', filters.plan_type);
+    if (filters?.billing_cycle) queryParams.append('billing_cycle', filters.billing_cycle);
+    if (filters?.is_active !== undefined) queryParams.append('is_active', filters.is_active.toString());
+    
+    return this.request<{ success: boolean; data: SubscriptionPlan[] }>(`/api/subscription-plans${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getSubscriptionPlan(id: number) {
+    return this.request<{ success: boolean; data: SubscriptionPlan }>(`/api/subscription-plans/${id}`);
+  }
+
+  // Invoices
+  async getInvoices(filters?: { organization_id?: number; payment_status?: string; invoice_type?: string; date_from?: string; date_to?: string; search?: string }) {
+    const queryParams = new URLSearchParams();
+    if (filters?.organization_id) queryParams.append('organization_id', filters.organization_id.toString());
+    if (filters?.payment_status) queryParams.append('payment_status', filters.payment_status);
+    if (filters?.invoice_type) queryParams.append('invoice_type', filters.invoice_type);
+    if (filters?.date_from) queryParams.append('date_from', filters.date_from);
+    if (filters?.date_to) queryParams.append('date_to', filters.date_to);
+    if (filters?.search) queryParams.append('search', filters.search);
+    
+    return this.request<{ success: boolean; data: Invoice[] }>(`/api/invoices${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getInvoice(id: number) {
+    return this.request<{ success: boolean; data: Invoice }>(`/api/invoices/${id}`);
+  }
+
+  async createInvoice(data: CreateInvoiceData) {
+    return this.request<{ success: boolean; data: Invoice }>('/api/invoices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateInvoice(id: number, data: Partial<CreateInvoiceData>) {
+    return this.request<{ success: boolean; data: Invoice }>(`/api/invoices/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async sendInvoice(id: number) {
+    return this.request<{ success: boolean; data: Invoice }>(`/api/invoices/${id}/send`, {
+      method: 'POST',
+    });
+  }
+
+  async getOverdueInvoices(organization_id?: number) {
+    const queryParams = organization_id ? `?organization_id=${organization_id}` : '';
+    return this.request<{ success: boolean; data: Invoice[] }>(`/api/invoices/overdue${queryParams}`);
+  }
+
+  // Payments
+  async getPayments(filters?: { organization_id?: number; invoice_id?: number; payment_status?: string; payment_method?: string; date_from?: string; date_to?: string; search?: string }) {
+    const queryParams = new URLSearchParams();
+    if (filters?.organization_id) queryParams.append('organization_id', filters.organization_id.toString());
+    if (filters?.invoice_id) queryParams.append('invoice_id', filters.invoice_id.toString());
+    if (filters?.payment_status) queryParams.append('payment_status', filters.payment_status);
+    if (filters?.payment_method) queryParams.append('payment_method', filters.payment_method);
+    if (filters?.date_from) queryParams.append('date_from', filters.date_from);
+    if (filters?.date_to) queryParams.append('date_to', filters.date_to);
+    if (filters?.search) queryParams.append('search', filters.search);
+    
+    return this.request<{ success: boolean; data: Payment[] }>(`/api/payments${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getPayment(id: number) {
+    return this.request<{ success: boolean; data: Payment }>(`/api/payments/${id}`);
+  }
+
+  async createPayment(data: CreatePaymentData) {
+    return this.request<{ success: boolean; data: Payment }>('/api/payments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePayment(id: number, data: Partial<CreatePaymentData>) {
+    return this.request<{ success: boolean; data: Payment }>(`/api/payments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePayment(id: number) {
+    return this.request<{ success: boolean }>(`/api/payments/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getInvoicePayments(invoice_id: number) {
+    return this.request<{ success: boolean; data: Payment[] }>(`/api/payments/invoice/${invoice_id}`);
+  }
+
+  // Billing Settings
+  async getBillingSettings(organization_id?: number) {
+    const endpoint = organization_id ? `/api/billing-settings/${organization_id}` : '/api/billing-settings';
+    return this.request<{ success: boolean; data: BillingSettings }>(endpoint);
+  }
+
+  async updateBillingSettings(organization_id: number, data: Partial<BillingSettings>) {
+    return this.request<{ success: boolean; data: BillingSettings }>(`/api/billing-settings/${organization_id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export interface Patient {
@@ -6279,6 +7427,7 @@ export interface Doctor {
   patients?: number;
   rating?: number;
   total_appointments?: number;
+  user_id?: number;
   created_at: string;
 }
 
@@ -7207,8 +8356,9 @@ export interface FAQEntry {
 
 export interface ShareProcedure {
   procedure_name: string;
+  charges?: number; // The actual charge/price for the procedure
   share_type: 'percentage' | 'rupees';
-  share_value: number;
+  share_value: number; // Share percentage or amount
 }
 
 export interface UserFormData {
@@ -8225,6 +9375,181 @@ export interface RecordIPDPaymentData {
   payment_mode?: 'Cash' | 'Card' | 'UPI' | 'Insurance' | 'Cheque';
 }
 
+// Patient Payment Interfaces
+export interface PatientPayment {
+  id: number;
+  payment_number: string;
+  receipt_number?: string;
+  patient_id: number;
+  patient_name?: string;
+  patient_code?: string;
+  bill_type: 'ipd' | 'opd' | 'emergency' | 'lab' | 'radiology' | 'advance';
+  bill_id?: number;
+  payment_type: 'advance' | 'partial' | 'full' | 'refund';
+  payment_method: 'cash' | 'card' | 'bank_transfer' | 'cheque';
+  amount: number;
+  payment_date: string;
+  payment_time?: string;
+  transaction_id?: string;
+  bank_name?: string;
+  cheque_number?: string;
+  cheque_date?: string;
+  receipt_path?: string;
+  payment_status: 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+  notes?: string;
+  processed_by?: number;
+  processed_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePatientPaymentData {
+  patient_id: number;
+  bill_type?: 'ipd' | 'opd' | 'emergency' | 'lab' | 'radiology' | 'advance';
+  bill_id?: number;
+  payment_type?: 'advance' | 'partial' | 'full' | 'refund';
+  payment_method: 'cash' | 'card' | 'bank_transfer' | 'cheque';
+  amount: number;
+  payment_date?: string;
+  payment_time?: string;
+  transaction_id?: string;
+  bank_name?: string;
+  cheque_number?: string;
+  cheque_date?: string;
+  notes?: string;
+}
+
+export interface PatientPaymentFilters {
+  patient_id?: number;
+  bill_type?: 'ipd' | 'opd' | 'emergency' | 'lab' | 'radiology' | 'advance' | 'all';
+  bill_id?: number;
+  payment_type?: 'advance' | 'partial' | 'full' | 'refund' | 'all';
+  payment_status?: 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled' | 'all';
+  payment_method?: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'all';
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PaymentReceipt {
+  id: number;
+  receipt_number: string;
+  payment_id: number;
+  patient_id: number;
+  patient_name?: string;
+  patient_code?: string;
+  receipt_date: string;
+  receipt_path?: string;
+  receipt_url?: string;
+  template_type?: string;
+  generated_by?: number;
+  generated_by_name?: string;
+  is_emailed?: boolean;
+  is_sms_sent?: boolean;
+  email_sent_at?: string;
+  sms_sent_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// OPD Billing Interfaces
+export interface OpdBill {
+  id: number;
+  bill_number: string;
+  patient_id: number;
+  patient_name?: string;
+  patient_code?: string;
+  appointment_id?: number;
+  consultation_id?: number;
+  bill_date: string;
+  consultation_fee: number;
+  procedure_fees?: Array<{
+    procedure_name: string;
+    amount: number;
+  }>;
+  lab_charges: number;
+  radiology_charges: number;
+  medication_charges: number;
+  other_charges?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  subtotal: number;
+  discount: number;
+  discount_percentage: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_amount: number;
+  advance_applied: number;
+  insurance_covered: number;
+  paid_amount: number;
+  total_paid?: number;
+  due_amount: number;
+  payment_status: 'pending' | 'partial' | 'paid' | 'cancelled';
+  notes?: string;
+  items?: OpdBillItem[];
+  payments?: PatientPayment[];
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpdBillItem {
+  id: number;
+  bill_id: number;
+  item_type: 'consultation' | 'procedure' | 'lab_test' | 'radiology_test' | 'medication' | 'other';
+  item_name: string;
+  item_id?: number;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  created_at: string;
+}
+
+export interface CreateOpdBillData {
+  patient_id: number;
+  appointment_id?: number;
+  consultation_id?: number;
+  bill_date?: string;
+  consultation_fee?: number;
+  procedure_fees?: Array<{
+    procedure_name: string;
+    amount: number;
+  }>;
+  lab_charges?: number;
+  radiology_charges?: number;
+  medication_charges?: number;
+  other_charges?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  discount?: number;
+  discount_percentage?: number;
+  tax_rate?: number;
+  insurance_covered?: number;
+  notes?: string;
+  items?: Array<{
+    item_type: 'consultation' | 'procedure' | 'lab_test' | 'radiology_test' | 'medication' | 'other';
+    item_name: string;
+    item_id?: number;
+    quantity?: number;
+    unit_price: number;
+  }>;
+}
+
+export interface OpdBillFilters {
+  patient_id?: number;
+  payment_status?: 'pending' | 'partial' | 'paid' | 'cancelled' | 'all';
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface IPDRehabilitationRequest {
   id: number;
   admission_id?: number;
@@ -8323,6 +9648,74 @@ export interface CreateIPDAdmissionRequestData {
   diagnosis?: string;
   reason?: string;
   estimated_duration?: number;
+}
+
+export interface OperationTheatre {
+  id: number;
+  ot_number: string;
+  ot_name?: string;
+  specialty?: string;
+  location?: string;
+  capacity: number;
+  hourly_rate: number;
+  minimum_charge_hours: number;
+  equipment?: any;
+  status: 'active' | 'maintenance' | 'inactive';
+  notes?: string;
+}
+
+export interface OTSchedule {
+  id: number;
+  admission_id: number;
+  patient_id: number;
+  procedure_id?: number;
+  ot_number: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  procedure_name: string;
+  procedure_type?: string;
+  surgeon_user_id?: number;
+  surgeon_name?: string;
+  assistant_surgeon_user_id?: number;
+  assistant_surgeon_name?: string;
+  anesthetist_user_id?: number;
+  anesthetist_name?: string;
+  anesthesia_type?: string;
+  estimated_duration_minutes?: number;
+  actual_duration_minutes?: number;
+  status: 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled' | 'Postponed';
+  start_time?: string;
+  end_time?: string;
+  complications?: string;
+  asa_score?: number;
+  notes?: string;
+  created_by_user_id?: number;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  patient_name?: string;
+  patient_code?: string;
+  patient_phone?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  ipd_number?: string;
+  created_by_name?: string;
+}
+
+export interface CreateOTScheduleData {
+  admission_id: number;
+  ot_number: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  procedure_name: string;
+  procedure_type?: string;
+  surgeon_user_id?: number;
+  assistant_surgeon_user_id?: number;
+  anesthetist_user_id?: number;
+  anesthesia_type?: string;
+  estimated_duration_minutes?: number;
+  asa_score?: number;
+  notes?: string;
 }
 
 export interface CreateIPDWardData {

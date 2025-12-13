@@ -39,6 +39,9 @@ import IndoorDutyRoster from './IndoorDutyRoster';
 import BirthCertificates from './BirthCertificates';
 import DeathCertificates from './DeathCertificates';
 import IpdReportsListing from '../IpdReportsListing';
+import { PaymentDialog } from '../payments/PaymentDialog';
+import { OTSchedules } from './OTSchedules';
+import { IPDPatientProfile } from './IPDPatientProfile';
 import {
   Bed,
   Building2,
@@ -114,7 +117,8 @@ import {
   Loader2,
   X,
   UserPlus,
-  FileDown
+  FileDown,
+  Scissors
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { toast } from 'sonner';
@@ -276,6 +280,8 @@ export function IPDManagement() {
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [isNursingNoteDialogOpen, setIsNursingNoteDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [isBillDetailsDialogOpen, setIsBillDetailsDialogOpen] = useState(false);
+  const [selectedBillPayments, setSelectedBillPayments] = useState<any[]>([]);
   
   // Ward/Bed/Room Dialog States
   const [isWardDialogOpen, setIsWardDialogOpen] = useState(false);
@@ -288,6 +294,7 @@ export function IPDManagement() {
   // API Data States
   const [dashboardStats, setDashboardStats] = useState<IPDDashboardStats | null>(null);
   const [admissions, setAdmissions] = useState<IPDAdmission[]>([]);
+  const [discharges, setDischarges] = useState<IPDDischargeSummary[]>([]);
   const [wards, setWards] = useState<IPDWard[]>([]);
   const [beds, setBeds] = useState<IPDBed[]>([]);
   const [rooms, setRooms] = useState<IPDRoom[]>([]);
@@ -425,6 +432,13 @@ export function IPDManagement() {
       loadAdmissions();
     }
   }, [activeSection, searchQuery]);
+
+  // Load discharges data
+  useEffect(() => {
+    if (activeSection === 'discharges') {
+      loadDischarges();
+    }
+  }, [activeSection, searchQuery]);
   
   // Load wards data
   useEffect(() => {
@@ -524,6 +538,22 @@ export function IPDManagement() {
     } catch (err: any) {
       setError(err.message || 'Failed to load admissions');
       toast.error('Failed to load admissions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDischarges = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const filters: any = {};
+      if (searchQuery) filters.search = searchQuery;
+      const data = await api.getIPDDischarges(filters);
+      setDischarges(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load discharges');
+      toast.error('Failed to load discharges');
     } finally {
       setLoading(false);
     }
@@ -1235,9 +1265,13 @@ export function IPDManagement() {
                       } : undefined,
                       estimatedDuration: patient.estimated_duration || 0,
                       actualDuration: patient.actual_duration || undefined,
-                      totalCharges: 0, // Will be loaded from billing
-                      paidAmount: 0,
-                      dueAmount: 0
+                      totalCharges: patient.billing_total_amount || patient.surgery_charges_total || 0,
+                      paidAmount: patient.billing_total_amount 
+                        ? (patient.billing_total_amount - (patient.billing_due_amount || 0))
+                        : ((patient.surgery_charges_total || 0) - (patient.billing_due_amount || 0)),
+                      dueAmount: patient.billing_due_amount !== undefined 
+                        ? patient.billing_due_amount 
+                        : (patient.surgery_charges_total || 0)
                     };
                     
                     return (
@@ -1304,6 +1338,110 @@ export function IPDManagement() {
                         >
                           <Eye className="w-3 h-3" />
                         </Button>
+                        {patientObj.dueAmount > 0 && (
+                          <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={async () => {
+                              setSelectedPatient(patientObj);
+                              setActiveSection('patient-details');
+                              // Load billing data and open payment dialog
+                              try {
+                                const admissionId = parseInt(patientObj.id);
+                                const billingData = await api.getIPDBilling(admissionId).catch(() => null);
+                                setBilling(billingData);
+                                setTimeout(() => setIsPaymentDialogOpen(true), 100);
+                              } catch (error) {
+                                console.error('Failed to load billing:', error);
+                                setIsPaymentDialogOpen(true);
+                              }
+                            }}
+                            title="Collect Payment"
+                          >
+                            <CreditCard className="w-3 h-3" />
+                          </Button>
+                        )}
+                        {((patientObj.dueAmount === 0 && patientObj.totalCharges > 0) || patientObj.paidAmount > 0) && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
+                            onClick={async () => {
+                              setSelectedPatient(patientObj);
+                              try {
+                                // Get billing ID - try to get from billing or use admission ID
+                                const admissionId = parseInt(patientObj.id);
+                                const billingData = await api.getIPDBilling(admissionId).catch(() => null);
+                                setBilling(billingData);
+                                
+                                // Get payments - try with both billing ID and admission ID
+                                // Payments might be recorded with either ID
+                                let payments: any[] = [];
+                                
+                                // Try with billing ID first
+                                if (billingData?.id) {
+                                  try {
+                                    const billingPaymentsResponse = await api.getBillPayments('ipd', billingData.id);
+                                    // API returns { payments: [...], total_paid: ... }
+                                    if (billingPaymentsResponse && typeof billingPaymentsResponse === 'object') {
+                                      payments = Array.isArray(billingPaymentsResponse.payments) 
+                                        ? billingPaymentsResponse.payments 
+                                        : (Array.isArray(billingPaymentsResponse) ? billingPaymentsResponse : []);
+                                    }
+                                    console.log('Payments found with billing ID:', payments.length);
+                                  } catch (e) {
+                                    console.log('No payments found with billing ID, trying admission ID:', e);
+                                  }
+                                }
+                                
+                                // If no payments found, try with admission ID
+                                if (payments.length === 0) {
+                                  try {
+                                    const admissionPaymentsResponse = await api.getBillPayments('ipd', admissionId);
+                                    // API returns { payments: [...], total_paid: ... }
+                                    if (admissionPaymentsResponse && typeof admissionPaymentsResponse === 'object') {
+                                      payments = Array.isArray(admissionPaymentsResponse.payments) 
+                                        ? admissionPaymentsResponse.payments 
+                                        : (Array.isArray(admissionPaymentsResponse) ? admissionPaymentsResponse : []);
+                                    }
+                                    console.log('Payments found with admission ID:', payments.length);
+                                  } catch (e) {
+                                    console.log('No payments found with admission ID either:', e);
+                                    payments = [];
+                                  }
+                                }
+                                
+                                // Also try fetching by patient_id as fallback
+                                if (payments.length === 0 && billingData?.patient_id) {
+                                  try {
+                                    const patientPaymentsResponse = await api.getPatientPaymentHistory(billingData.patient_id, {
+                                      bill_type: 'ipd'
+                                    });
+                                    // Filter payments that match this admission/billing
+                                    if (patientPaymentsResponse && Array.isArray(patientPaymentsResponse.payments)) {
+                                      payments = patientPaymentsResponse.payments.filter((p: any) => 
+                                        p.bill_id == billingData.id || p.bill_id == admissionId
+                                      );
+                                      console.log('Payments found via patient history:', payments.length);
+                                    }
+                                  } catch (e) {
+                                    console.log('Failed to fetch patient payment history:', e);
+                                  }
+                                }
+                                
+                                console.log('Final payments array:', payments);
+                                setSelectedBillPayments(payments);
+                                setIsBillDetailsDialogOpen(true);
+                              } catch (error) {
+                                console.error('Failed to load bill payments:', error);
+                                toast.error('Failed to load bill details');
+                              }
+                            }}
+                            title="View Bill & Payment Details"
+                          >
+                            <Receipt className="w-3 h-3" />
+                          </Button>
+                        )}
                         <Button 
                           size="sm" 
                           variant="outline" 
@@ -1417,6 +1555,19 @@ export function IPDManagement() {
   // ============= PATIENT DETAILS =============
   const renderPatientDetails = () => {
     if (!selectedPatient) return null;
+    
+    // Use IPDPatientProfile component
+    return (
+      <IPDPatientProfile
+        patient={selectedPatient}
+        onClose={() => setActiveSection('admissions')}
+      />
+    );
+  };
+
+  // ============= OLD PATIENT DETAILS (DEPRECATED - KEPT FOR REFERENCE) =============
+  const renderPatientDetailsOld = () => {
+    if (!selectedPatient) return null;
 
     const patientTabs = [
       { id: 'daily-patient-care-order', label: 'Daily Patient Care Order', icon: ClipboardList },
@@ -1452,14 +1603,37 @@ export function IPDManagement() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
-            <div>
-              <h2 className="text-xl text-gray-900">{selectedPatient.patientName}</h2>
-              <p className="text-xs text-gray-600">
-                {selectedPatient.ipdNumber} • MRN: {selectedPatient.id.slice(0, 8)} • {selectedPatient.uhid}
-              </p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="text-xl text-gray-900">{selectedPatient.patientName}</h2>
+                <p className="text-xs text-gray-600">
+                  {selectedPatient.ipdNumber} • MRN: {selectedPatient.id.slice(0, 8)} • {selectedPatient.uhid}
+                </p>
+              </div>
+              <Badge className={getStatusColor(selectedPatient.status)}>
+                {selectedPatient.status.replace('-', ' ').toUpperCase()}
+              </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {billing && selectedPatient.dueAmount > 0 && (
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => setIsPaymentDialogOpen(true)}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Collect Payment
+              </Button>
+            )}
+            {selectedPatient.status !== 'discharged' && selectedPatient.status !== 'absconded' && (
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => setIsDischargeDialogOpen(true)}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Discharge Patient
+              </Button>
+            )}
             <Button className="bg-[#2F80ED] hover:bg-blue-600">
               <Calendar className="w-4 h-4 mr-2" />
               Daily Visit
@@ -1521,6 +1695,104 @@ export function IPDManagement() {
             Charts
           </button>
         </div>
+
+        {/* Billing Summary Card */}
+        {billing && (
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="grid grid-cols-4 gap-6 flex-1">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Total Charges</p>
+                    <p className="text-lg font-semibold text-gray-900">₹{selectedPatient.totalCharges.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Paid Amount</p>
+                    <p className="text-lg font-semibold text-green-600">₹{selectedPatient.paidAmount.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Due Amount</p>
+                    <p className={`text-lg font-semibold ${selectedPatient.dueAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      ₹{selectedPatient.dueAmount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-end">
+                    {selectedPatient.dueAmount > 0 ? (
+                      <Button 
+                        className="bg-green-600 hover:bg-green-700 w-full"
+                        onClick={() => setIsPaymentDialogOpen(true)}
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Pay Now
+                      </Button>
+                    ) : (
+                      <Badge className="bg-green-100 text-green-800 border-green-300">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Paid
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Status Management Card - Similar to Emergency Module */}
+        {selectedPatient.status !== 'discharged' && selectedPatient.status !== 'absconded' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                Status Management
+              </CardTitle>
+              <CardDescription>Manage patient status and discharge</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 flex-wrap">
+                {selectedPatient.status === 'admitted' && (
+                  <Button onClick={() => {
+                    // Update status to under-treatment
+                    // This would typically call an API to update status
+                    toast.info('Status update functionality can be added here');
+                  }} className="bg-blue-600 hover:bg-blue-700">
+                    Start Treatment
+                  </Button>
+                )}
+                {selectedPatient.status === 'under-treatment' && (
+                  <Button onClick={() => {
+                    // Update status to stable
+                    toast.info('Status update functionality can be added here');
+                  }} className="bg-yellow-600 hover:bg-yellow-700">
+                    Mark as Stable
+                  </Button>
+                )}
+                {selectedPatient.status === 'stable' && (
+                  <Button onClick={() => setIsDischargeDialogOpen(true)} className="bg-green-600 hover:bg-green-700">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Ready for Discharge
+                  </Button>
+                )}
+                {selectedPatient.status === 'critical' && (
+                  <Button onClick={() => {
+                    // Update status to stable
+                    toast.info('Status update functionality can be added here');
+                  }} className="bg-orange-600 hover:bg-orange-700">
+                    Mark as Stable
+                  </Button>
+                )}
+                <Button 
+                  onClick={() => setIsDischargeDialogOpen(true)} 
+                  className="bg-green-600 hover:bg-green-700"
+                  variant="outline"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Discharge Patient
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Content Area */}
         <Tabs value={activePatientSubTab} className="space-y-6">
@@ -3164,7 +3436,8 @@ export function IPDManagement() {
 
   // ============= DISCHARGES =============
   const renderDischarges = () => {
-    const dischargedPatients = admissions.filter(a => a.status === 'discharged');
+    if (loading) return <div className="text-center py-12">Loading discharges...</div>;
+    if (error) return <div className="text-center py-12 text-red-500">{error}</div>;
     
     return (
       <div className="space-y-6">
@@ -3185,56 +3458,116 @@ export function IPDManagement() {
                   <TableHead>Discharge Date</TableHead>
                   <TableHead>Length of Stay</TableHead>
                   <TableHead>Final Diagnosis</TableHead>
+                  <TableHead>Condition</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dischargedPatients.length === 0 ? (
+                {discharges.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-12 text-gray-500">
                       No discharged patients found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  dischargedPatients.map((patient) => (
-                    <TableRow key={patient.id}>
-                      <TableCell className="font-medium">{patient.ipd_number}</TableCell>
-                      <TableCell>{patient.patient_name || 'N/A'}</TableCell>
-                      <TableCell>{patient.discharge_date || 'N/A'}</TableCell>
-                      <TableCell>{patient.actual_duration || 0} days</TableCell>
-                      <TableCell className="max-w-xs truncate">{patient.diagnosis || 'N/A'}</TableCell>
+                  discharges.map((discharge: any) => (
+                    <TableRow key={discharge.id}>
+                      <TableCell className="font-medium">{discharge.ipd_number || 'N/A'}</TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{discharge.patient_name || 'N/A'}</div>
+                          {discharge.patient_age && (
+                            <div className="text-xs text-gray-500">{discharge.patient_age}Y, {discharge.patient_gender || 'N/A'}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {discharge.discharge_date ? (
+                          <div>
+                            <div>{new Date(discharge.discharge_date).toLocaleDateString()}</div>
+                            {discharge.discharge_time && (
+                              <div className="text-xs text-gray-500">{discharge.discharge_time}</div>
+                            )}
+                          </div>
+                        ) : 'N/A'}
+                      </TableCell>
+                      <TableCell>{discharge.length_of_stay || 0} days</TableCell>
+                      <TableCell className="max-w-xs truncate" title={discharge.final_diagnosis}>
+                        {discharge.final_diagnosis || 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(discharge.condition_at_discharge?.toLowerCase() || 'stable')}>
+                          {discharge.condition_at_discharge || 'N/A'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => {
-                          const dischargePatient = admissions.find(a => a.id === patient.id);
-                          if (dischargePatient) {
+                          // Find admission by admission_id from discharge
+                          const admission = admissions.find(a => a.id === discharge.admission_id);
+                          if (admission) {
                             const patientObj: IPDPatient = {
-                              id: dischargePatient.id?.toString() || '',
-                              ipdNumber: dischargePatient.ipd_number || '',
-                              uhid: dischargePatient.uhid || '',
-                              patientName: dischargePatient.patient_name || '',
-                              age: dischargePatient.patient_age || 0,
-                              gender: (dischargePatient.patient_gender as any) || 'other',
-                              contactNumber: dischargePatient.patient_contact || '',
-                              emergencyContact: dischargePatient.patient_emergency_contact || '',
-                              address: dischargePatient.patient_address || '',
-                              admissionDate: dischargePatient.admission_date || '',
-                              admissionTime: dischargePatient.admission_time || '',
-                              admittedBy: dischargePatient.admitted_by_name || '',
-                              consultingDoctor: dischargePatient.consulting_doctor_name || '',
-                              department: dischargePatient.department || '',
-                              wardName: dischargePatient.ward_name || '',
-                              bedNumber: dischargePatient.bed_number || '',
-                              diagnosis: dischargePatient.diagnosis || '',
-                              admissionType: (dischargePatient.admission_type as any) || 'Emergency',
-                              status: (dischargePatient.status as any) || 'discharged',
-                              estimatedDuration: dischargePatient.estimated_duration || 0,
-                              actualDuration: dischargePatient.actual_duration || undefined,
+                              id: admission.id?.toString() || '',
+                              ipdNumber: admission.ipd_number || '',
+                              uhid: admission.uhid || '',
+                              patientName: admission.patient_name || '',
+                              age: admission.patient_age || 0,
+                              gender: (admission.patient_gender as any) || 'other',
+                              contactNumber: admission.patient_contact || '',
+                              emergencyContact: admission.patient_emergency_contact || '',
+                              address: admission.patient_address || '',
+                              admissionDate: admission.admission_date || '',
+                              admissionTime: admission.admission_time || '',
+                              admittedBy: admission.admitted_by_name || '',
+                              consultingDoctor: admission.consulting_doctor_name || '',
+                              department: admission.department || '',
+                              wardName: admission.ward_name || '',
+                              bedNumber: admission.bed_number || '',
+                              diagnosis: discharge.final_diagnosis || admission.diagnosis || '',
+                              admissionType: (admission.admission_type as any) || 'Emergency',
+                              status: 'discharged' as any,
+                              estimatedDuration: admission.estimated_duration || 0,
+                              actualDuration: discharge.length_of_stay || undefined,
                               totalCharges: 0,
                               paidAmount: 0,
                               dueAmount: 0
                             };
                             setSelectedPatient(patientObj);
                             setActiveSection('patient-details');
+                          } else {
+                            // If admission not found in current list, load it
+                            toast.info('Loading patient details...');
+                            api.getIPDAdmission(discharge.admission_id).then((admission) => {
+                              const patientObj: IPDPatient = {
+                                id: admission.id?.toString() || '',
+                                ipdNumber: admission.ipd_number || '',
+                                uhid: admission.uhid || '',
+                                patientName: admission.patient_name || '',
+                                age: admission.patient_age || 0,
+                                gender: (admission.patient_gender as any) || 'other',
+                                contactNumber: admission.patient_contact || '',
+                                emergencyContact: admission.patient_emergency_contact || '',
+                                address: admission.patient_address || '',
+                                admissionDate: admission.admission_date || '',
+                                admissionTime: admission.admission_time || '',
+                                admittedBy: admission.admitted_by_name || '',
+                                consultingDoctor: admission.consulting_doctor_name || '',
+                                department: admission.department || '',
+                                wardName: admission.ward_name || '',
+                                bedNumber: admission.bed_number || '',
+                                diagnosis: discharge.final_diagnosis || admission.diagnosis || '',
+                                admissionType: (admission.admission_type as any) || 'Emergency',
+                                status: 'discharged' as any,
+                                estimatedDuration: admission.estimated_duration || 0,
+                                actualDuration: discharge.length_of_stay || undefined,
+                                totalCharges: 0,
+                                paidAmount: 0,
+                                dueAmount: 0
+                              };
+                              setSelectedPatient(patientObj);
+                              setActiveSection('patient-details');
+                            }).catch((err) => {
+                              toast.error('Failed to load patient details');
+                            });
                           }
                         }}>
                           <Eye className="w-3 h-3" />
@@ -3998,6 +4331,8 @@ export function IPDManagement() {
         return renderDeathCertificates();
       case 'transfer-history':
         return renderTransferHistory();
+      case 'ot-schedules':
+        return <OTSchedules />;
       case 'doctor-requests':
       case 'admission-requests':
         return renderAdmissionRequests();
@@ -4214,6 +4549,16 @@ export function IPDManagement() {
                   <span style={{ color: '#ffffff' }}>Bed/Room Transfer History</span>
                 </button>
                 <button
+                  onClick={() => setActiveSection('ot-schedules')}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                    activeSection === 'ot-schedules' ? 'bg-blue-600' : 'hover:bg-gray-800'
+                  }`}
+                  style={{ color: '#ffffff' }}
+                >
+                  <Scissors className="w-5 h-5" style={{ color: '#ffffff' }} />
+                  <span style={{ color: '#ffffff' }}>OT Schedules</span>
+                </button>
+                <button
                   onClick={() => setActiveSection('doctor-requests')}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                     activeSection === 'doctor-requests' ? 'bg-blue-600' : 'hover:bg-gray-800'
@@ -4388,17 +4733,35 @@ export function IPDManagement() {
       />
 
       {/* Payment Dialog */}
-      <PaymentDialog 
-        open={isPaymentDialogOpen}
-        onOpenChange={setIsPaymentDialogOpen}
-        patient={selectedPatient}
-        billing={billing}
-        onSuccess={() => {
-          if (selectedPatient?.id) {
-            loadPatientDetailsData();
-          }
-        }}
-      />
+      {selectedPatient && (
+        <PaymentDialog 
+          open={isPaymentDialogOpen}
+          onOpenChange={setIsPaymentDialogOpen}
+          patientId={parseInt(selectedPatient.id)}
+          billType="ipd"
+          billId={billing?.id || parseInt(selectedPatient.id)}
+          totalAmount={selectedPatient.totalCharges}
+          paidAmount={selectedPatient.paidAmount}
+          dueAmount={selectedPatient.dueAmount}
+          onSuccess={() => {
+            if (selectedPatient?.id) {
+              loadPatientDetailsData();
+              loadAdmissions();
+            }
+          }}
+        />
+      )}
+
+      {/* Bill Details & Payment History Dialog */}
+      {selectedPatient && (
+        <BillDetailsDialog
+          open={isBillDetailsDialogOpen}
+          onOpenChange={setIsBillDetailsDialogOpen}
+          patient={selectedPatient}
+          billing={billing}
+          payments={selectedBillPayments}
+        />
+      )}
 
       {/* Daily Care Order Dialog */}
       <DailyCareOrderDialog
@@ -4687,6 +5050,23 @@ function AdmissionDialog({
   const [patientSearchResults, setPatientSearchResults] = useState<any[]>([]);
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [showAddPatientDialog, setShowAddPatientDialog] = useState(false);
+  const [newPatientForm, setNewPatientForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    age: 0,
+    gender: 'Male' as 'Male' | 'Female' | 'Other',
+    date_of_birth: '',
+    address: '',
+    city: '',
+    state: '',
+    zip_code: '',
+    blood_group: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+  });
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [createPatientError, setCreatePatientError] = useState('');
   
   // Real-time data states
   const [wards, setWards] = useState<IPDWard[]>([]);
@@ -4902,6 +5282,28 @@ function AdmissionDialog({
       setAddress('');
     }
   }, [open, admission]);
+
+  // Reset patient form when add patient dialog closes
+  useEffect(() => {
+    if (!showAddPatientDialog) {
+      setNewPatientForm({
+        name: '',
+        email: '',
+        phone: '',
+        age: 0,
+        gender: 'Male',
+        date_of_birth: '',
+        address: '',
+        city: '',
+        state: '',
+        zip_code: '',
+        blood_group: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+      });
+      setCreatePatientError('');
+    }
+  }, [showAddPatientDialog]);
   
   // Update form fields when patient is selected
   useEffect(() => {
@@ -5083,9 +5485,282 @@ function AdmissionDialog({
                           Fill in the patient details to register a new patient in the system.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="text-center py-8 text-gray-500">
-                        Patient registration form will be implemented here
-                      </div>
+                      <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        setCreatePatientError('');
+                        setCreatingPatient(true);
+
+                        try {
+                          const patientData = {
+                            ...newPatientForm,
+                            age: parseInt(newPatientForm.age.toString()) || 0,
+                          };
+
+                          const createdPatient = await api.createPatient(patientData);
+                          toast.success('Patient created successfully');
+                          handleSelectPatient(createdPatient);
+                          setShowAddPatientDialog(false);
+                          // Reset form
+                          setNewPatientForm({
+                            name: '',
+                            email: '',
+                            phone: '',
+                            age: 0,
+                            gender: 'Male',
+                            date_of_birth: '',
+                            address: '',
+                            city: '',
+                            state: '',
+                            zip_code: '',
+                            blood_group: '',
+                            emergency_contact_name: '',
+                            emergency_contact_phone: '',
+                          });
+                        } catch (err: any) {
+                          setCreatePatientError(err.message || 'Failed to create patient');
+                          toast.error('Failed to create patient: ' + (err.message || 'Unknown error'));
+                        } finally {
+                          setCreatingPatient(false);
+                        }
+                      }} className="space-y-6 py-4">
+                        {createPatientError && (
+                          <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+                            {createPatientError}
+                          </div>
+                        )}
+
+                        {/* Personal Information */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Personal Information</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="new-patient-name">Full Name *</Label>
+                              <Input
+                                id="new-patient-name"
+                                value={newPatientForm.name}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, name: e.target.value })}
+                                required
+                                disabled={creatingPatient}
+                                placeholder="Enter full name"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-email">Email</Label>
+                              <Input
+                                id="new-patient-email"
+                                type="email"
+                                value={newPatientForm.email}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="patient@example.com"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="new-patient-phone">Phone Number *</Label>
+                              <Input
+                                id="new-patient-phone"
+                                type="tel"
+                                value={newPatientForm.phone}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, phone: e.target.value })}
+                                required
+                                disabled={creatingPatient}
+                                placeholder="+1 234-567-8900"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-dob">Date of Birth</Label>
+                              <Input
+                                id="new-patient-dob"
+                                type="date"
+                                value={newPatientForm.date_of_birth}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, date_of_birth: e.target.value })}
+                                disabled={creatingPatient}
+                                max={new Date().toISOString().split('T')[0]}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <Label htmlFor="new-patient-age">Age *</Label>
+                              <Input
+                                id="new-patient-age"
+                                type="number"
+                                min="0"
+                                max="150"
+                                value={newPatientForm.age || ''}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, age: parseInt(e.target.value) || 0 })}
+                                required
+                                disabled={creatingPatient}
+                                placeholder="0"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-gender">Gender *</Label>
+                              <Select
+                                value={newPatientForm.gender}
+                                onValueChange={(value: 'Male' | 'Female' | 'Other') =>
+                                  setNewPatientForm({ ...newPatientForm, gender: value })
+                                }
+                                disabled={creatingPatient}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Male">Male</SelectItem>
+                                  <SelectItem value="Female">Female</SelectItem>
+                                  <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-blood-group">Blood Group</Label>
+                              <Select
+                                value={newPatientForm.blood_group}
+                                onValueChange={(value) => setNewPatientForm({ ...newPatientForm, blood_group: value })}
+                                disabled={creatingPatient}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select blood group" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="A+">A+</SelectItem>
+                                  <SelectItem value="A-">A-</SelectItem>
+                                  <SelectItem value="B+">B+</SelectItem>
+                                  <SelectItem value="B-">B-</SelectItem>
+                                  <SelectItem value="AB+">AB+</SelectItem>
+                                  <SelectItem value="AB-">AB-</SelectItem>
+                                  <SelectItem value="O+">O+</SelectItem>
+                                  <SelectItem value="O-">O-</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Address Information */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Address Information</h3>
+                          
+                          <div>
+                            <Label htmlFor="new-patient-address">Street Address</Label>
+                            <Input
+                              id="new-patient-address"
+                              value={newPatientForm.address}
+                              onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
+                              disabled={creatingPatient}
+                              placeholder="123 Main Street"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <Label htmlFor="new-patient-city">City</Label>
+                              <Input
+                                id="new-patient-city"
+                                value={newPatientForm.city}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, city: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="City"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-state">State/Province</Label>
+                              <Input
+                                id="new-patient-state"
+                                value={newPatientForm.state}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, state: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="State"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-zip">Zip/Postal Code</Label>
+                              <Input
+                                id="new-patient-zip"
+                                value={newPatientForm.zip_code}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, zip_code: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="12345"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Emergency Contact */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Emergency Contact</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="new-patient-emergency-name">Emergency Contact Name</Label>
+                              <Input
+                                id="new-patient-emergency-name"
+                                value={newPatientForm.emergency_contact_name}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, emergency_contact_name: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="Contact person name"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor="new-patient-emergency-phone">Emergency Contact Phone</Label>
+                              <Input
+                                id="new-patient-emergency-phone"
+                                type="tel"
+                                value={newPatientForm.emergency_contact_phone}
+                                onChange={(e) => setNewPatientForm({ ...newPatientForm, emergency_contact_phone: e.target.value })}
+                                disabled={creatingPatient}
+                                placeholder="+1 234-567-8900"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Form Actions */}
+                        <DialogFooter>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => {
+                              setShowAddPatientDialog(false);
+                              setCreatePatientError('');
+                              setNewPatientForm({
+                                name: '',
+                                email: '',
+                                phone: '',
+                                age: 0,
+                                gender: 'Male',
+                                date_of_birth: '',
+                                address: '',
+                                city: '',
+                                state: '',
+                                zip_code: '',
+                                blood_group: '',
+                                emergency_contact_name: '',
+                                emergency_contact_phone: '',
+                              });
+                            }} 
+                            disabled={creatingPatient}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={creatingPatient} className="bg-blue-600 hover:bg-blue-700">
+                            {creatingPatient ? 'Creating...' : 'Create Patient'}
+                          </Button>
+                        </DialogFooter>
+                      </form>
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -8388,162 +9063,7 @@ function NursingNoteDialog({
   );
 }
 
-function PaymentDialog({ 
-  open, 
-  onOpenChange, 
-  patient,
-  billing,
-  onSuccess
-}: { 
-  open: boolean; 
-  onOpenChange: (open: boolean) => void;
-  patient: IPDPatient | null;
-  billing: IPDBilling | null;
-  onSuccess?: () => void;
-}) {
-  const [paymentAmount, setPaymentAmount] = useState<string>('');
-  const [paymentMode, setPaymentMode] = useState<string>('');
-  const [submitting, setSubmitting] = useState(false);
-  
-  useEffect(() => {
-    if (patient && open) {
-      setPaymentAmount(patient.dueAmount > 0 ? patient.dueAmount.toString() : '');
-    }
-    if (!open) {
-      setPaymentAmount('');
-      setPaymentMode('');
-    }
-  }, [open, patient]);
-  
-  const handleSubmit = async () => {
-    if (!patient?.id) {
-      toast.error('No patient selected');
-      return;
-    }
-    
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      toast.error('Please enter a valid payment amount');
-      return;
-    }
-    
-    if (!paymentMode) {
-      toast.error('Please select a payment mode');
-      return;
-    }
-    
-    if (parseFloat(paymentAmount) > patient.dueAmount) {
-      toast.error('Payment amount cannot exceed due amount');
-      return;
-    }
-    
-    try {
-      setSubmitting(true);
-      const admissionId = parseInt(patient.id);
-      
-      const paymentData: any = {
-        amount: parseFloat(paymentAmount),
-        payment_mode: paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1),
-        payment_date: new Date().toISOString().split('T')[0],
-        payment_time: new Date().toTimeString().split(' ')[0].substring(0, 5),
-      };
-      
-      await api.recordIPDPayment(admissionId, paymentData);
-      
-      toast.success('Payment recorded successfully!');
-      onOpenChange(false);
-      if (onSuccess) onSuccess();
-    } catch (error: any) {
-      toast.error('Failed to record payment: ' + (error.message || 'Unknown error'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  
-  if (!patient || !billing) {
-    return null;
-  }
-  
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Collect Payment</DialogTitle>
-          <DialogDescription>Record payment for IPD admission</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Charges</span>
-                  <span className="font-medium">₹{patient.totalCharges.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Paid Amount</span>
-                  <span className="text-green-600">₹{patient.paidAmount.toLocaleString()}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-lg">
-                  <span className="font-semibold">Due Amount</span>
-                  <span className="font-bold text-red-600">₹{patient.dueAmount.toLocaleString()}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <div className="space-y-2">
-            <Label>Payment Amount *</Label>
-            <Input 
-              type="number" 
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              placeholder="0"
-              max={patient.dueAmount}
-            />
-            <p className="text-xs text-gray-500">Maximum: ₹{patient.dueAmount.toLocaleString()}</p>
-          </div>
-          
-          <div className="space-y-2">
-            <Label>Payment Mode *</Label>
-            <Select value={paymentMode} onValueChange={setPaymentMode}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select payment mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="card">Card</SelectItem>
-                <SelectItem value="upi">UPI</SelectItem>
-                <SelectItem value="netbanking">Net Banking</SelectItem>
-                <SelectItem value="cheque">Cheque</SelectItem>
-                <SelectItem value="insurance">Insurance</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
-          <Button 
-            className="bg-green-600 hover:bg-green-700" 
-            onClick={handleSubmit}
-            disabled={submitting || !patient || !paymentAmount || !paymentMode}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <IndianRupee className="w-4 h-4 mr-2" />
-                Record Payment
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// PaymentDialog is now imported from '../payments/PaymentDialog'
 
 // ============= DAILY CARE ORDER DIALOG =============
 function DailyCareOrderDialog({
@@ -12152,6 +12672,311 @@ function SettingsDialog({
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>
             Save Settings
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BillDetailsDialog({
+  open,
+  onOpenChange,
+  patient,
+  billing,
+  payments
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  patient: IPDPatient | null;
+  billing: IPDBilling | null;
+  payments: any[];
+}) {
+  // Ensure payments is always an array
+  const paymentsArray = Array.isArray(payments) ? payments : [];
+  const totalPaid = paymentsArray.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+  
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-green-600" />
+            Bill & Payment Details
+          </DialogTitle>
+          <DialogDescription>
+            {patient?.patientName} - {patient?.ipdNumber}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Bill Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Bill Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {billing ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-gray-500">Bill Number</Label>
+                      <p className="font-semibold">{billing.bill_number || `IPD-BILL-${billing.id || 'N/A'}`}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Bill Date</Label>
+                      <p className="font-semibold">{billing.billing_date ? new Date(billing.billing_date).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  {/* Bill Breakdown */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold text-gray-700">Bill Breakdown</Label>
+                    
+                    {/* Room Charges */}
+                    {billing.room_charges && (typeof billing.room_charges === 'object') && (
+                      <div className="pl-4 border-l-2 border-blue-200">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-sm">Room/Bed Charges</p>
+                            <p className="text-xs text-gray-500">
+                              {billing.room_charges.bed_type || billing.room_charges.room_type || 'Room'} 
+                              {billing.room_charges.days ? ` × ${billing.room_charges.days} day(s)` : ''}
+                              {billing.room_charges.rate_per_day ? ` @ ₹${parseFloat(billing.room_charges.rate_per_day).toLocaleString('en-IN', { minimumFractionDigits: 2 })}/day` : ''}
+                            </p>
+                          </div>
+                          <span className="font-semibold">₹{parseFloat(billing.room_charges.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Consultation Charges */}
+                    {billing.consultation_charges && Array.isArray(billing.consultation_charges) && billing.consultation_charges.length > 0 && (
+                      <div className="pl-4 border-l-2 border-green-200">
+                        <p className="font-medium text-sm mb-2">Consultation Charges</p>
+                        {billing.consultation_charges.map((consult: any, idx: number) => (
+                          <div key={idx} className="flex justify-between mb-1">
+                            <div>
+                              <p className="text-sm">{consult.doctor || 'Consultation'}</p>
+                              <p className="text-xs text-gray-500">
+                                {consult.visits || 0} visit(s) @ ₹{parseFloat(consult.rate_per_visit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            <span className="font-semibold">₹{parseFloat(consult.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Medication Charges */}
+                    {parseFloat(billing.medication_charges || 0) > 0 && (
+                      <div className="pl-4 border-l-2 border-purple-200">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-sm">Medication Charges</span>
+                          <span className="font-semibold">₹{parseFloat(billing.medication_charges || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Lab Charges */}
+                    {parseFloat(billing.lab_charges || 0) > 0 && (
+                      <div className="pl-4 border-l-2 border-orange-200">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-sm">Laboratory Charges</span>
+                          <span className="font-semibold">₹{parseFloat(billing.lab_charges || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Imaging Charges */}
+                    {parseFloat(billing.imaging_charges || 0) > 0 && (
+                      <div className="pl-4 border-l-2 border-pink-200">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-sm">Imaging/Radiology Charges</span>
+                          <span className="font-semibold">₹{parseFloat(billing.imaging_charges || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Procedure/Surgery Charges */}
+                    {billing.procedure_charges && Array.isArray(billing.procedure_charges) && billing.procedure_charges.length > 0 && (
+                      <div className="pl-4 border-l-2 border-red-200">
+                        <p className="font-medium text-sm mb-2">Procedure/Surgery Charges</p>
+                        {billing.procedure_charges.map((proc: any, idx: number) => (
+                          <div key={idx} className="flex justify-between mb-1">
+                            <div>
+                              <p className="text-sm">{proc.procedure_name || proc.procedureName || 'Procedure'}</p>
+                              <p className="text-xs text-gray-500">
+                                {proc.date ? new Date(proc.date).toLocaleDateString() : ''}
+                                {proc.ot_number ? ` | OT: ${proc.ot_number}` : ''}
+                              </p>
+                            </div>
+                            <span className="font-semibold">₹{parseFloat(proc.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Other Charges */}
+                    {billing.other_charges && Array.isArray(billing.other_charges) && billing.other_charges.length > 0 && (
+                      <div className="pl-4 border-l-2 border-gray-200">
+                        <p className="font-medium text-sm mb-2">Other Charges</p>
+                        {billing.other_charges.map((other: any, idx: number) => (
+                          <div key={idx} className="flex justify-between mb-1">
+                            <span className="text-sm">{other.description || 'Other'}</span>
+                            <span className="font-semibold">₹{parseFloat(other.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-semibold">₹{parseFloat(billing.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {parseFloat(billing.discount || 0) > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Discount</span>
+                        <span>-₹{parseFloat(billing.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {parseFloat(billing.tax || 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tax (GST)</span>
+                        <span>₹{parseFloat(billing.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {parseFloat(billing.advance_paid || 0) > 0 && (
+                      <div className="flex justify-between text-blue-600">
+                        <span>Advance Paid</span>
+                        <span>₹{parseFloat(billing.advance_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {parseFloat(billing.insurance_covered || 0) > 0 && (
+                      <div className="flex justify-between text-purple-600">
+                        <span>Insurance Covered</span>
+                        <span>₹{parseFloat(billing.insurance_covered || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <Separator />
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total Amount</span>
+                      <span>₹{parseFloat(billing.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold text-green-600">
+                      <span>Total Paid</span>
+                      <span>₹{totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold text-red-600">
+                      <span>Due Amount</span>
+                      <span>₹{parseFloat(billing.due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="mt-2">
+                      <Badge variant={billing.payment_status === 'paid' ? 'default' : billing.payment_status === 'partial' ? 'secondary' : 'destructive'}>
+                        {billing.payment_status?.toUpperCase() || 'PENDING'}
+                      </Badge>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-gray-500 text-center py-4">No billing information available</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Payment History */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Payment History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {paymentsArray && paymentsArray.length > 0 ? (
+                <div className="space-y-3">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Payment #</TableHead>
+                        <TableHead>Date & Time</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Receipt</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paymentsArray.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell className="font-medium">{payment.payment_number || payment.receipt_number || 'N/A'}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A'}</div>
+                              <div className="text-gray-500">{payment.payment_time || ''}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {payment.payment_method || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold text-green-600">
+                            ₹{parseFloat(payment.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={payment.payment_status === 'completed' ? 'default' : 'secondary'}>
+                              {payment.payment_status?.toUpperCase() || 'PENDING'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {payment.receipt_number ? (
+                              <Button size="sm" variant="outline" className="text-xs">
+                                <FileText className="w-3 h-3 mr-1" />
+                                {payment.receipt_number}
+                              </Button>
+                            ) : (
+                              <span className="text-gray-400 text-sm">N/A</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-green-800">Total Payments:</span>
+                      <span className="text-xl font-bold text-green-700">
+                        ₹{totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">No payment records found</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          {billing && (
+            <Button variant="outline" onClick={() => {
+              // Print functionality can be added here
+              window.print();
+            }}>
+              <Printer className="w-4 h-4 mr-2" />
+              Print Bill
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

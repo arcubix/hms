@@ -381,6 +381,23 @@ class Users extends Api {
                 return;
             }
 
+            // Set organization_id automatically from logged-in user
+            // Super admins can override by providing organization_id in request
+            if ($this->isAdmin() && !empty($data['organization_id'])) {
+                // Super admin can assign to any organization
+                // Validate organization exists
+                $org = $this->db->get_where('organizations', array('id' => $data['organization_id']))->row_array();
+                if (!$org) {
+                    $this->error('Invalid organization ID', 422, array('organization_id' => 'Organization not found.'));
+                    return;
+                }
+            } else {
+                // Regular admins: use their own organization_id
+                // Remove any provided organization_id to prevent override
+                unset($data['organization_id']);
+                $data = $this->set_organization_id($data);
+            }
+
             $user_id = $this->User_model->create_user($data);
 
             if ($user_id) {

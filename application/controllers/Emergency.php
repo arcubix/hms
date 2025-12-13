@@ -13,6 +13,7 @@ class Emergency extends Api {
         parent::__construct();
         
         $this->load->model('Emergency_model');
+        $this->load->library('PaymentProcessor');
         
         // Verify token for all requests (except OPTIONS which already exited)
         if (!$this->verify_token()) {
@@ -796,6 +797,109 @@ class Emergency extends Api {
             }
         } catch (Exception $e) {
             log_message('error', 'Emergency charges error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Collect payment for emergency visit charges
+     * POST /api/emergency/visits/:id/payment
+     */
+    public function payment($visit_id = null) {
+        try {
+            if (!$visit_id) {
+                $visit_id = $this->input->post('visit_id');
+            }
+            
+            if (!$visit_id) {
+                $this->error('Visit ID is required', 400);
+                return;
+            }
+
+            $method = $this->input->server('REQUEST_METHOD');
+            
+            if ($method === 'POST') {
+                $data = json_decode($this->input->raw_input_stream, true);
+                if (empty($data)) {
+                    $data = $this->input->post();
+                }
+                
+                if (empty($data['amount'])) {
+                    $this->error('Payment amount is required', 400);
+                    return;
+                }
+
+                // Get visit to get patient_id
+                $visit = $this->Emergency_model->get_by_id($visit_id);
+                if (!$visit) {
+                    $this->error('Visit not found', 404);
+                    return;
+                }
+
+                // Get total charges
+                $total_charges = $this->Emergency_model->calculate_total_charges($visit_id);
+                
+                // Get total already paid
+                $this->load->model('Patient_payment_model');
+                $total_paid = $this->Patient_payment_model->get_total_paid('emergency', $visit_id);
+                $due_amount = $total_charges - $total_paid;
+
+                // Validate payment amount
+                if ($data['amount'] > $due_amount) {
+                    $this->error('Payment amount exceeds due amount', 400);
+                    return;
+                }
+
+                // Prepare payment data
+                $payment_data = array(
+                    'patient_id' => $visit['patient_id'],
+                    'bill_type' => 'emergency',
+                    'bill_id' => $visit_id,
+                    'amount' => $data['amount'],
+                    'payment_method' => strtolower($data['payment_method'] ?? 'cash'),
+                    'payment_date' => $data['payment_date'] ?? date('Y-m-d'),
+                    'payment_time' => $data['payment_time'] ?? date('H:i:s'),
+                    'transaction_id' => $data['transaction_id'] ?? null,
+                    'bank_name' => $data['bank_name'] ?? null,
+                    'cheque_number' => $data['cheque_number'] ?? null,
+                    'cheque_date' => $data['cheque_date'] ?? null,
+                    'notes' => $data['notes'] ?? null
+                );
+
+                // Set processed_by if user is logged in
+                if ($this->user && isset($this->user['id'])) {
+                    $payment_data['processed_by'] = $this->user['id'];
+                }
+
+                // Process payment
+                $result = $this->PaymentProcessor->process_bill_payment('emergency', $visit_id, $payment_data);
+                
+                if ($result['success']) {
+                    // Get updated charges info
+                    $charges = $this->Emergency_model->get_charges($visit_id);
+                    $total = $this->Emergency_model->calculate_total_charges($visit_id);
+                    $new_total_paid = $this->Patient_payment_model->get_total_paid('emergency', $visit_id);
+                    
+                    // Log payment
+                    $this->load->library('audit_log');
+                    $this->audit_log->logCreate('Emergency Department', 'Payment', $result['payment_id'], "Recorded payment: {$payment_data['amount']} ({$payment_data['payment_method']}) for patient ID: {$visit['patient_id']} (Visit ID: {$visit_id})");
+                    
+                    $payment = $this->Patient_payment_model->get_by_id($result['payment_id']);
+                    $this->success(array(
+                        'payment' => $payment,
+                        'charges' => $charges,
+                        'total_charges' => $total,
+                        'total_paid' => $new_total_paid,
+                        'due_amount' => $total - $new_total_paid
+                    ), 'Payment recorded successfully', 201);
+                } else {
+                    $this->error($result['error'] ?? 'Failed to record payment', 400);
+                }
+            } else {
+                $this->error('Method not allowed', 405);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Emergency payment error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }

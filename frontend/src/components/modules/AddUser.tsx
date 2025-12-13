@@ -531,6 +531,7 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
       ...formData,
       share_procedures: [...formData.share_procedures, {
         procedure_name: '',
+        charges: 0,
         share_type: 'percentage',
         share_value: 0
       }]
@@ -1577,8 +1578,19 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-4">
               <CardTitle className="text-lg">Doctor's Share Procedures</CardTitle>
+              <p className="text-sm text-gray-500 mt-2">Configure charges and doctor's share percentage/amount for each procedure</p>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Table Header */}
+              {formData.share_procedures.length > 0 && (
+                <div className="grid grid-cols-12 gap-2 pb-2 border-b font-medium text-sm text-gray-700">
+                  <div className="col-span-4">Procedure</div>
+                  <div className="col-span-2">Charges (Rs.)</div>
+                  <div className="col-span-2">Share Type</div>
+                  <div className="col-span-2">Share Value</div>
+                  <div className="col-span-2"></div>
+                </div>
+              )}
               {formData.share_procedures.map((procedure, index) => (
                 <div key={index} className="flex gap-2 items-end">
                   <div className="flex-1 space-y-2">
@@ -1604,7 +1616,22 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
                     </Select>
                   </div>
                   <div className="w-32 space-y-2">
-                    <Label>Type</Label>
+                    <Label>Charges (Rs.)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={procedure.charges || ''}
+                      onChange={(e) => {
+                        const newProcedures = [...formData.share_procedures];
+                        newProcedures[index].charges = parseFloat(e.target.value) || 0;
+                        setFormData({ ...formData, share_procedures: newProcedures });
+                      }}
+                    />
+                  </div>
+                  <div className="w-32 space-y-2">
+                    <Label>Share Type</Label>
                     <Select
                       value={procedure.share_type}
                       onValueChange={(value: 'percentage' | 'rupees') => {
@@ -1617,19 +1644,28 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="percentage">percentage</SelectItem>
-                        <SelectItem value="rupees">rupees</SelectItem>
+                        <SelectItem value="percentage">Percentage</SelectItem>
+                        <SelectItem value="rupees">Rupees</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="w-32 space-y-2">
-                    <Label>Value</Label>
+                    <Label>{procedure.share_type === 'percentage' ? 'Share %' : 'Share Amount'}</Label>
                     <Input
                       type="number"
-                      value={procedure.share_value}
+                      min="0"
+                      step={procedure.share_type === 'percentage' ? '0.01' : '1'}
+                      max={procedure.share_type === 'percentage' ? 100 : undefined}
+                      placeholder={procedure.share_type === 'percentage' ? '0.00' : '0'}
+                      value={procedure.share_value || ''}
                       onChange={(e) => {
                         const newProcedures = [...formData.share_procedures];
-                        newProcedures[index].share_value = parseFloat(e.target.value) || 0;
+                        const value = parseFloat(e.target.value) || 0;
+                        // Validate percentage doesn't exceed 100
+                        if (procedure.share_type === 'percentage' && value > 100) {
+                          return;
+                        }
+                        newProcedures[index].share_value = value;
                         setFormData({ ...formData, share_procedures: newProcedures });
                       }}
                     />
@@ -1638,6 +1674,7 @@ export function AddUser({ onBack, onSuccess, userId }: AddUserProps) {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleRemoveShareProcedure(index)}
+                    className="mb-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>

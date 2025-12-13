@@ -30,6 +30,12 @@ import {
   Building,
   ClipboardList,
   Microscope,
+  ShoppingCart,
+  Receipt,
+  CheckCircle,
+  CreditCard,
+  Video,
+  User,
 } from 'lucide-react';
 
 export const moduleIcons: Record<string, any> = {
@@ -60,6 +66,12 @@ export const moduleIcons: Record<string, any> = {
   'Building': Building,
   'ClipboardList': ClipboardList,
   'Microscope': Microscope,
+  'ShoppingCart': ShoppingCart,
+  'Receipt': Receipt,
+  'CheckCircle': CheckCircle,
+  'CreditCard': CreditCard,
+  'Video': Video,
+  'User': User,
 };
 
 /**
@@ -105,6 +117,8 @@ export const getModuleGradient = (colorFrom: string, colorTo: string): { from: s
     'violet-600': { from: '#7c3aed', to: '#6d28d9' },
     'slate-500': { from: '#64748b', to: '#475569' },
     'slate-600': { from: '#475569', to: '#334155' },
+    'emerald-500': { from: '#10b981', to: '#059669' },
+    'emerald-600': { from: '#059669', to: '#047857' },
   };
 
   const fromColor = colorMap[colorFrom]?.from || colorMap['blue-500'].from;

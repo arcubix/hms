@@ -105,9 +105,33 @@ class Prescription_model extends CI_Model {
             }
         }
 
-        // Add lab tests
+        // Add lab tests and create lab orders
         if (!empty($data['lab_tests']) && is_array($data['lab_tests'])) {
+            // Create lab order for this prescription
+            $this->load->model('Lab_order_model');
+            $this->load->model('Lab_test_model');
+            
+            // Map priority from prescription format to lab order format
+            $priority_map = array(
+                'Normal' => 'routine',
+                'Urgent' => 'urgent',
+                'Emergency' => 'stat'
+            );
+            
+            $lab_order_tests = array();
             foreach ($data['lab_tests'] as $test) {
+                // Get test price if lab_test_id is provided
+                $test_price = 0.00;
+                $test_code = null;
+                if (!empty($test['lab_test_id'])) {
+                    $lab_test = $this->Lab_test_model->get_by_id($test['lab_test_id']);
+                    if ($lab_test) {
+                        $test_price = isset($lab_test['price']) ? $lab_test['price'] : 0.00;
+                        $test_code = $lab_test['test_code'];
+                    }
+                }
+                
+                // Add to prescription_lab_tests
                 $test_data = array(
                     'prescription_id' => $prescription_id,
                     'lab_test_id' => isset($test['lab_test_id']) && $test['lab_test_id'] ? (int)$test['lab_test_id'] : null,
@@ -118,6 +142,42 @@ class Prescription_model extends CI_Model {
                     'status' => 'Pending'
                 );
                 $this->db->insert('prescription_lab_tests', $test_data);
+                $prescription_test_id = $this->db->insert_id();
+                
+                // Prepare for lab order
+                $lab_order_tests[] = array(
+                    'lab_test_id' => isset($test['lab_test_id']) && $test['lab_test_id'] ? (int)$test['lab_test_id'] : null,
+                    'test_name' => $test['test_name'],
+                    'test_code' => $test_code,
+                    'price' => $test_price,
+                    'priority' => isset($priority_map[$test['priority'] ?? 'Normal']) ? $priority_map[$test['priority']] : 'routine',
+                    'instructions' => $test['instructions'] ?? null
+                );
+            }
+            
+            // Create lab order if there are tests
+            if (!empty($lab_order_tests)) {
+                $order_data = array(
+                    'patient_id' => (int)$data['patient_id'],
+                    'order_type' => 'OPD',
+                    'order_source_id' => $prescription_id,
+                    'ordered_by_user_id' => isset($data['created_by']) ? (int)$data['created_by'] : null,
+                    'priority' => isset($priority_map[$data['lab_tests'][0]['priority'] ?? 'Normal']) ? $priority_map[$data['lab_tests'][0]['priority']] : 'routine',
+                    'tests' => $lab_order_tests,
+                    'notes' => 'Created from prescription: ' . $prescription_number,
+                    'organization_id' => isset($data['organization_id']) ? $data['organization_id'] : null
+                );
+                
+                $lab_order_id = $this->Lab_order_model->create($order_data);
+                
+                // Link prescription_lab_tests to lab_order_tests
+                if ($lab_order_id) {
+                    $order = $this->Lab_order_model->get_by_id($lab_order_id);
+                    if ($order && !empty($order['tests'])) {
+                        // Update prescription_lab_tests with lab_order_test reference (if needed)
+                        // This can be done via a linking table or by storing order_id in prescription_lab_tests
+                    }
+                }
             }
         }
 

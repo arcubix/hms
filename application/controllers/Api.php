@@ -220,7 +220,29 @@ class Api extends CI_Controller {
         $user_role = is_object($this->user) ? $this->user->role : (is_array($this->user) ? $this->user['role'] : null);
         
         // Check for admin role (case-insensitive)
-        return $user_role === 'admin' || $user_role === 'Admin' || strtolower($user_role) === 'admin';
+        if ($user_role && (strtolower(trim($user_role)) === 'admin')) {
+            return true;
+        }
+        
+        // Check user_roles table if role field doesn't match (for multi-role support)
+        if (is_array($this->user) && isset($this->user['id'])) {
+            try {
+                $this->load->model('User_model');
+                $roles = $this->User_model->get_user_roles($this->user['id']);
+                if (is_array($roles)) {
+                    foreach ($roles as $role) {
+                        if (strtolower(trim($role)) === 'admin') {
+                            return true;
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                // If there's an error checking roles, just continue
+                log_message('debug', 'Error checking user roles: ' . $e->getMessage());
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -278,6 +300,12 @@ class Api extends CI_Controller {
      * @return bool True if permission exists or user is admin, otherwise sends error response and returns false
      */
     protected function requirePermission($permission_key, $error_message = null) {
+        // Check if user is authenticated
+        if (!$this->user) {
+            $this->error('Authentication required', 401);
+            return false;
+        }
+        
         // Allow admin role by default
         if ($this->isAdmin()) {
             return true;
@@ -352,6 +380,96 @@ class Api extends CI_Controller {
      */
     public function get_current_user() {
         return $this->user;
+    }
+
+    /**
+     * Get organization ID from current user
+     * @return int|null Organization ID or null if not set
+     */
+    protected function get_organization_id() {
+        if (!$this->user) {
+            return null;
+        }
+        
+        $user_id = is_object($this->user) ? $this->user->id : (is_array($this->user) ? $this->user['id'] : null);
+        if (!$user_id) {
+            return null;
+        }
+        
+        // Get user's organization_id
+        $organization_id = is_object($this->user) ? 
+            (isset($this->user->organization_id) ? $this->user->organization_id : null) : 
+            (isset($this->user['organization_id']) ? $this->user['organization_id'] : null);
+        
+        // If not in user object, fetch from database
+        if (!$organization_id) {
+            $this->load->model('User_model');
+            $user_data = $this->User_model->get_user_by_id($user_id);
+            if ($user_data && isset($user_data['organization_id'])) {
+                $organization_id = $user_data['organization_id'];
+                // Cache it in user object
+                if (is_array($this->user)) {
+                    $this->user['organization_id'] = $organization_id;
+                }
+            }
+        }
+        
+        return $organization_id;
+    }
+
+    /**
+     * Filter query by organization_id for multi-tenant data isolation
+     * @param string $table Table name
+     * @param int|null $organization_id Organization ID (if null, uses current user's org)
+     * @return void
+     */
+    protected function filter_by_organization($table, $organization_id = null) {
+        if ($organization_id === null) {
+            $organization_id = $this->get_organization_id();
+        }
+        
+        if ($organization_id) {
+            $this->db->where($table . '.organization_id', $organization_id);
+        }
+    }
+
+    /**
+     * Require organization access (for super-admin or same organization)
+     * @param int $organization_id Organization ID to check access for
+     * @return bool True if access allowed, false otherwise
+     */
+    protected function require_organization_access($organization_id) {
+        // Super-admin can access all organizations
+        if ($this->isAdmin()) {
+            return true;
+        }
+        
+        // Regular users can only access their own organization
+        $user_org_id = $this->get_organization_id();
+        if ($user_org_id == $organization_id) {
+            return true;
+        }
+        
+        $this->error('Access denied. You do not have permission to access this organization.', 403);
+        return false;
+    }
+
+    /**
+     * Set organization_id in data array for create/update operations
+     * @param array $data Data array
+     * @param int|null $organization_id Organization ID (if null, uses current user's org)
+     * @return array Data array with organization_id set
+     */
+    protected function set_organization_id($data, $organization_id = null) {
+        if ($organization_id === null) {
+            $organization_id = $this->get_organization_id();
+        }
+        
+        if ($organization_id) {
+            $data['organization_id'] = $organization_id;
+        }
+        
+        return $data;
     }
 }
 

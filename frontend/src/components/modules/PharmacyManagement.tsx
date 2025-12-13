@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -174,222 +175,20 @@ interface PurchaseOrderItem {
   total: number;
 }
 
-const mockMedicines: Medicine[] = [
-  {
-    id: '1',
-    name: 'Paracetamol',
-    genericName: 'Acetaminophen',
-    category: 'Analgesics',
-    manufacturer: 'PharmaCorp',
-    form: 'Tablet',
-    strength: '500mg',
-    unitPrice: 2.5,
-    sellingPrice: 5.0,
-    stock: 500,
-    minStock: 100,
-    maxStock: 1000,
-    location: 'Shelf A-1',
-    supplier: 'MedSupply Co',
-    barcode: '8901234567890',
-    status: 'in-stock'
-  },
-  {
-    id: '2',
-    name: 'Amoxicillin',
-    genericName: 'Amoxicillin',
-    category: 'Antibiotics',
-    manufacturer: 'BioMed',
-    form: 'Capsule',
-    strength: '250mg',
-    unitPrice: 8.0,
-    sellingPrice: 15.0,
-    stock: 45,
-    minStock: 50,
-    maxStock: 500,
-    location: 'Shelf B-2',
-    supplier: 'Global Pharma',
-    barcode: '8901234567891',
-    status: 'low-stock'
-  },
-  {
-    id: '3',
-    name: 'Insulin Glargine',
-    genericName: 'Insulin Glargine',
-    category: 'Diabetes',
-    manufacturer: 'DiabetCare',
-    form: 'Injection',
-    strength: '100IU/ml',
-    unitPrice: 45.0,
-    sellingPrice: 85.0,
-    stock: 0,
-    minStock: 20,
-    maxStock: 100,
-    location: 'Refrigerator-1',
-    supplier: 'HealthMed Inc',
-    barcode: '8901234567892',
-    status: 'out-of-stock'
-  }
-];
-
-const mockBatches: Batch[] = [
-  {
-    id: '1',
-    medicineId: '1',
-    medicineName: 'Paracetamol 500mg',
-    batchNumber: 'BAT001-2024',
-    manufacturer: 'PharmaCorp',
-    manufactureDate: '2024-01-15',
-    expiryDate: '2026-01-15',
-    quantity: 500,
-    costPrice: 2.5,
-    sellingPrice: 5.0,
-    supplier: 'MedSupply Co',
-    status: 'active'
-  },
-  {
-    id: '2',
-    medicineId: '2',
-    medicineName: 'Amoxicillin 250mg',
-    batchNumber: 'BAT002-2024',
-    manufacturer: 'BioMed',
-    manufactureDate: '2024-06-20',
-    expiryDate: '2025-12-20',
-    quantity: 45,
-    costPrice: 8.0,
-    sellingPrice: 15.0,
-    supplier: 'Global Pharma',
-    status: 'expiring-soon'
-  }
-];
-
-const mockSuppliers: Supplier[] = [
-  {
-    id: '1',
-    name: 'John Anderson',
-    company: 'MedSupply Co',
-    email: 'john@medsupply.com',
-    phone: '+92-300-1234567',
-    address: '123 Medical Street',
-    city: 'Karachi',
-    country: 'Pakistan',
-    taxId: 'TAX-12345',
-    creditLimit: 500000,
-    outstanding: 125000,
-    status: 'active',
-    rating: 4.5,
-    brands: ['PharmaCorp International', 'HealthPlus Generic'],
-    totalTargets: 5,
-    linkedDoctors: 12,
-    commission: 7.5,
-    totalOrders: 248
-  },
-  {
-    id: '2',
-    name: 'Sarah Williams',
-    company: 'Global Pharma',
-    email: 'sarah@globalpharma.com',
-    phone: '+92-321-9876543',
-    address: '456 Health Avenue',
-    city: 'Lahore',
-    country: 'Pakistan',
-    taxId: 'TAX-67890',
-    creditLimit: 750000,
-    outstanding: 250000,
-    status: 'active',
-    rating: 4.8,
-    brands: ['BioMed Solutions', 'CarePlus Pharma'],
-    totalTargets: 8,
-    linkedDoctors: 18,
-    commission: 8.5,
-    totalOrders: 352
-  }
-];
-
-const mockSales: Sale[] = [
-  {
-    id: '1',
-    invoiceNo: 'INV-2024-001',
-    date: '2024-11-10',
-    time: '10:30 AM',
-    customerName: 'Ahmed Khan',
-    customerPhone: '+92-300-1111111',
-    items: [
-      {
-        medicineId: '1',
-        medicineName: 'Paracetamol 500mg',
-        quantity: 20,
-        unitPrice: 5.0,
-        discount: 0,
-        total: 100
-      }
-    ],
-    subtotal: 100,
-    discount: 5,
-    tax: 14,
-    total: 109,
-    paymentMethod: 'cash',
-    status: 'completed'
-  }
-];
-
-const mockExpenses: Expense[] = [
-  {
-    id: '1',
-    date: '2024-11-08',
-    category: 'Utilities',
-    description: 'Electricity Bill - November',
-    amount: 15000,
-    paymentMethod: 'Bank Transfer',
-    reference: 'REF-001',
-    status: 'paid'
-  },
-  {
-    id: '2',
-    date: '2024-11-09',
-    category: 'Salaries',
-    description: 'Staff Salaries - November',
-    amount: 250000,
-    paymentMethod: 'Bank Transfer',
-    reference: 'REF-002',
-    status: 'paid'
-  }
-];
-
-const mockPurchaseOrders: PurchaseOrder[] = [
-  {
-    id: '1',
-    poNumber: 'PO-2024-001',
-    supplier: 'MedSupply Co',
-    orderDate: '2024-11-05',
-    expectedDate: '2024-11-15',
-    items: [
-      {
-        medicineId: '1',
-        medicineName: 'Paracetamol 500mg',
-        quantity: 1000,
-        unitPrice: 2.5,
-        total: 2500
-      }
-    ],
-    subtotal: 2500,
-    tax: 350,
-    shipping: 150,
-    total: 3000,
-    status: 'pending'
-  }
-];
-
 const COLORS = ['#2F80ED', '#27AE60', '#F2994A', '#EB5757', '#9B51E0'];
 
 export function PharmacyManagement() {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [medicines] = useState<Medicine[]>(mockMedicines);
-  const [batches] = useState<Batch[]>(mockBatches);
-  const [suppliers] = useState<Supplier[]>(mockSuppliers);
-  const [sales] = useState<Sale[]>(mockSales);
-  const [expenses] = useState<Expense[]>(mockExpenses);
-  const [purchaseOrders] = useState<PurchaseOrder[]>(mockPurchaseOrders);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+  const [dashboardData, setDashboardData] = useState<any>(null);
   
   // Dialog states
   const [isAddMedicineOpen, setIsAddMedicineOpen] = useState(false);
@@ -398,6 +197,228 @@ export function PharmacyManagement() {
   const [isAddSaleOpen, setIsAddSaleOpen] = useState(false);
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isCreatePOOpen, setIsCreatePOOpen] = useState(false);
+
+  // Load medicines
+  const loadMedicines = async () => {
+    try {
+      setLoading(prev => ({ ...prev, medicines: true }));
+      const data = await api.getMedicines({ status: 'Active' });
+      // Transform API data to match component interface
+      const transformed = data.map((m: any) => ({
+        id: m.id?.toString() || '',
+        name: m.name || '',
+        genericName: m.generic_name || '',
+        category: m.category || '',
+        manufacturer: m.manufacturer || '',
+        form: m.unit || '',
+        strength: m.strength || '',
+        unitPrice: parseFloat(m.cost_price || 0),
+        sellingPrice: parseFloat(m.selling_price || 0),
+        stock: parseInt(m.current_stock || 0),
+        minStock: parseInt(m.min_stock || 0),
+        maxStock: parseInt(m.max_stock || 0),
+        location: m.location || '',
+        supplier: m.supplier_name || '',
+        barcode: m.barcode || '',
+        status: m.stock_status || 'in-stock'
+      }));
+      setMedicines(transformed);
+    } catch (error: any) {
+      console.error('Failed to load medicines:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, medicines: false }));
+    }
+  };
+
+  // Load stock batches
+  const loadBatches = async () => {
+    try {
+      setLoading(prev => ({ ...prev, batches: true }));
+      const stockData = await api.getPharmacyStock({ limit: 100 });
+      const transformed = stockData.map((s: any) => ({
+        id: s.id?.toString() || '',
+        medicineId: s.medicine_id?.toString() || '',
+        medicineName: s.medicine_name || '',
+        batchNumber: s.batch_number || '',
+        manufacturer: s.manufacturer || '',
+        manufactureDate: s.manufacture_date || '',
+        expiryDate: s.expiry_date || '',
+        quantity: parseInt(s.quantity || 0),
+        costPrice: parseFloat(s.cost_price || 0),
+        sellingPrice: parseFloat(s.selling_price || 0),
+        supplier: s.supplier_name || '',
+        status: s.status || 'active'
+      }));
+      setBatches(transformed);
+    } catch (error: any) {
+      console.error('Failed to load batches:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, batches: false }));
+    }
+  };
+
+  // Load suppliers
+  const loadSuppliers = async () => {
+    try {
+      setLoading(prev => ({ ...prev, suppliers: true }));
+      const data = await api.getSuppliers({ status: 'Active' });
+      const transformed = data.map((s: any) => ({
+        id: s.id?.toString() || '',
+        name: s.name || s.contact_person || '',
+        company: s.company_name || s.name || '',
+        email: s.email || '',
+        phone: s.phone || '',
+        address: s.address || '',
+        city: s.city || '',
+        country: s.country || 'Pakistan',
+        taxId: s.tax_id || '',
+        creditLimit: parseFloat(s.credit_limit || 0),
+        outstanding: parseFloat(s.outstanding_balance || 0),
+        status: s.status?.toLowerCase() || 'active',
+        rating: parseFloat(s.rating || 0),
+        brands: s.brands || [],
+        totalTargets: s.total_targets || 0,
+        linkedDoctors: s.linked_doctors || 0,
+        commission: parseFloat(s.commission || 0),
+        totalOrders: s.total_orders || 0
+      }));
+      setSuppliers(transformed);
+    } catch (error: any) {
+      console.error('Failed to load suppliers:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, suppliers: false }));
+    }
+  };
+
+  // Load sales
+  const loadSales = async () => {
+    try {
+      setLoading(prev => ({ ...prev, sales: true }));
+      const data = await api.getSales({ limit: 100 });
+      const transformed = data.map((s: any) => ({
+        id: s.id?.toString() || '',
+        invoiceNo: s.invoice_number || '',
+        date: s.sale_date || '',
+        time: s.sale_time || '',
+        customerName: s.customer_name || s.patient_name || '',
+        customerPhone: s.customer_phone || '',
+        items: s.items || [],
+        subtotal: parseFloat(s.subtotal || 0),
+        discount: parseFloat(s.discount || 0),
+        tax: parseFloat(s.tax || 0),
+        total: parseFloat(s.total || 0),
+        paymentMethod: s.payment_method?.toLowerCase() || 'cash',
+        status: s.status?.toLowerCase() || 'completed'
+      }));
+      setSales(transformed);
+    } catch (error: any) {
+      console.error('Failed to load sales:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, sales: false }));
+    }
+  };
+
+  // Load expenses
+  const loadExpenses = async () => {
+    try {
+      setLoading(prev => ({ ...prev, expenses: true }));
+      const data = await api.getExpenses({ limit: 100 });
+      const transformed = data.map((e: any) => ({
+        id: e.id?.toString() || '',
+        date: e.expense_date || '',
+        category: e.category_name || '',
+        description: e.description || '',
+        amount: parseFloat(e.amount || 0),
+        paymentMethod: e.payment_method || '',
+        reference: e.reference_number || '',
+        status: e.status?.toLowerCase() || 'paid'
+      }));
+      setExpenses(transformed);
+    } catch (error: any) {
+      console.error('Failed to load expenses:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, expenses: false }));
+    }
+  };
+
+  // Load expense categories
+  const loadExpenseCategories = async () => {
+    try {
+      setLoading(prev => ({ ...prev, expenseCategories: true }));
+      const data = await api.getExpenseCategories({ status: 'Active' });
+      setExpenseCategories(data);
+    } catch (error: any) {
+      console.error('Failed to load expense categories:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, expenseCategories: false }));
+    }
+  };
+
+  // Load purchase orders
+  const loadPurchaseOrders = async () => {
+    try {
+      setLoading(prev => ({ ...prev, purchaseOrders: true }));
+      const data = await api.getPurchaseOrders({ limit: 100 });
+      const transformed = data.map((po: any) => ({
+        id: po.id?.toString() || '',
+        poNumber: po.po_number || '',
+        supplier: po.supplier_name || '',
+        orderDate: po.order_date || '',
+        expectedDate: po.expected_date || '',
+        items: po.items || [],
+        subtotal: parseFloat(po.subtotal || 0),
+        tax: parseFloat(po.tax || 0),
+        shipping: parseFloat(po.shipping || 0),
+        total: parseFloat(po.total || 0),
+        status: po.status?.toLowerCase() || 'draft'
+      }));
+      setPurchaseOrders(transformed);
+    } catch (error: any) {
+      console.error('Failed to load purchase orders:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, purchaseOrders: false }));
+    }
+  };
+
+  // Load dashboard data
+  const loadDashboardData = async () => {
+    try {
+      setLoading(prev => ({ ...prev, dashboard: true }));
+      const [salesSummary, expenseSummary] = await Promise.all([
+        api.getSalesSummary(),
+        api.getExpenseSummary()
+      ]);
+      setDashboardData({ salesSummary, expenseSummary });
+    } catch (error: any) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, dashboard: false }));
+    }
+  };
+
+  // Load data based on active section
+  useEffect(() => {
+    if (activeSection === 'dashboard') {
+      loadDashboardData();
+      loadMedicines();
+      loadSales();
+      loadExpenses();
+    } else if (activeSection === 'medicine-list' || activeSection === 'add-medicine') {
+      loadMedicines();
+    } else if (activeSection === 'batches' || activeSection === 'expiring') {
+      loadBatches();
+    } else if (activeSection === 'suppliers' || activeSection === 'add-supplier') {
+      loadSuppliers();
+    } else if (activeSection === 'sales' || activeSection === 'add-sale') {
+      loadSales();
+    } else if (activeSection === 'expenses' || activeSection === 'add-expense' || activeSection === 'expense-categories') {
+      loadExpenses();
+      loadExpenseCategories();
+    } else if (activeSection === 'purchase-orders' || activeSection === 'create-po') {
+      loadPurchaseOrders();
+      loadSuppliers();
+    }
+  }, [activeSection]);
 
   const getStockStatusColor = (status: string) => {
     switch (status) {
@@ -426,22 +447,30 @@ export function PharmacyManagement() {
   };
 
   const renderDashboard = () => {
-    const salesData = [
-      { month: 'Jan', sales: 45000, purchases: 30000 },
-      { month: 'Feb', sales: 52000, purchases: 35000 },
-      { month: 'Mar', sales: 48000, purchases: 32000 },
-      { month: 'Apr', sales: 61000, purchases: 40000 },
-      { month: 'May', sales: 55000, purchases: 38000 },
-      { month: 'Jun', sales: 67000, purchases: 45000 }
+    // Use real data from API or fallback to empty
+    const salesData = dashboardData?.salesSummary?.daily_sales?.map((d: any) => ({
+      month: new Date(d.date).toLocaleDateString('en-US', { month: 'short' }),
+      sales: parseFloat(d.total_sales || 0),
+      purchases: 0 // Purchase data not available in sales summary
+    })) || [
+      { month: 'Jan', sales: 0, purchases: 0 },
+      { month: 'Feb', sales: 0, purchases: 0 },
+      { month: 'Mar', sales: 0, purchases: 0 },
+      { month: 'Apr', sales: 0, purchases: 0 },
+      { month: 'May', sales: 0, purchases: 0 },
+      { month: 'Jun', sales: 0, purchases: 0 }
     ];
 
-    const categoryData = [
-      { name: 'Analgesics', value: 35 },
-      { name: 'Antibiotics', value: 25 },
-      { name: 'Diabetes', value: 20 },
-      { name: 'Cardiovascular', value: 15 },
-      { name: 'Others', value: 5 }
-    ];
+    // Calculate category distribution from medicines
+    const categoryCounts: { [key: string]: number } = {};
+    medicines.forEach(m => {
+      categoryCounts[m.category] = (categoryCounts[m.category] || 0) + 1;
+    });
+    const totalMedicines = medicines.length || 1;
+    const categoryData = Object.entries(categoryCounts).map(([name, count]) => ({
+      name,
+      value: Math.round((count / totalMedicines) * 100)
+    })).slice(0, 5);
 
     return (
       <div className="space-y-6">
@@ -455,9 +484,13 @@ export function PharmacyManagement() {
                 </div>
                 <TrendingUp className="w-5 h-5 text-green-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">PKR 67,000</h3>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">
+                PKR {dashboardData?.salesSummary?.total_revenue?.toLocaleString() || sales.reduce((sum, s) => sum + s.total, 0).toLocaleString()}
+              </h3>
               <p className="text-sm text-gray-600">Monthly Sales</p>
-              <p className="text-xs text-green-600 mt-2">+12.5% from last month</p>
+              <p className="text-xs text-green-600 mt-2">
+                {dashboardData?.salesSummary?.total_sales || sales.length} transactions
+              </p>
             </CardContent>
           </Card>
 
@@ -1506,7 +1539,9 @@ export function PharmacyManagement() {
               <DollarSign className="w-8 h-8 text-red-600" />
               <TrendingUp className="w-5 h-5 text-red-600" />
             </div>
-            <p className="text-2xl font-bold text-red-900">PKR {expenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}</p>
+            <p className="text-2xl font-bold text-red-900">
+              PKR {expenses.length > 0 ? expenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString() : '0'}
+            </p>
             <p className="text-xs text-gray-600">Total Expenses</p>
           </CardContent>
         </Card>
@@ -1515,9 +1550,11 @@ export function PharmacyManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Calendar className="w-8 h-8 text-orange-600" />
-              <Badge>{expenses.filter(e => e.date === '2024-11-09').length}</Badge>
+                  <Badge>{expenses.filter(e => e.date === new Date().toISOString().split('T')[0]).length}</Badge>
             </div>
-            <p className="text-2xl font-bold text-orange-900">PKR {expenses.filter(e => e.date === '2024-11-09').reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}</p>
+            <p className="text-2xl font-bold text-orange-900">
+              PKR {expenses.filter(e => e.date === new Date().toISOString().split('T')[0]).reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}
+            </p>
             <p className="text-xs text-gray-600">Today's Expenses</p>
           </CardContent>
         </Card>
@@ -1900,18 +1937,25 @@ export function PharmacyManagement() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { category: 'Utilities', amount: 15000, percentage: 5.7 },
-                  { category: 'Salaries', amount: 250000, percentage: 94.3 }
-                ].map((item) => (
-                  <div key={item.category} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold">{item.category}</span>
-                      <Badge variant="outline">{item.percentage}%</Badge>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">PKR {item.amount.toLocaleString()}</p>
-                  </div>
-                ))}
+                {expenseCategories.length > 0 ? (
+                  expenseCategories.map((cat) => {
+                    const categoryExpenses = expenses.filter(e => e.category === cat.name);
+                    const total = categoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+                    const allTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
+                    const percentage = allTotal > 0 ? ((total / allTotal) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={cat.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold">{cat.name}</span>
+                          <Badge variant="outline">{percentage}%</Badge>
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">PKR {total.toLocaleString()}</p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-full text-center py-8 text-gray-500">No expense data available</div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -2079,6 +2123,257 @@ export function PharmacyManagement() {
     </div>
   );
 
+  const renderAddMedicine = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Add New Medicine</h2>
+            <p className="text-sm text-gray-600 mt-1">Add a new medicine to the inventory</p>
+          </div>
+          <Button variant="outline" onClick={() => setActiveSection('medicine-list')}>
+            ← Back to Medicine List
+          </Button>
+        </div>
+        <Card className="border-0 shadow-sm max-w-4xl">
+          <CardContent className="p-6">
+            <div className="space-y-6">
+              <Tabs defaultValue="basic" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                  <TabsTrigger value="pricing">Pricing & Stock</TabsTrigger>
+                  <TabsTrigger value="supplier">Supplier Info</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="basic" className="space-y-4 mt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Medicine Name *</Label>
+                      <Input placeholder="e.g., Paracetamol" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Generic Name</Label>
+                      <Input placeholder="e.g., Acetaminophen" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Category *</Label>
+                      <Select>
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="analgesics">Analgesics</SelectItem>
+                          <SelectItem value="antibiotics">Antibiotics</SelectItem>
+                          <SelectItem value="diabetes">Diabetes</SelectItem>
+                          <SelectItem value="cardiovascular">Cardiovascular</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Manufacturer</Label>
+                      <Input placeholder="e.g., PharmaCorp" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Form *</Label>
+                      <Select>
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Select form" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tablet">Tablet</SelectItem>
+                          <SelectItem value="capsule">Capsule</SelectItem>
+                          <SelectItem value="syrup">Syrup</SelectItem>
+                          <SelectItem value="injection">Injection</SelectItem>
+                          <SelectItem value="cream">Cream</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Strength</Label>
+                      <Input placeholder="e.g., 500mg" className="mt-2" />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Barcode</Label>
+                      <div className="flex gap-2 mt-2">
+                        <Input placeholder="Enter or scan barcode" />
+                        <Button variant="outline">
+                          <Barcode className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="pricing" className="space-y-4 mt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Unit Cost Price (PKR) *</Label>
+                      <Input type="number" placeholder="0.00" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Selling Price (PKR) *</Label>
+                      <Input type="number" placeholder="0.00" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Current Stock</Label>
+                      <Input type="number" placeholder="0" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Minimum Stock Level *</Label>
+                      <Input type="number" placeholder="e.g., 100" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Maximum Stock Level</Label>
+                      <Input type="number" placeholder="e.g., 1000" className="mt-2" />
+                    </div>
+                    <div>
+                      <Label>Storage Location</Label>
+                      <Input placeholder="e.g., Shelf A-1" className="mt-2" />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="supplier" className="space-y-4 mt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Primary Supplier *</Label>
+                      <Select>
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Select supplier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {suppliers.map((supplier) => (
+                            <SelectItem key={supplier.id} value={supplier.id}>
+                              {supplier.company}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Lead Time (Days)</Label>
+                      <Input type="number" placeholder="e.g., 7" className="mt-2" />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Notes</Label>
+                      <Textarea placeholder="Additional information about this medicine..." className="mt-2" rows={4} />
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <Button variant="outline" onClick={() => setActiveSection('medicine-list')}>
+                  Cancel
+                </Button>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Add Medicine
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  const renderMedicineCategory = () => {
+    // Get unique categories from medicines
+    const categorySet = new Set(medicines.map(m => m.category).filter(Boolean));
+    const categories = Array.from(categorySet);
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Medicine Categories</h2>
+            <p className="text-sm text-gray-600 mt-1">Manage medicine categories</p>
+          </div>
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setActiveSection('add-category')}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Category
+          </Button>
+        </div>
+
+        {loading.medicines ? (
+          <div className="text-center py-8">Loading categories...</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.length > 0 ? (
+              categories.map((category, index) => {
+                const categoryMedicines = medicines.filter(m => m.category === category);
+                return (
+                  <Card key={index} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className={`w-12 h-12 rounded-lg bg-blue-500 flex items-center justify-center`}>
+                          <Tag className="w-6 h-6 text-white" />
+                        </div>
+                        <Button variant="outline" size="sm">
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <h3 className="font-semibold mb-2">{category}</h3>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">Medicines</span>
+                          <Badge variant="outline">{categoryMedicines.length}</Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <div className="col-span-full text-center py-8 text-gray-500">No categories found</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAddCategory = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Add New Category</h2>
+            <p className="text-sm text-gray-600 mt-1">Create a new medicine category</p>
+          </div>
+          <Button variant="outline" onClick={() => setActiveSection('medicine-category')}>
+            ← Back to Categories
+          </Button>
+        </div>
+
+        <Card className="border-0 shadow-sm max-w-2xl">
+          <CardContent className="p-6">
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label>Category Name *</Label>
+                <Input placeholder="e.g., Antibiotics" />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea placeholder="Enter category description..." rows={4} />
+              </div>
+              <div className="flex items-center gap-3 pt-4 border-t">
+                <Button className="bg-blue-600 hover:bg-blue-700 flex-1">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Add Category
+                </Button>
+                <Button variant="outline" onClick={() => setActiveSection('medicine-category')}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
@@ -2091,10 +2386,16 @@ export function PharmacyManagement() {
         return <RefundProcessing />;
       case 'medicine-list':
         return renderMedicineList();
+      case 'add-medicine':
+        return renderAddMedicine();
+      case 'medicine-category':
+        return renderMedicineCategory();
+      case 'add-category':
+        return renderAddCategory();
       case 'suppliers':
         return renderSuppliers();
       case 'add-supplier':
-        return <AddSupplier />;
+        return <AddSupplier onCancel={() => setActiveSection('suppliers')} />;
       case 'batches':
         return renderBatches();
       case 'purchase-orders':

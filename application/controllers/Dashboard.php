@@ -35,24 +35,28 @@ class Dashboard extends Api {
             // No specific permission check needed for basic dashboard
             
             // Total patients
-            $totalPatients = $this->db->count_all_results('patients');
+            $this->db->from('patients');
+            $totalPatients = $this->db->count_all_results();
             
             // Active doctors
+            $this->db->from('doctors');
             $this->db->where('status', 'Available');
-            $activeDoctors = $this->db->count_all_results('doctors');
+            $activeDoctors = $this->db->count_all_results();
             
             // On-duty doctors (assuming Available status means on-duty)
             $onDutyDoctors = $activeDoctors; // Can be refined with schedule check
             
             // Today's appointments
             $today = date('Y-m-d');
+            $this->db->from('appointments');
             $this->db->where('DATE(appointment_date)', $today);
-            $todayAppointments = $this->db->count_all_results('appointments');
+            $todayAppointments = $this->db->count_all_results();
             
             // Completed appointments today
+            $this->db->from('appointments');
             $this->db->where('DATE(appointment_date)', $today);
             $this->db->where('status', 'Completed');
-            $completedAppointments = $this->db->count_all_results('appointments');
+            $completedAppointments = $this->db->count_all_results();
             
             // Pending appointments today
             $pendingAppointments = $todayAppointments - $completedAppointments;
@@ -94,13 +98,15 @@ class Dashboard extends Api {
             $bedOccupancy = $bedStats->total_beds > 0 ? round(($bedStats->occupied_beds / $bedStats->total_beds) * 100, 1) : 0;
             
             // Pending labs
-            $this->db->where('status', 'pending');
-            $pendingLabs = $this->db->count_all_results('lab_test_orders'); // Adjust table name if different
+            $this->db->from('lab_orders');
+            $this->db->where_in('status', ['ordered', 'sample-collected', 'sample-received', 'in-progress']);
+            $pendingLabs = $this->db->count_all_results();
             
             // Urgent labs
-            $this->db->where('status', 'pending');
+            $this->db->from('lab_orders');
             $this->db->where('priority', 'urgent');
-            $urgentLabs = $this->db->count_all_results('lab_test_orders'); // Adjust table name if different
+            $this->db->where_in('status', ['ordered', 'sample-collected', 'sample-received', 'in-progress']);
+            $urgentLabs = $this->db->count_all_results();
             
             // Medicine stock percentage (simplified - check medicines with low stock)
             $this->db->select('COUNT(*) as total_medicines, SUM(CASE WHEN stock_quantity <= minimum_stock THEN 1 ELSE 0 END) as low_stock');
@@ -113,8 +119,9 @@ class Dashboard extends Api {
             // AI Predictions (simple trend-based)
             // Patient flow prediction (average of last 7 days + 15% growth)
             $sevenDaysAgo = date('Y-m-d', strtotime('-7 days'));
+            $this->db->from('appointments');
             $this->db->where('appointment_date >=', $sevenDaysAgo);
-            $avgDailyAppointments = $this->db->count_all_results('appointments') / 7;
+            $avgDailyAppointments = $this->db->count_all_results() / 7;
             $patientFlowPrediction = round($avgDailyAppointments * 1.15);
             
             // Revenue forecast (current month revenue + 15%)
@@ -314,7 +321,8 @@ class Dashboard extends Api {
             $opdDepts = $this->db->get()->result_array();
             
             // Get emergency visits count
-            $emergencyCount = $this->db->count_all_results('emergency_visits');
+            $this->db->from('emergency_visits');
+            $emergencyCount = $this->db->count_all_results();
             
             // Merge department data
             $deptData = array();
@@ -411,23 +419,25 @@ class Dashboard extends Api {
             }
             
             // Recent lab tests
-            $this->db->select('lto.*, p.name as patient_name, lt.test_name as test');
-            $this->db->from('lab_test_orders lto');
-            $this->db->join('patients p', 'p.id = lto.patient_id', 'left');
-            $this->db->join('lab_tests lt', 'lt.id = lto.test_id', 'left');
-            $this->db->order_by('lto.created_at', 'DESC');
+            $this->db->select('lo.*, p.name as patient_name, GROUP_CONCAT(lt.test_name) as tests');
+            $this->db->from('lab_orders lo');
+            $this->db->join('patients p', 'p.id = lo.patient_id', 'left');
+            $this->db->join('lab_order_tests lot', 'lot.order_id = lo.id', 'left');
+            $this->db->join('lab_tests lt', 'lt.id = lot.lab_test_id', 'left');
+            $this->db->group_by('lo.id');
+            $this->db->order_by('lo.created_at', 'DESC');
             $this->db->limit(ceil($limit / 4));
             $labTests = $this->db->get()->result_array();
             
             foreach ($labTests as $lab) {
-                $timeAgo = $this->time_ago($lab['created_at']);
+                $timeAgo = $this->time_ago($lab['created_at'] ?? $lab['order_date']);
                 $activities[] = array(
                     'id' => 'lab_' . $lab['id'],
                     'type' => 'lab',
                     'patient' => $lab['patient_name'] ?? 'Unknown',
-                    'test' => $lab['test'] ?? 'Unknown Test',
+                    'test' => $lab['tests'] ?? 'Lab Order',
                     'time' => $timeAgo,
-                    'status' => strtolower($lab['status'] ?? 'pending')
+                    'status' => strtolower($lab['status'] ?? 'ordered')
                 );
             }
             
@@ -533,9 +543,10 @@ class Dashboard extends Api {
             }
             
             // Low stock medicines
-            $this->db->where('stock_quantity <=', 'minimum_stock', false);
+            $this->db->from('medicines');
+            $this->db->where('stock_quantity <= minimum_stock', null, false);
             $this->db->where('stock_quantity >', 0);
-            $lowStockCount = $this->db->count_all_results('medicines');
+            $lowStockCount = $this->db->count_all_results();
             
             if ($lowStockCount > 0) {
                 $alerts[] = array(
@@ -547,9 +558,10 @@ class Dashboard extends Api {
             }
             
             // Urgent lab results
-            $this->db->where('status', 'pending');
+            $this->db->from('lab_orders');
             $this->db->where('priority', 'urgent');
-            $urgentLabs = $this->db->count_all_results('lab_test_orders');
+            $this->db->where_in('status', ['ordered', 'sample-collected', 'sample-received', 'in-progress']);
+            $urgentLabs = $this->db->count_all_results();
             
             if ($urgentLabs > 0) {
                 $alerts[] = array(

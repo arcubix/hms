@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { api } from '../../services/api';
+import { toast } from 'sonner';
 
 interface Medicine {
   id: string;
@@ -47,253 +49,6 @@ interface CartItem extends Medicine {
   discount: number;
   total: number;
 }
-
-const mockMedicines: Medicine[] = [
-  // Pain Relief
-  {
-    id: 'M001',
-    name: 'Paracetamol 500mg',
-    category: 'Pain Relief',
-    stock: 500,
-    batch: 'PCM001',
-    expiry: '2025-12-31',
-    unit: 'Strip',
-    rate: 2.50,
-    barcode: '1234567890123'
-  },
-  {
-    id: 'M002',
-    name: 'Ibuprofen 400mg',
-    category: 'Pain Relief',
-    stock: 350,
-    batch: 'IBU002',
-    expiry: '2026-01-15',
-    unit: 'Strip',
-    rate: 3.20,
-    barcode: '1234567890124'
-  },
-  {
-    id: 'M003',
-    name: 'Aspirin 75mg',
-    category: 'Pain Relief',
-    stock: 280,
-    batch: 'ASP003',
-    expiry: '2025-08-20',
-    unit: 'Strip',
-    rate: 1.80,
-    barcode: '1234567890125'
-  },
-  
-  // Antibiotic
-  {
-    id: 'M004',
-    name: 'Amoxicillin 250mg',
-    category: 'Antibiotic',
-    stock: 200,
-    batch: 'AMX002',
-    expiry: '2025-06-30',
-    unit: 'Strip',
-    rate: 5.00,
-    barcode: '2345678901234'
-  },
-  {
-    id: 'M005',
-    name: 'Azithromycin 500mg',
-    category: 'Antibiotic',
-    stock: 180,
-    batch: 'AZI005',
-    expiry: '2025-10-12',
-    unit: 'Strip',
-    rate: 12.50,
-    barcode: '2345678901235'
-  },
-  {
-    id: 'M006',
-    name: 'Ciprofloxacin 500mg',
-    category: 'Antibiotic',
-    stock: 150,
-    batch: 'CIP006',
-    expiry: '2025-07-18',
-    unit: 'Strip',
-    rate: 8.75,
-    barcode: '2345678901236'
-  },
-  
-  // Gastric
-  {
-    id: 'M007',
-    name: 'Omeprazole 20mg',
-    category: 'Gastric',
-    stock: 150,
-    batch: 'OME003',
-    expiry: '2025-09-15',
-    unit: 'Strip',
-    rate: 8.00,
-    barcode: '3456789012345'
-  },
-  {
-    id: 'M008',
-    name: 'Ranitidine 150mg',
-    category: 'Gastric',
-    stock: 220,
-    batch: 'RAN008',
-    expiry: '2025-11-22',
-    unit: 'Strip',
-    rate: 6.50,
-    barcode: '3456789012346'
-  },
-  {
-    id: 'M009',
-    name: 'Pantoprazole 40mg',
-    category: 'Gastric',
-    stock: 190,
-    batch: 'PAN009',
-    expiry: '2026-02-10',
-    unit: 'Strip',
-    rate: 9.20,
-    barcode: '3456789012347'
-  },
-  
-  // Diabetes
-  {
-    id: 'M010',
-    name: 'Insulin Glargine',
-    category: 'Diabetes',
-    stock: 50,
-    batch: 'INS004',
-    expiry: '2024-12-31',
-    unit: 'Vial',
-    rate: 45.00,
-    barcode: '4567890123456'
-  },
-  {
-    id: 'M011',
-    name: 'Metformin 500mg',
-    category: 'Diabetes',
-    stock: 400,
-    batch: 'MET006',
-    expiry: '2025-11-10',
-    unit: 'Strip',
-    rate: 4.20,
-    barcode: '6789012345678'
-  },
-  {
-    id: 'M012',
-    name: 'Glimepiride 2mg',
-    category: 'Diabetes',
-    stock: 160,
-    batch: 'GLI012',
-    expiry: '2025-09-05',
-    unit: 'Strip',
-    rate: 7.80,
-    barcode: '4567890123458'
-  },
-  
-  // Cardiovascular
-  {
-    id: 'M013',
-    name: 'Atorvastatin 20mg',
-    category: 'Cardiovascular',
-    stock: 240,
-    batch: 'ATO013',
-    expiry: '2026-03-15',
-    unit: 'Strip',
-    rate: 11.50,
-    barcode: '5678901234560'
-  },
-  {
-    id: 'M014',
-    name: 'Amlodipine 5mg',
-    category: 'Cardiovascular',
-    stock: 320,
-    batch: 'AML014',
-    expiry: '2025-12-20',
-    unit: 'Strip',
-    rate: 5.60,
-    barcode: '5678901234561'
-  },
-  {
-    id: 'M015',
-    name: 'Lisinopril 10mg',
-    category: 'Cardiovascular',
-    stock: 280,
-    batch: 'LIS015',
-    expiry: '2026-01-08',
-    unit: 'Strip',
-    rate: 6.90,
-    barcode: '5678901234562'
-  },
-  
-  // Respiratory
-  {
-    id: 'M016',
-    name: 'Salbutamol Inhaler',
-    category: 'Respiratory',
-    stock: 85,
-    batch: 'SAL016',
-    expiry: '2025-10-30',
-    unit: 'Inhaler',
-    rate: 15.00,
-    barcode: '6789012345670'
-  },
-  {
-    id: 'M017',
-    name: 'Montelukast 10mg',
-    category: 'Respiratory',
-    stock: 140,
-    batch: 'MON017',
-    expiry: '2026-02-14',
-    unit: 'Strip',
-    rate: 10.50,
-    barcode: '6789012345671'
-  },
-  {
-    id: 'M018',
-    name: 'Budesonide Inhaler',
-    category: 'Respiratory',
-    stock: 65,
-    batch: 'BUD018',
-    expiry: '2025-08-25',
-    unit: 'Inhaler',
-    rate: 22.00,
-    barcode: '6789012345672'
-  },
-  
-  // Allergy
-  {
-    id: 'M019',
-    name: 'Cetirizine 10mg',
-    category: 'Allergy',
-    stock: 300,
-    batch: 'CET005',
-    expiry: '2026-03-20',
-    unit: 'Strip',
-    rate: 3.50,
-    barcode: '5678901234567'
-  },
-  {
-    id: 'M020',
-    name: 'Loratadine 10mg',
-    category: 'Allergy',
-    stock: 260,
-    batch: 'LOR020',
-    expiry: '2025-11-18',
-    unit: 'Strip',
-    rate: 4.20,
-    barcode: '7890123456780'
-  },
-  {
-    id: 'M021',
-    name: 'Fexofenadine 120mg',
-    category: 'Allergy',
-    stock: 175,
-    batch: 'FEX021',
-    expiry: '2026-01-25',
-    unit: 'Strip',
-    rate: 8.90,
-    barcode: '7890123456781'
-  }
-];
 
 const categoryButtons = [
   { name: 'Pain Relief', icon: Heart, color: 'bg-orange-500' },
@@ -319,8 +74,40 @@ export function POSScreen() {
   const [printInvoice, setPrintInvoice] = useState(true);
   const [cashReceived, setCashReceived] = useState(0);
   const [productQuantity, setProductQuantity] = useState(1);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredMedicines = mockMedicines.filter(medicine => {
+  // Load medicines from API
+  useEffect(() => {
+    loadMedicines();
+  }, []);
+
+  const loadMedicines = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getMedicines({ status: 'Active' });
+      // Transform API data to match component interface
+      const transformed: Medicine[] = data.map((m: any) => ({
+        id: m.id?.toString() || '',
+        name: m.name || '',
+        category: m.category || 'Other',
+        stock: parseInt(m.current_stock || 0),
+        batch: '', // Will need to get from stock batches
+        expiry: '', // Will need to get from stock batches
+        unit: m.unit || '',
+        rate: parseFloat(m.selling_price || 0),
+        barcode: m.barcode || ''
+      }));
+      setMedicines(transformed);
+    } catch (error: any) {
+      console.error('Failed to load medicines:', error);
+      toast.error('Failed to load medicines');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredMedicines = medicines.filter(medicine => {
     const matchesSearch = medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          medicine.barcode.includes(searchTerm);
     const matchesCategory = selectedCategory === 'All Products' || medicine.category === selectedCategory;

@@ -288,20 +288,23 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
       setSaving(true);
       
       // Save settings
+      // Use explicit checks to allow 0 values to be saved (don't use || 0 which converts null to 0)
       const settingsToSave: Partial<UserSettings> = {
-        consultation_fee: settings.consultation_fee || 0,
-        follow_up_charges: settings.follow_up_charges || 0,
-        follow_up_share_price: settings.follow_up_share_price || 0,
-        share_price: settings.share_price || 0,
+        consultation_fee: (settings.consultation_fee !== undefined && settings.consultation_fee !== null && settings.consultation_fee !== '') 
+          ? Number(settings.consultation_fee) 
+          : (settings.consultation_fee === 0 ? 0 : null),
+        follow_up_charges: (settings.follow_up_charges !== undefined && settings.follow_up_charges !== null) ? Number(settings.follow_up_charges) : null,
+        follow_up_share_price: (settings.follow_up_share_price !== undefined && settings.follow_up_share_price !== null) ? Number(settings.follow_up_share_price) : null,
+        share_price: (settings.share_price !== undefined && settings.share_price !== null) ? Number(settings.share_price) : null,
         share_type: settings.share_type,
         follow_up_share_types: settings.follow_up_share_types,
-        lab_share_value: settings.lab_share_value || 0,
+        lab_share_value: (settings.lab_share_value !== undefined && settings.lab_share_value !== null) ? Number(settings.lab_share_value) : null,
         lab_share_type: settings.lab_share_type,
-        radiology_share_value: settings.radiology_share_value || 0,
+        radiology_share_value: (settings.radiology_share_value !== undefined && settings.radiology_share_value !== null) ? Number(settings.radiology_share_value) : null,
         radiology_share_type: settings.radiology_share_type,
         instant_booking: settings.instant_booking,
         visit_charges: settings.visit_charges,
-        invoice_edit_count: settings.invoice_edit_count || 0
+        invoice_edit_count: (settings.invoice_edit_count !== undefined && settings.invoice_edit_count !== null) ? Number(settings.invoice_edit_count) : 0
       };
       
       await api.updateUserSettings(userId, settingsToSave);
@@ -352,15 +355,29 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
         <CardContent className="space-y-6">
           {/* General Settings */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">General Settings</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold">General Settings</h3>
+              <div className="flex-1 border-t"></div>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-2">
+                <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">Consultation Fee Configuration</p>
+                  <p>Set the consultation fee for this doctor/user. This fee will be automatically applied when collecting payment for appointments.</p>
+                </div>
+              </div>
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Consultation fee in Rs.</Label>
+                <Label className="text-base font-medium">Consultation Fee (Rs.) *</Label>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
+                  placeholder="Enter consultation fee"
                   value={settings.consultation_fee || ''}
                   onChange={(e) => {
                     const value = parseFloat(e.target.value);
@@ -374,6 +391,7 @@ export function UserSettings({ userId, onSuccess }: UserSettingsProps) {
                 {validationErrors.consultation_fee && (
                   <p className="text-sm text-red-500">{validationErrors.consultation_fee}</p>
                 )}
+                <p className="text-xs text-gray-500">This fee will be charged for each appointment</p>
               </div>
 
               <div className="space-y-2">

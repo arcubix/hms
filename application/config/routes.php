@@ -67,6 +67,7 @@ $route['api/doctors/(:num)/schedule'] = 'doctors/schedule/$1';
 $route['api/appointments'] = 'appointments/index';
 $route['api/appointments/(:num)'] = 'appointments/get/$1';
 $route['api/appointments/(:num)/status'] = 'appointments/update_status/$1';
+$route['api/appointments/(:num)/payment'] = 'appointments/payment/$1';
 $route['api/appointments/doctor/(:num)/slots'] = 'appointments/get_available_slots/$1';
 $route['api/appointments/doctor/(:num)/available-dates'] = 'appointments/get_available_dates/$1';
 $route['api/appointments/doctor/(:num)'] = 'appointments/get_by_doctor/$1';
@@ -77,6 +78,9 @@ $route['api/medicines'] = 'medicines/index';
 $route['api/medicines/(:num)'] = 'medicines/get/$1';
 $route['api/lab-tests'] = 'lab_tests/index';
 $route['api/lab-tests/(:num)'] = 'lab_tests/get/$1';
+$route['api/lab-tests/categories'] = 'lab_tests/categories';
+$route['api/lab-tests/types'] = 'lab_tests/types';
+$route['api/lab-tests/sample-types'] = 'lab_tests/sample_types';
 $route['api/radiology-tests'] = 'radiology_tests/index';
 $route['api/radiology-tests/(:num)'] = 'radiology_tests/get/$1';
 $route['api/emergency/visits'] = 'emergency/index';
@@ -263,6 +267,15 @@ $route['api/pharmacy/gst-rates/default'] = 'gst_rates/default_rate';
 $route['api/pharmacy/gst-rates/(:num)'] = 'gst_rates/get/$1';
 $route['api/pharmacy/gst-rates/(:num)/set-default'] = 'gst_rates/set_default/$1';
 
+// Expenses
+$route['api/pharmacy/expenses'] = 'expenses/index';
+$route['api/pharmacy/expenses/summary'] = 'expenses/summary';
+$route['api/pharmacy/expenses/(:num)'] = 'expenses/id/$1';
+
+// Expense Categories
+$route['api/pharmacy/expense-categories'] = 'expense_categories/index';
+$route['api/pharmacy/expense-categories/(:num)'] = 'expense_categories/id/$1';
+
 // User Management Routes
 $route['api/users'] = 'users/index';
 $route['api/users/(:num)/settings'] = 'users/settings/$1'; // Must be before generic (:num) route
@@ -312,6 +325,30 @@ $route['api/donation-donors/(:num)'] = 'donationdonors/get/$1';
 $route['api/modules'] = 'prioritymodules/index';
 $route['api/priority-modules'] = 'prioritymodules/get_priority_modules';
 $route['api/priority-modules/(:any)'] = 'prioritymodules/delete_priority_module/$1';
+
+// Billing Routes - Organizations
+$route['api/organizations/current'] = 'organizations/current';
+$route['api/organizations'] = 'organizations/index';
+$route['api/organizations/(:num)'] = 'organizations/get/$1';
+
+// Billing Routes - Subscription Plans
+$route['api/subscription-plans'] = 'subscriptionplans/index';
+$route['api/subscription-plans/(:num)'] = 'subscriptionplans/get/$1';
+
+// Billing Routes - Invoices
+$route['api/invoices/overdue'] = 'invoices/overdue';
+$route['api/invoices/(:num)/send'] = 'invoices/send/$1';
+$route['api/invoices'] = 'invoices/index';
+$route['api/invoices/(:num)'] = 'invoices/get/$1';
+
+// Billing Routes - Payments
+$route['api/payments/invoice/(:num)'] = 'payments/invoice/$1';
+$route['api/payments'] = 'payments/index';
+$route['api/payments/(:num)'] = 'payments/get/$1';
+
+// Billing Routes - Billing Settings
+$route['api/billing-settings'] = 'billingsettings/get';
+$route['api/billing-settings/(:num)'] = 'billingsettings/get/$1';
 
 // System Settings Routes (order matters - more specific routes first)
 $route['api/system-settings/room-mode'] = 'system_settings/room_mode';
@@ -372,6 +409,44 @@ $route['api/message-statistics/daily'] = 'message_statistics/daily';
 $route['api/message-statistics/weekly'] = 'message_statistics/weekly';
 $route['api/message-statistics/by-platform'] = 'message_statistics/by_platform';
 
+// Laboratory Routes
+$route['api/laboratory/dashboard'] = 'laboratory/dashboard';
+$route['api/laboratory/orders'] = 'laboratory/orders';
+$route['api/laboratory/orders/(:num)'] = 'laboratory/get_order/$1';
+$route['api/laboratory/orders/(:num)/status'] = 'laboratory/update_order_status/$1';
+$route['api/laboratory/orders/(:num)/billing'] = 'lab_billing/create_billing/$1';
+$route['api/laboratory/samples'] = 'laboratory/samples';
+$route['api/laboratory/samples/(:any)'] = 'laboratory/get_sample/$1'; // by barcode
+$route['api/laboratory/results'] = 'laboratory/results';
+$route['api/laboratory/results/(:num)'] = 'laboratory/get_result/$1';
+$route['api/laboratory/results/(:num)/verify'] = 'laboratory/verify_result/$1';
+$route['api/laboratory/results/(:num)/approve'] = 'laboratory/approve_result/$1';
+$route['api/laboratory/reports/(:num)'] = 'laboratory/generate_report/$1';
+$route['api/laboratory/billing/(:num)'] = 'lab_billing/get/$1';
+$route['api/laboratory/billing/(:num)/payment'] = 'lab_billing/payment/$1';
+
+// OPD Billing Routes
+$route['api/opd-billing'] = 'OpdBilling/index';
+$route['api/opd-billing/(:num)'] = 'OpdBilling/get/$1';
+$route['api/opd-billing/bill-number/(:any)'] = 'OpdBilling/bill_number/$1';
+$route['api/opd-billing/patient/(:num)'] = 'OpdBilling/patient/$1';
+$route['api/opd-billing/appointment/(:num)'] = 'OpdBilling/appointment/$1';
+$route['api/opd-billing/payment/(:num)'] = 'OpdBilling/payment/$1';
+$route['api/opd-billing/update-status/(:num)'] = 'OpdBilling/update_status/$1';
+
+// Patient Payments Routes
+$route['api/patient-payments'] = 'PatientPayments/index';
+$route['api/patient-payments/(:num)'] = 'PatientPayments/index/$1';
+$route['api/patient-payments/bill-payment'] = 'PatientPayments/bill_payment';
+$route['api/patient-payments/advance'] = 'PatientPayments/advance';
+$route['api/patient-payments/history/(:num)'] = 'PatientPayments/history/$1';
+$route['api/patient-payments/bill/(:any)/(:num)'] = 'PatientPayments/bill/$1/$2';
+$route['api/patient-payments/advance-balance/(:num)'] = 'PatientPayments/advance_balance/$1';
+$route['api/patient-payments/apply-advance'] = 'PatientPayments/apply_advance';
+$route['api/patient-payments/refund/(:num)'] = 'PatientPayments/refund/$1';
+$route['api/patient-payments/generate-receipt/(:num)'] = 'PatientPayments/generate_receipt/$1';
+$route['api/patient-payments/receipt/(:any)'] = 'PatientPayments/receipt/$1';
+
 // IPD Management Routes
 // Dashboard
 $route['api/ipd/dashboard'] = 'ipd/dashboard';
@@ -396,6 +471,7 @@ $route['api/ipd/admissions/(:num)/nursing-notes'] = 'ipd/nursing_notes/$1';
 $route['api/ipd/admissions/(:num)/billing'] = 'ipd/billing/$1';
 $route['api/ipd/admissions/(:num)/billing/payment'] = 'ipd/billing_payment/$1';
 $route['api/ipd/admissions/(:num)/discharge'] = 'ipd/discharge/$1';
+$route['api/ipd/discharges'] = 'ipd/discharges';
 $route['api/ipd/admissions/(:num)/transfer'] = 'ipd/transfer/$1';
 $route['api/ipd/admissions/(:num)/transfers'] = 'ipd/transfer/$1';
 $route['api/ipd/admissions/(:num)/daily-care-orders'] = 'ipd/daily_care_orders/$1';
@@ -422,6 +498,18 @@ $route['api/ipd/radiology-orders/(:num)'] = 'ipd/radiology_orders_update/$1';
 $route['api/ipd/doctor-notes/(:num)'] = 'ipd/doctor_notes_update/$1';
 $route['api/ipd/pharmacist-notes/(:num)'] = 'ipd/pharmacist_notes_update/$1';
 $route['api/ipd/procedures/(:num)'] = 'ipd/procedures_update/$1';
+// OT Schedules
+$route['api/ipd/ot-schedules'] = 'ipd/ot_schedules';
+$route['api/ipd/ot-schedules/(:num)'] = 'ipd/ot_schedules/$1';
+$route['api/ipd/ot-schedules/(:num)/start'] = 'ipd/ot_schedule_start/$1';
+$route['api/ipd/ot-schedules/(:num)/complete'] = 'ipd/ot_schedule_complete/$1';
+$route['api/ipd/ot-schedules/(:num)/cancel'] = 'ipd/ot_schedule_cancel/$1';
+$route['api/ipd/ot-schedules/(:num)/pre-op-checklist'] = 'ipd/pre_op_checklist/$1';
+$route['api/ipd/ot-availability'] = 'ipd/ot_availability';
+$route['api/ipd/operation-theatres'] = 'ipd/operation_theatres';
+$route['api/ipd/surgeries/(:num)/charges'] = 'ipd/surgery_charges/$1';
+$route['api/ipd/surgeries/(:num)/consumables'] = 'ipd/surgery_consumables/$1';
+$route['api/ipd/surgeries/(:num)/consumables/(:num)'] = 'ipd/surgery_consumables/$1/$2';
 $route['api/ipd/nutrition/(:num)'] = 'ipd/nutrition_update/$1';
 $route['api/ipd/intake-output/(:num)'] = 'ipd/intake_output_update/$1';
 $route['api/ipd/health-physical-habits/(:num)'] = 'ipd/health_physical_habits_update/$1';

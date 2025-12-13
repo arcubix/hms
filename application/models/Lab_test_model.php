@@ -44,6 +44,7 @@ class Lab_test_model extends CI_Model {
             $this->db->like('test_name', $search);
             $this->db->or_like('test_code', $search);
             $this->db->or_like('test_type', $search);
+            $this->db->or_like('category', $search);
             $this->db->group_end();
         }
         
@@ -55,6 +56,18 @@ class Lab_test_model extends CI_Model {
             $this->db->where('category', $filters['category']);
         }
         
+        if (!empty($filters['sample_type'])) {
+            $this->db->where('sample_type', $filters['sample_type']);
+        }
+        
+        if (isset($filters['min_price'])) {
+            $this->db->where('price >=', $filters['min_price']);
+        }
+        
+        if (isset($filters['max_price'])) {
+            $this->db->where('price <=', $filters['max_price']);
+        }
+        
         if (!empty($filters['status'])) {
             $this->db->where('status', $filters['status']);
         } else {
@@ -62,7 +75,58 @@ class Lab_test_model extends CI_Model {
             $this->db->where('status', 'Active');
         }
         
+        if (!empty($filters['organization_id'])) {
+            $this->db->where('organization_id', $filters['organization_id']);
+        }
+        
         $this->db->order_by('test_name', 'ASC');
+        
+        if (!empty($filters['limit'])) {
+            $this->db->limit($filters['limit'], isset($filters['offset']) ? $filters['offset'] : 0);
+        }
+        
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+    
+    /**
+     * Get test categories
+     */
+    public function get_categories() {
+        $this->db->select('DISTINCT category');
+        $this->db->from('lab_tests');
+        $this->db->where('category IS NOT NULL');
+        $this->db->where('category !=', '');
+        $this->db->where('status', 'Active');
+        $this->db->order_by('category', 'ASC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+    
+    /**
+     * Get test types
+     */
+    public function get_test_types() {
+        $this->db->select('DISTINCT test_type');
+        $this->db->from('lab_tests');
+        $this->db->where('test_type IS NOT NULL');
+        $this->db->where('test_type !=', '');
+        $this->db->where('status', 'Active');
+        $this->db->order_by('test_type', 'ASC');
+        $query = $this->db->get();
+        return $query->result_array();
+    }
+    
+    /**
+     * Get sample types
+     */
+    public function get_sample_types() {
+        $this->db->select('DISTINCT sample_type');
+        $this->db->from('lab_tests');
+        $this->db->where('sample_type IS NOT NULL');
+        $this->db->where('sample_type !=', '');
+        $this->db->where('status', 'Active');
+        $this->db->order_by('sample_type', 'ASC');
         $query = $this->db->get();
         return $query->result_array();
     }

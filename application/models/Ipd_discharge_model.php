@@ -124,5 +124,67 @@ class Ipd_discharge_model extends CI_Model {
         $this->db->where('id', $id);
         return $this->db->delete('ipd_discharge_summaries');
     }
+
+    /**
+     * Get all discharges with admission details
+     */
+    public function get_all($filters = []) {
+        $this->db->select('
+            ids.*,
+            ia.ipd_number,
+            ia.uhid,
+            ia.admission_date,
+            ia.admission_time,
+            ia.diagnosis as admission_diagnosis,
+            ia.status as admission_status,
+            p.name as patient_name,
+            p.age as patient_age,
+            p.gender as patient_gender,
+            p.phone as patient_phone,
+            d.name as consulting_doctor_name,
+            iw.name as ward_name,
+            ib.bed_number,
+            ir.room_number,
+            d1.name as discharging_doctor_name,
+            d2.name as follow_up_doctor_name,
+            u.name as created_by_name,
+            DATEDIFF(ids.discharge_date, ia.admission_date) as length_of_stay
+        ');
+        $this->db->from('ipd_discharge_summaries ids');
+        $this->db->join('ipd_admissions ia', 'ia.id = ids.admission_id', 'inner');
+        $this->db->join('patients p', 'p.id = ids.patient_id', 'left');
+        $this->db->join('doctors d', 'd.id = ia.consulting_doctor_id', 'left');
+        $this->db->join('ipd_wards iw', 'iw.id = ia.ward_id', 'left');
+        $this->db->join('ipd_beds ib', 'ib.id = ia.bed_id', 'left');
+        $this->db->join('ipd_rooms ir', 'ir.id = ia.room_id', 'left');
+        $this->db->join('doctors d1', 'd1.id = ids.discharging_doctor_id', 'left');
+        $this->db->join('doctors d2', 'd2.id = ids.follow_up_doctor_id', 'left');
+        $this->db->join('users u', 'u.id = ids.created_by', 'left');
+        
+        // Apply filters
+        if (!empty($filters['search'])) {
+            $search = $this->db->escape_like_str($filters['search']);
+            $this->db->group_start();
+            $this->db->like('ia.ipd_number', $search);
+            $this->db->or_like('ia.uhid', $search);
+            $this->db->or_like('p.name', $search);
+            $this->db->or_like('p.phone', $search);
+            $this->db->group_end();
+        }
+        
+        if (!empty($filters['date_from'])) {
+            $this->db->where('ids.discharge_date >=', $filters['date_from']);
+        }
+        
+        if (!empty($filters['date_to'])) {
+            $this->db->where('ids.discharge_date <=', $filters['date_to']);
+        }
+        
+        $this->db->order_by('ids.discharge_date', 'DESC');
+        $this->db->order_by('ids.discharge_time', 'DESC');
+        
+        $query = $this->db->get();
+        return $query->result_array();
+    }
 }
 

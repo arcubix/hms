@@ -13,7 +13,7 @@
  * - AI-powered validation & alerts
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -87,6 +87,7 @@ import {
 } from 'lucide-react';
 import { LineChart as RechartsLine, Line, BarChart as RechartsBar, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 interface TestItem {
   id: string;
@@ -429,14 +430,135 @@ const mockQC: QualityControl[] = [
 export function LaboratoryManagement() {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [tests] = useState<TestItem[]>(mockTests);
-  const [orders] = useState<TestOrder[]>(mockOrders);
-  const [samples] = useState<Sample[]>(mockSamples);
+  const [tests, setTests] = useState<TestItem[]>([]);
+  const [orders, setOrders] = useState<TestOrder[]>([]);
+  const [samples, setSamples] = useState<Sample[]>([]);
   const [qcRecords] = useState<QualityControl[]>(mockQC);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [isResultEntryOpen, setIsResultEntryOpen] = useState(false);
   const [isQCEntryOpen, setIsQCEntryOpen] = useState(false);
+
+  // Load data from API
+  useEffect(() => {
+    loadDashboardData();
+    loadTests();
+    loadOrders();
+    loadSamples();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      const stats = await api.getLaboratoryDashboard();
+      setDashboardStats(stats);
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+      toast.error('Failed to load dashboard statistics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTests = async () => {
+    try {
+      const labTests = await api.getLabTests({ status: 'Active' });
+      // Map API data to component format
+      const mappedTests: TestItem[] = labTests.map((test: any) => ({
+        id: test.id.toString(),
+        code: test.test_code,
+        name: test.test_name,
+        category: test.category || 'General',
+        department: test.category || 'General',
+        sampleType: test.sample_type || 'Not specified',
+        sampleVolume: test.sample_volume || '',
+        container: test.container_type || '',
+        methodology: test.methodology || '',
+        price: parseFloat(test.price || 0),
+        tat: parseInt(test.tat_hours || test.duration || '24'),
+        normalRange: {
+          min: 0,
+          max: 100,
+          unit: '',
+          notes: test.normal_range || ''
+        },
+        criticalRange: test.critical_range_low && test.critical_range_high ? {
+          low: parseFloat(test.critical_range_low),
+          high: parseFloat(test.critical_range_high)
+        } : undefined,
+        isActive: test.status === 'Active',
+        preparationInstructions: test.preparation_instructions
+      }));
+      setTests(mappedTests.length > 0 ? mappedTests : mockTests);
+    } catch (error) {
+      console.error('Failed to load tests:', error);
+      setTests(mockTests); // Fallback to mock data
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const labOrders = await api.getLabOrders({});
+      // Map API data to component format
+      const mappedOrders: TestOrder[] = labOrders.map((order: any) => ({
+        id: order.id.toString(),
+        orderId: order.order_number,
+        patientId: order.patient_id?.toString() || '',
+        patientName: order.patient_name || 'Unknown',
+        patientAge: order.patient_age || 0,
+        patientGender: (order.patient_gender || 'other') as 'male' | 'female' | 'other',
+        doctorName: order.ordered_by_name || 'Unknown',
+        orderDate: order.order_date,
+        orderTime: order.order_time,
+        orderType: order.order_type as 'OPD' | 'IPD' | 'Emergency' | 'Walk-in',
+        priority: order.priority as 'routine' | 'urgent' | 'stat',
+        tests: order.tests ? order.tests.map((test: any) => ({
+          testId: test.lab_test_id?.toString() || '',
+          testName: test.test_name,
+          testCode: test.test_code || '',
+          category: '',
+          price: parseFloat(test.price || 0),
+          status: test.status as any
+        })) : [],
+        totalAmount: parseFloat(order.total_amount || 0),
+        paymentStatus: order.payment_status as 'pending' | 'paid' | 'partial',
+        status: order.status as any
+      }));
+      setOrders(mappedOrders.length > 0 ? mappedOrders : mockOrders);
+    } catch (error) {
+      console.error('Failed to load orders:', error);
+      setOrders(mockOrders); // Fallback to mock data
+    }
+  };
+
+  const loadSamples = async () => {
+    try {
+      const labSamples = await api.getLabSamples({});
+      // Map API data to component format
+      const mappedSamples: Sample[] = labSamples.map((sample: any) => ({
+        id: sample.id.toString(),
+        sampleId: sample.sample_id,
+        barcode: sample.barcode || '',
+        orderId: sample.order_id?.toString() || '',
+        patientName: sample.patient_name || 'Unknown',
+        testName: sample.test_name || 'Unknown',
+        sampleType: sample.sample_type || '',
+        collectionDate: sample.collection_date || '',
+        collectionTime: sample.collection_time || '',
+        collectedBy: sample.collected_by_name || 'Unknown',
+        status: sample.status as any,
+        location: sample.location,
+        condition: sample.condition as any,
+        remarks: sample.remarks
+      }));
+      setSamples(mappedSamples.length > 0 ? mappedSamples : mockSamples);
+    } catch (error) {
+      console.error('Failed to load samples:', error);
+      setSamples(mockSamples); // Fallback to mock data
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -514,9 +636,9 @@ export function LaboratoryManagement() {
                 </div>
                 <TrendingUp className="w-5 h-5 text-green-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">118</h3>
-              <p className="text-sm text-gray-600">Today's Tests</p>
-              <p className="text-xs text-green-600 mt-2">+12.5% from yesterday</p>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{dashboardStats?.orders_today || 0}</h3>
+              <p className="text-sm text-gray-600">Today's Orders</p>
+              <p className="text-xs text-gray-500 mt-2">{dashboardStats?.completed_today || 0} completed</p>
             </CardContent>
           </Card>
 
@@ -528,9 +650,9 @@ export function LaboratoryManagement() {
                 </div>
                 <Badge className="bg-green-100 text-green-700">85%</Badge>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">45</h3>
-              <p className="text-sm text-gray-600">Pending Reports</p>
-              <p className="text-xs text-gray-500 mt-2">28 ready for validation</p>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{dashboardStats?.results_pending_verification || 0}</h3>
+              <p className="text-sm text-gray-600">Pending Verification</p>
+              <p className="text-xs text-gray-500 mt-2">Results awaiting approval</p>
             </CardContent>
           </Card>
 
@@ -542,9 +664,9 @@ export function LaboratoryManagement() {
                 </div>
                 <Badge className="bg-orange-100 text-orange-700">Avg</Badge>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">2.8h</h3>
-              <p className="text-sm text-gray-600">Avg TAT (Today)</p>
-              <p className="text-xs text-green-600 mt-2">Within target time</p>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{dashboardStats?.samples_collected_today || 0}</h3>
+              <p className="text-sm text-gray-600">Samples Collected Today</p>
+              <p className="text-xs text-gray-500 mt-2">Ready for processing</p>
             </CardContent>
           </Card>
 
@@ -556,8 +678,8 @@ export function LaboratoryManagement() {
                 </div>
                 <Zap className="w-5 h-5 text-red-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">8</h3>
-              <p className="text-sm text-gray-600">STAT/Urgent Tests</p>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{dashboardStats?.critical_results || 0}</h3>
+              <p className="text-sm text-gray-600">Critical Results</p>
               <p className="text-xs text-red-600 mt-2">Requires immediate attention</p>
             </CardContent>
           </Card>

@@ -99,6 +99,51 @@ $config['permissions'] = array(
         'delete' => ['view_patient_profiles'],
     ),
     
+    // Organizations Controller (Billing)
+    'Organizations' => array(
+        'index' => ['admin.view_users'], // List organizations (admin only)
+        'get' => ['admin.view_users'], // View organization
+        'current' => [], // Current user's organization (no permission needed)
+        'create' => ['admin.edit_users'], // Create organization
+        'update' => ['admin.edit_users'], // Update organization
+        'delete' => ['admin.edit_users'], // Delete organization
+    ),
+    
+    // Subscription Plans Controller (Billing)
+    'SubscriptionPlans' => array(
+        'index' => ['admin.view_users'], // List plans
+        'get' => ['admin.view_users'], // View plan
+        'create' => ['admin.edit_users'], // Create plan
+        'update' => ['admin.edit_users'], // Update plan
+        'delete' => ['admin.edit_users'], // Delete plan
+    ),
+    
+    // Invoices Controller (Billing)
+    'Invoices' => array(
+        'index' => ['admin.view_users'], // List invoices
+        'get' => ['admin.view_users'], // View invoice
+        'create' => ['admin.edit_users'], // Create invoice
+        'update' => ['admin.edit_users'], // Update invoice
+        'send' => ['admin.edit_users'], // Send invoice
+        'overdue' => ['admin.view_users'], // View overdue invoices
+    ),
+    
+    // Payments Controller (Billing)
+    'Payments' => array(
+        'index' => ['admin.view_users'], // List payments
+        'get' => ['admin.view_users'], // View payment
+        'create' => ['admin.edit_users'], // Record payment
+        'update' => ['admin.edit_users'], // Update payment
+        'delete' => ['admin.edit_users'], // Delete payment
+        'invoice' => ['admin.view_users'], // Get invoice payments
+    ),
+    
+    // Billing Settings Controller
+    'BillingSettings' => array(
+        'get' => ['admin.view_users'], // View billing settings
+        'update' => ['admin.edit_users'], // Update billing settings
+    ),
+    
     // Audit Logs Controller
     'Audit_logs' => array(
         'index' => ['admin.view_users'], // Admin only

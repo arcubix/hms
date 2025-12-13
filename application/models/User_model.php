@@ -158,6 +158,7 @@ class User_model extends CI_Model {
             'gender' => $data['gender'] ?? null,
             'status' => $data['status'] ?? 'active',
             'role' => $data['role'] ?? 'admin', // Default role for backward compatibility
+            'organization_id' => $data['organization_id'] ?? null, // Organization ID for multi-tenant support
             'professional_statement' => $data['professional_statement'] ?? null,
             'awards' => $data['awards'] ?? null,
             'expertise' => $data['expertise'] ?? null,
@@ -284,6 +285,7 @@ class User_model extends CI_Model {
                     $this->db->insert('user_share_procedures', array(
                         'user_id' => $user_id,
                         'procedure_name' => $procedure['procedure_name'],
+                        'charges' => isset($procedure['charges']) ? floatval($procedure['charges']) : null,
                         'share_type' => $procedure['share_type'] ?? 'percentage',
                         'share_value' => $procedure['share_value']
                     ));
@@ -468,6 +470,7 @@ class User_model extends CI_Model {
                     $this->db->insert('user_share_procedures', array(
                         'user_id' => $id,
                         'procedure_name' => $procedure['procedure_name'],
+                        'charges' => isset($procedure['charges']) ? floatval($procedure['charges']) : null,
                         'share_type' => $procedure['share_type'] ?? 'percentage',
                         'share_value' => $procedure['share_value']
                     ));
@@ -583,6 +586,25 @@ class User_model extends CI_Model {
     }
 
     /**
+     * Get consultation fee from user_share_procedures
+     * Returns the charges value for 'Consultation Charges' procedure
+     */
+    public function get_consultation_fee_from_procedures($user_id) {
+        $this->db->select('charges');
+        $this->db->where('user_id', $user_id);
+        $this->db->where('procedure_name', 'Consultation Charges');
+        $this->db->limit(1);
+        $query = $this->db->get('user_share_procedures');
+        $result = $query->row_array();
+        
+        if ($result && isset($result['charges']) && $result['charges'] !== null && $result['charges'] > 0) {
+            return floatval($result['charges']);
+        }
+        
+        return null;
+    }
+
+    /**
      * Get user follow up share types
      */
     public function get_user_follow_up_share_types($user_id) {
@@ -679,8 +701,26 @@ class User_model extends CI_Model {
             return null;
         }
         
+        // Get consultation fee from user_share_procedures table where procedure_name = 'Consultation Charges'
+        $consultation_fee = null;
+        $this->db->select('charges');
+        $this->db->where('user_id', $user_id);
+        $this->db->where('procedure_name', 'Consultation Charges');
+        $this->db->limit(1);
+        $query = $this->db->get('user_share_procedures');
+        $consultation_procedure = $query->row_array();
+        
+        if ($consultation_procedure && isset($consultation_procedure['charges']) && $consultation_procedure['charges'] !== null) {
+            $consultation_fee = floatval($consultation_procedure['charges']);
+        } else {
+            // Fallback to users.consultation_fee if not found in share_procedures
+            if (isset($user['consultation_fee']) && $user['consultation_fee'] !== null && $user['consultation_fee'] !== '') {
+                $consultation_fee = floatval($user['consultation_fee']);
+            }
+        }
+        
         return array(
-            'consultation_fee' => $user['consultation_fee'],
+            'consultation_fee' => $consultation_fee,
             'follow_up_charges' => $user['follow_up_charges'],
             'follow_up_share_price' => $user['follow_up_share_price'],
             'share_price' => $user['share_price'],
@@ -709,11 +749,22 @@ class User_model extends CI_Model {
         );
         
         foreach ($allowed_fields as $field) {
-            if (isset($settings[$field])) {
+            // Include field if it's set, or if it's explicitly 0 (for numeric fields)
+            if (isset($settings[$field]) || (in_array($field, array('consultation_fee', 'follow_up_charges', 'follow_up_share_price', 'share_price', 'lab_share_value', 'radiology_share_value', 'invoice_edit_count')) && array_key_exists($field, $settings))) {
                 if (in_array($field, array('instant_booking', 'visit_charges'))) {
                     $user_data[$field] = (int)$settings[$field];
                 } else {
-                    $user_data[$field] = $settings[$field];
+                    // Handle numeric fields - convert to float if numeric, or null if empty string
+                    if (in_array($field, array('consultation_fee', 'follow_up_charges', 'follow_up_share_price', 'share_price', 'lab_share_value', 'radiology_share_value', 'invoice_edit_count'))) {
+                        $value = $settings[$field];
+                        if ($value === '' || $value === null) {
+                            $user_data[$field] = null;
+                        } else {
+                            $user_data[$field] = floatval($value);
+                        }
+                    } else {
+                        $user_data[$field] = $settings[$field];
+                    }
                 }
             }
         }

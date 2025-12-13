@@ -24,6 +24,8 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
+import { Loader2 } from 'lucide-react';
 
 interface AmbulanceRequestDialogProps {
   patient: any;
@@ -36,6 +38,12 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
   const [destination, setDestination] = useState('');
   const [priority, setPriority] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [customDestinationAddress, setCustomDestinationAddress] = useState('');
+  const [pickupDate, setPickupDate] = useState(new Date().toISOString().split('T')[0]);
+  const [pickupTime, setPickupTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [medicalRequirements, setMedicalRequirements] = useState<string[]>([]);
+  const [contactPerson, setContactPerson] = useState('');
+  const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -46,14 +54,130 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
     };
   }, []);
 
-  const handleRequest = () => {
+  // Safety check: if patient is not provided, close dialog
+  useEffect(() => {
+    if (!patient) {
+      console.warn('AmbulanceRequestDialog: Patient data is missing');
+      onClose();
+    }
+  }, [patient, onClose]);
+
+  // Map service type to backend format
+  const mapServiceType = (value: string): string => {
+    const mapping: Record<string, string> = {
+      'basic': 'BLS',
+      'advanced': 'ALS',
+      'critical': 'Critical Care',
+      'air': 'Air',
+      'neonatal': 'Neonatal'
+    };
+    return mapping[value] || 'BLS';
+  };
+
+  // Map priority to backend format
+  const mapPriority = (value: string): string => {
+    const mapping: Record<string, string> = {
+      'emergency': 'Emergency',
+      'urgent': 'Urgent',
+      'scheduled': 'Scheduled'
+    };
+    return mapping[value] || 'Emergency';
+  };
+
+  // Map destination to backend format
+  const mapDestination = (value: string): string => {
+    const mapping: Record<string, string> = {
+      'home': 'Home',
+      'city-general': 'City General Hospital',
+      'metro-medical': 'Metro Medical Center',
+      'cardiac-center': 'Cardiac Specialty Center',
+      'trauma-center': 'Regional Trauma Center',
+      'rehab': 'Rehabilitation Facility',
+      'other': 'Other'
+    };
+    return mapping[value] || 'Home';
+  };
+
+  // Extract emergency_visit_id from patient object
+  const getEmergencyVisitId = (): number | null => {
+    const vid = patient.id || patient.visitId || patient.emergency_visit_id;
+    if (!vid) return null;
+    return typeof vid === 'string' ? parseInt(vid, 10) : vid;
+  };
+
+  // Handle medical requirements checkbox change
+  const handleMedicalRequirementChange = (requirement: string, checked: boolean) => {
+    if (checked) {
+      setMedicalRequirements([...medicalRequirements, requirement]);
+    } else {
+      setMedicalRequirements(medicalRequirements.filter(r => r !== requirement));
+    }
+  };
+
+  const handleRequest = async () => {
+    // Validate required fields
     if (!serviceType || !destination || !priority) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    onRequest();
-    toast.success('Ambulance requested successfully! ETA: 15 minutes');
+    // Validate emergency_visit_id
+    const emergencyVisitId = getEmergencyVisitId();
+    if (!emergencyVisitId) {
+      toast.error('Patient visit ID not found. Cannot create ambulance request.');
+      return;
+    }
+
+    // Validate custom destination if "Other" is selected
+    if (destination === 'other' && !customDestinationAddress.trim()) {
+      toast.error('Please provide the custom destination address');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Prepare API payload
+      const requestData: any = {
+        emergency_visit_id: emergencyVisitId,
+        service_type: mapServiceType(serviceType),
+        priority: mapPriority(priority),
+        destination: mapDestination(destination),
+        pickup_date: pickupDate,
+        pickup_time: pickupTime + ':00', // Add seconds for TIME format
+        additional_notes: additionalNotes || null
+      };
+
+      // Add custom destination address if "Other" is selected
+      if (destination === 'other' && customDestinationAddress.trim()) {
+        requestData.destination_address = customDestinationAddress.trim();
+      }
+
+      // Add medical requirements if any are selected
+      if (medicalRequirements.length > 0) {
+        requestData.medical_requirements = medicalRequirements;
+      }
+
+      // Add contact person if provided
+      if (contactPerson.trim()) {
+        requestData.contact_person = contactPerson.trim();
+      }
+
+      // Call API
+      await api.createAmbulanceRequest(requestData);
+
+      // Success
+      toast.success('Ambulance requested successfully! ETA: 15 minutes');
+      onRequest();
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to create ambulance request:', error);
+      toast.error(
+        error?.message || 'Failed to create ambulance request. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!mounted) return null;
@@ -83,7 +207,7 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
               </div>
               <div>
                 <CardTitle>Request Ambulance Service</CardTitle>
-                <CardDescription>Emergency medical transport for {patient.name}</CardDescription>
+                <CardDescription>Emergency medical transport for {patient?.name || 'Patient'}</CardDescription>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -99,23 +223,23 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <span className="text-gray-600">Name:</span>
-                <span className="font-medium ml-2">{patient.name}</span>
+                <span className="font-medium ml-2">{patient?.name || 'N/A'}</span>
               </div>
               <div>
                 <span className="text-gray-600">Age/Gender:</span>
-                <span className="font-medium ml-2">{patient.age}Y / {patient.gender}</span>
+                <span className="font-medium ml-2">{patient?.age || 'N/A'}Y / {patient?.gender || 'N/A'}</span>
               </div>
               <div>
                 <span className="text-gray-600">UHID:</span>
-                <span className="font-medium ml-2">{patient.uhid}</span>
+                <span className="font-medium ml-2">{patient?.uhid || 'N/A'}</span>
               </div>
               <div>
                 <span className="text-gray-600">Current Location:</span>
-                <span className="font-medium ml-2">{patient.assignedWard} - {patient.bedNumber}</span>
+                <span className="font-medium ml-2">{patient?.assignedWard || 'N/A'} - {patient?.bedNumber || 'N/A'}</span>
               </div>
               <div className="col-span-2">
                 <span className="text-gray-600">Condition:</span>
-                <Badge className="ml-2" variant="outline">{patient.status}</Badge>
+                <Badge className="ml-2" variant="outline">{patient?.status || 'N/A'}</Badge>
               </div>
             </div>
           </div>
@@ -191,22 +315,25 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
 
             {destination === 'other' && (
               <div className="space-y-2">
-                <Label htmlFor="customDestination">Custom Destination Address</Label>
+                <Label htmlFor="customDestination">Custom Destination Address *</Label>
                 <Textarea
                   id="customDestination"
                   placeholder="Enter complete address"
                   rows={2}
+                  value={customDestinationAddress}
+                  onChange={(e) => setCustomDestinationAddress(e.target.value)}
                 />
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="pickupTime">Pickup Date</Label>
+                <Label htmlFor="pickupDate">Pickup Date</Label>
                 <Input
-                  id="pickupTime"
+                  id="pickupDate"
                   type="date"
-                  defaultValue={new Date().toISOString().split('T')[0]}
+                  value={pickupDate}
+                  onChange={(e) => setPickupDate(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -214,7 +341,8 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
                 <Input
                   id="pickupTimeSlot"
                   type="time"
-                  defaultValue={new Date().toTimeString().slice(0, 5)}
+                  value={pickupTime}
+                  onChange={(e) => setPickupTime(e.target.value)}
                 />
               </div>
             </div>
@@ -226,23 +354,48 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
               <Label>Special Medical Requirements</Label>
               <div className="space-y-2">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded" 
+                    checked={medicalRequirements.includes('Oxygen Support Required')}
+                    onChange={(e) => handleMedicalRequirementChange('Oxygen Support Required', e.target.checked)}
+                  />
                   <span className="text-sm">Oxygen Support Required</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded" 
+                    checked={medicalRequirements.includes('IV Medications in Transit')}
+                    onChange={(e) => handleMedicalRequirementChange('IV Medications in Transit', e.target.checked)}
+                  />
                   <span className="text-sm">IV Medications in Transit</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded" 
+                    checked={medicalRequirements.includes('Cardiac Monitoring Equipment')}
+                    onChange={(e) => handleMedicalRequirementChange('Cardiac Monitoring Equipment', e.target.checked)}
+                  />
                   <span className="text-sm">Cardiac Monitoring Equipment</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded" 
+                    checked={medicalRequirements.includes('Stretcher/Wheelchair Accessible')}
+                    onChange={(e) => handleMedicalRequirementChange('Stretcher/Wheelchair Accessible', e.target.checked)}
+                  />
                   <span className="text-sm">Stretcher/Wheelchair Accessible</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded" 
+                    checked={medicalRequirements.includes('Paramedic Escort Required')}
+                    onChange={(e) => handleMedicalRequirementChange('Paramedic Escort Required', e.target.checked)}
+                  />
                   <span className="text-sm">Paramedic Escort Required</span>
                 </label>
               </div>
@@ -253,6 +406,8 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
               <Input
                 id="contactPerson"
                 placeholder="Name and contact number"
+                value={contactPerson}
+                onChange={(e) => setContactPerson(e.target.value)}
               />
             </div>
 
@@ -304,12 +459,30 @@ export function AmbulanceRequestDialog({ patient, onClose, onRequest }: Ambulanc
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={onClose}>
+            <Button 
+              variant="outline" 
+              className="flex-1" 
+              onClick={onClose}
+              disabled={loading}
+            >
               Cancel
             </Button>
-            <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={handleRequest}>
-              <Ambulance className="w-4 h-4 mr-2" />
-              Request Ambulance
+            <Button 
+              className="flex-1 bg-red-600 hover:bg-red-700" 
+              onClick={handleRequest}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Requesting...
+                </>
+              ) : (
+                <>
+                  <Ambulance className="w-4 h-4 mr-2" />
+                  Request Ambulance
+                </>
+              )}
             </Button>
           </div>
         </CardContent>

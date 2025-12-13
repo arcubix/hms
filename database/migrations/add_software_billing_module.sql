@@ -1,0 +1,12 @@
+-- Add Software Billing module to modules table
+INSERT INTO `modules` (`module_id`, `label`, `description`, `category`, `icon_name`, `color_from`, `color_to`, `display_order`) VALUES
+('software-billing', 'Software Billing', 'Multi-tenant billing and invoicing system', 'Financial', 'DollarSign', 'emerald-500', 'emerald-600', 18)
+ON DUPLICATE KEY UPDATE 
+  `label` = VALUES(`label`), 
+  `description` = VALUES(`description`),
+  `category` = VALUES(`category`),
+  `icon_name` = VALUES(`icon_name`),
+  `color_from` = VALUES(`color_from`),
+  `color_to` = VALUES(`color_to`),
+  `display_order` = VALUES(`display_order`);
+

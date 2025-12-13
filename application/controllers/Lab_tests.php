@@ -46,6 +46,22 @@ class Lab_tests extends Api {
                 $filters['status'] = $this->input->get('status');
             }
             
+            if ($this->input->get('sample_type')) {
+                $filters['sample_type'] = $this->input->get('sample_type');
+            }
+            
+            if ($this->input->get('min_price')) {
+                $filters['min_price'] = $this->input->get('min_price');
+            }
+            
+            if ($this->input->get('max_price')) {
+                $filters['max_price'] = $this->input->get('max_price');
+            }
+            
+            if ($this->user && isset($this->user['organization_id'])) {
+                $filters['organization_id'] = $this->user['organization_id'];
+            }
+            
             $tests = $this->Lab_test_model->get_all($filters);
             $this->success($tests);
             
@@ -153,6 +169,60 @@ class Lab_tests extends Api {
             }
         } catch (Exception $e) {
             log_message('error', 'Lab test update error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get test categories
+     * GET /api/lab-tests/categories
+     */
+    public function categories() {
+        try {
+            if (!$this->requireAnyPermission(['lab_manager.view_lab_reports', 'lab_technician.view_lab_reports', 'doctor.view_lab_reports'])) {
+                return;
+            }
+            
+            $categories = $this->Lab_test_model->get_categories();
+            $this->success($categories);
+        } catch (Exception $e) {
+            log_message('error', 'Lab test categories error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get test types
+     * GET /api/lab-tests/types
+     */
+    public function types() {
+        try {
+            if (!$this->requireAnyPermission(['lab_manager.view_lab_reports', 'lab_technician.view_lab_reports', 'doctor.view_lab_reports'])) {
+                return;
+            }
+            
+            $types = $this->Lab_test_model->get_test_types();
+            $this->success($types);
+        } catch (Exception $e) {
+            log_message('error', 'Lab test types error: ' . $e->getMessage());
+            $this->error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get sample types
+     * GET /api/lab-tests/sample-types
+     */
+    public function sample_types() {
+        try {
+            if (!$this->requireAnyPermission(['lab_manager.view_lab_reports', 'lab_technician.view_lab_reports', 'doctor.view_lab_reports'])) {
+                return;
+            }
+            
+            $sample_types = $this->Lab_test_model->get_sample_types();
+            $this->success($sample_types);
+        } catch (Exception $e) {
+            log_message('error', 'Lab test sample_types error: ' . $e->getMessage());
             $this->error('Server error: ' . $e->getMessage(), 500);
         }
     }

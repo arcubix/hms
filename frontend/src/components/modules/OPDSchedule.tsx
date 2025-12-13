@@ -36,11 +36,14 @@ import {
   Printer,
   Globe,
   Mail,
-  Loader2
+  Loader2,
+  DollarSign
 } from 'lucide-react';
 import { api, Doctor as ApiDoctor, Appointment as ApiAppointment, Patient } from '../../services/api';
 import { AddHealthRecord } from './AddHealthRecord';
 import { HealthRecords } from './HealthRecords';
+import { OpdBilling } from '../opd/OpdBilling';
+import { PaymentDialog } from '../payments/PaymentDialog';
 import { toast } from 'sonner';
 
 interface Appointment {
@@ -73,10 +76,12 @@ interface Doctor {
 }
 
 export function OPDSchedule() {
+  const [activeTab, setActiveTab] = useState<'schedule' | 'billing'>('schedule');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDoctor, setSelectedDoctor] = useState('all');
   const [showTokenQueue, setShowTokenQueue] = useState(false);
   const [isCreateAppointmentOpen, setIsCreateAppointmentOpen] = useState(false);
+  const [selectedPatientIdForBilling, setSelectedPatientIdForBilling] = useState<number | undefined>(undefined);
   
   // Add Token Dialog States
   const [patientSearch, setPatientSearch] = useState('');
@@ -119,6 +124,11 @@ export function OPDSchedule() {
   
   // Health Records / Prescription states
   const [checkingAppointment, setCheckingAppointment] = useState<Appointment | null>(null);
+  
+  // Payment states
+  const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [appointmentBill, setAppointmentBill] = useState<any>(null);
   
   // Patient search results - use numeric id for API, but display patient_id string
   const searchResults = patientSearchResults.map(p => {
@@ -735,6 +745,182 @@ export function OPDSchedule() {
     setCheckingAppointment(null);
   };
 
+  // Handle appointment payment
+  const handleAppointmentPayment = async (appointment: Appointment) => {
+    try {
+      // Check if bill exists for this appointment
+      const bill = await api.getOpdBillByAppointment(parseInt(appointment.id));
+      if (bill) {
+        // Bill exists, use it
+        setAppointmentBill(bill);
+        setPaymentAppointment(appointment);
+        setShowPaymentDialog(true);
+        return;
+      }
+      // If bill is null, create temporary bill with consultation fee
+    } catch (error: any) {
+      // If error fetching bill, log it but continue to create temporary bill
+      if (error?.response?.status !== 404 && error?.response?.status !== 400) {
+        console.error('Error fetching bill:', error);
+      }
+    }
+    
+    // If bill doesn't exist (null) or error occurred, fetch doctor's consultation fee and create temporary bill
+    let consultationFee = 0;
+    let feeRetrievalError = false;
+    
+    if (appointment.doctorId) {
+      try {
+        const doctor = await api.getDoctor(appointment.doctorId);
+        console.log('Doctor fetched:', { id: appointment.doctorId, doctor, user_id: (doctor as any)?.user_id });
+        
+        if (doctor && (doctor as any).user_id) {
+          const userSettings = await api.getUserSettings((doctor as any).user_id);
+          console.log('User settings fetched:', { 
+            user_id: (doctor as any).user_id, 
+            userSettings,
+            consultation_fee_raw: userSettings?.consultation_fee,
+            consultation_fee_type: typeof userSettings?.consultation_fee,
+            full_user_settings: JSON.stringify(userSettings)
+          });
+          
+          // Handle consultation_fee - it might be string, number, null, or undefined
+          const fee = userSettings?.consultation_fee;
+          if (fee !== null && fee !== undefined && fee !== '') {
+            consultationFee = typeof fee === 'string' ? parseFloat(fee) : Number(fee);
+            if (isNaN(consultationFee) || consultationFee < 0) {
+              consultationFee = 0;
+            }
+          } else {
+            consultationFee = 0;
+          }
+          
+          console.log('Final consultation fee:', consultationFee, 'Type:', typeof consultationFee, 'Raw fee:', fee);
+          
+          // Only show warning if consultation fee is actually 0 or missing
+          // Don't show warning if fee was successfully retrieved and is > 0
+          if (consultationFee === 0 || consultationFee === null || consultationFee === undefined || isNaN(consultationFee)) {
+            feeRetrievalError = true;
+            // Only show warning if we couldn't retrieve a valid fee
+            if (userSettings && (userSettings.consultation_fee === null || userSettings.consultation_fee === undefined)) {
+              toast.warning('Doctor consultation fee is not set. Bill will be created with ₹0. Please set consultation fee in User Settings.', {
+                duration: 5000
+              });
+            } else if (consultationFee === 0 && userSettings?.consultation_fee === 0) {
+              toast.warning('Doctor consultation fee is set to ₹0. Bill will be created with ₹0. Please update consultation fee in User Settings.', {
+                duration: 5000
+              });
+            }
+          } else {
+            console.log('Consultation fee successfully retrieved:', consultationFee);
+          }
+        } else {
+          feeRetrievalError = true;
+          console.warn('Doctor user_id not found for doctor:', { doctorId: appointment.doctorId, doctor });
+          toast.warning('Doctor user account not found. Consultation fee cannot be retrieved. Please link doctor to a user account.');
+        }
+      } catch (err: any) {
+        feeRetrievalError = true;
+        console.error('Failed to fetch doctor consultation fee:', err);
+        toast.error('Failed to fetch doctor consultation fee: ' + (err?.message || 'Unknown error') + '. Please ensure doctor has consultation fee configured.');
+      }
+    } else {
+      feeRetrievalError = true;
+      toast.warning('Doctor ID not found for appointment. Consultation fee cannot be retrieved.');
+    }
+    
+    // Create a temporary bill object with consultation fee for display
+    const tempBill = {
+      id: null,
+      total_amount: consultationFee,
+      paid_amount: 0,
+      due_amount: consultationFee,
+      consultation_fee: consultationFee,
+      consultationFee: consultationFee // Also include as consultationFee for compatibility
+    };
+    
+    setAppointmentBill(tempBill as any);
+    setPaymentAppointment(appointment);
+    setShowPaymentDialog(true);
+  };
+
+  const handleAppointmentPaymentSuccess = async () => {
+    // Reload appointments after payment
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const apiAppointments = await api.getAppointments({ date: dateStr });
+    const mappedAppointments: Appointment[] = apiAppointments.map((apt, index) => {
+      const timeSlot = getTimeSlotFromTime(apt.appointment_date);
+      const tokenNumberFromAPI = (apt as any).token_number;
+      
+      return {
+        id: apt.id.toString(),
+        patientName: apt.patient_name || 'Unknown',
+        patientId: apt.patient_id_string || apt.patient_id.toString(),
+        patientIdNumeric: typeof apt.patient_id === 'number' ? apt.patient_id : (typeof apt.patient_id === 'string' ? parseInt(apt.patient_id, 10) : undefined),
+        tokenNumber: tokenNumberFromAPI || apt.appointment_number || String(index + 1).padStart(3, '0'),
+        room_number: (apt as any).room_number,
+        room_name: (apt as any).room_name,
+        floor_number: (apt as any).floor_number,
+        floor_name: (apt as any).floor_name,
+        reception_name: (apt as any).reception_name,
+        token_number: tokenNumberFromAPI || undefined,
+        token_id: (apt as any).token_id || undefined,
+        time: formatTime(apt.appointment_date),
+        timeSlot: timeSlot,
+        doctorId: apt.doctor_doctor_id?.toString() || '',
+        status: mapAppointmentStatus(apt.status),
+        phoneNumber: apt.patient_phone,
+        reason: apt.reason
+      };
+    });
+    setAppointments(mappedAppointments);
+    setPaymentAppointment(null);
+    setAppointmentBill(null);
+  };
+
+  // Show Billing tab content
+  if (activeTab === 'billing') {
+    return (
+      <div className="flex flex-col h-screen bg-gray-50">
+        {/* Tabs Navigation */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('schedule')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'schedule'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <CalendarIcon className="w-4 h-4 inline mr-2" />
+              Schedule
+            </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'billing'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <DollarSign className="w-4 h-4 inline mr-2" />
+              Billing
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto p-6">
+          {selectedPatientIdForBilling ? (
+            <OpdBilling patientId={selectedPatientIdForBilling} />
+          ) : (
+            <OpdBilling />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Show HealthRecords when checking an appointment
   if (checkingAppointment) {
     // Use numeric patient ID if available, otherwise try to parse from patientId string
@@ -771,8 +957,37 @@ export function OPDSchedule() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 relative">
-      {/* Left Sidebar - Calendar */}
+    <div className="flex flex-col h-screen bg-gray-50 relative">
+      {/* Tabs Navigation */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('schedule')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'schedule'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4 inline mr-2" />
+            Schedule
+          </button>
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'billing'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 inline mr-2" />
+            Billing
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar - Calendar */}
       <div className="w-80 bg-white border-r border-gray-200 p-4 space-y-4 overflow-y-auto relative z-0 flex flex-col">
         {/* Calendar Header */}
         <div className="flex items-center justify-between mb-2">
@@ -1325,36 +1540,45 @@ export function OPDSchedule() {
                                         <Button 
                                           variant="ghost" 
                                           size="sm" 
-                                          className="h-6 px-1.5 text-[10px] hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
+                                          className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
                                           title="View Details"
                                         >
-                                          <Eye className="w-2.5 h-2.5 mr-0.5" />
-                                          View
+                                          <Eye className="w-3.5 h-3.5" />
                                         </Button>
                                         <Button 
                                           variant="ghost" 
                                           size="sm" 
-                                          className="h-6 px-1.5 text-[10px] hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
+                                          className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600 rounded transition-colors"
                                           title="Edit"
                                         >
-                                          <Edit className="w-2.5 h-2.5 mr-0.5" />
-                                          Edit
+                                          <Edit className="w-3.5 h-3.5" />
                                         </Button>
                                         {appointment.status !== 'checked' && (
                                           <Button 
                                             variant="ghost" 
                                             size="sm" 
-                                            className="h-6 px-1.5 text-[10px] hover:bg-green-100 hover:text-green-600 text-green-600 rounded transition-colors"
+                                            className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600 text-green-600 rounded transition-colors"
                                             title="Mark as Checked"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleCheckAppointment(appointment);
                                             }}
                                           >
-                                            <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                                            Check
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
                                           </Button>
                                         )}
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600 text-blue-600 rounded transition-colors"
+                                          title="Collect Payment"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleAppointmentPayment(appointment);
+                                          }}
+                                        >
+                                          <DollarSign className="w-3.5 h-3.5" />
+                                        </Button>
                                       </div>
                                     </div>
                                     
@@ -1431,6 +1655,7 @@ export function OPDSchedule() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Floating Action Buttons */}
@@ -1798,6 +2023,29 @@ export function OPDSchedule() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Payment Dialog for Appointment */}
+      {paymentAppointment && paymentAppointment.patientIdNumeric && (
+        <PaymentDialog
+          open={showPaymentDialog}
+          onOpenChange={(open) => {
+            setShowPaymentDialog(open);
+            if (!open) {
+              setPaymentAppointment(null);
+              setAppointmentBill(null);
+            }
+          }}
+          patientId={paymentAppointment.patientIdNumeric}
+          billType="opd"
+          billId={appointmentBill?.id}
+          appointmentId={parseInt(paymentAppointment.id)}
+          consultationFee={appointmentBill?.consultation_fee || (appointmentBill as any)?.consultationFee}
+          totalAmount={appointmentBill?.total_amount || 0}
+          paidAmount={appointmentBill?.paid_amount || 0}
+          dueAmount={appointmentBill?.due_amount || (appointmentBill?.total_amount || 0)}
+          onSuccess={handleAppointmentPaymentSuccess}
+        />
+      )}
     </div>
   );
 }

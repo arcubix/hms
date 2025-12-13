@@ -9,8 +9,18 @@ class Appointments extends Api {
         parent::__construct();
         $this->load->model('Appointment_model');
         $this->load->model('System_settings_model');
+        $this->load->model('Opd_billing_model');
+        $this->load->model('Patient_payment_model');
         $this->load->library('Room_assignment_service');
         $this->load->library('Token_service');
+        
+        // Verify token for all requests (except OPTIONS which already exited)
+        if (!$this->verify_token()) {
+            return;
+        }
+        
+        // Load PaymentProcessor after token verification to ensure it's available
+        $this->load->library('PaymentProcessor');
     }
 
     /**
@@ -427,6 +437,211 @@ class Appointments extends Api {
     /**
      * GET /api/appointments/patient/:id - Get appointments by patient
      */
+    /**
+     * Collect payment for an appointment
+     * POST /api/appointments/{appointment_id}/payment
+     * This will create a bill if it doesn't exist, then collect payment
+     */
+    public function payment($appointment_id = null) {
+        try {
+            // Check permission for collecting payment
+            // Allow if user has add_appointment permission (for OPD billing) or is admin
+            if (!$this->requirePermission('add_appointment')) {
+                return;
+            }
+            
+            if (!$appointment_id) {
+                $appointment_id = $this->input->post('appointment_id');
+            }
+            
+            if (!$appointment_id) {
+                $this->error('Appointment ID is required', 400);
+                return;
+            }
+
+            // Get appointment details
+            $appointment = $this->Appointment_model->get_by_id($appointment_id);
+            if (!$appointment) {
+                $this->error('Appointment not found', 404);
+                return;
+            }
+
+            $data = $this->get_request_data();
+            
+            if (empty($data['amount'])) {
+                $this->error('Payment amount is required', 400);
+                return;
+            }
+
+            // Check if bill exists for this appointment
+            $bill = $this->Opd_billing_model->get_by_appointment($appointment_id);
+            
+            // If no bill exists, create one automatically
+            if (!$bill) {
+                // Get doctor's consultation fee
+                $consultation_fee = 0.00;
+                $fee_source = 'none';
+                
+                // First, try to use consultation fee from payment data (if provided)
+                if (isset($data['consultation_fee']) && $data['consultation_fee'] > 0) {
+                    $consultation_fee = floatval($data['consultation_fee']);
+                    $fee_source = 'payment_data';
+                } 
+                // Otherwise, fetch from doctor's user settings (from user_share_procedures table)
+                else if (!empty($appointment['doctor_doctor_id'])) {
+                    $this->load->model('Doctor_model');
+                    $doctor = $this->Doctor_model->get_by_id($appointment['doctor_doctor_id']);
+                    if ($doctor && !empty($doctor['user_id'])) {
+                        $this->load->model('User_model');
+                        
+                        // Get consultation fee from user_share_procedures where procedure_name = 'Consultation Charges'
+                        $consultation_fee_from_procedures = $this->User_model->get_consultation_fee_from_procedures($doctor['user_id']);
+                        
+                        if ($consultation_fee_from_procedures !== null && $consultation_fee_from_procedures > 0) {
+                            $consultation_fee = $consultation_fee_from_procedures;
+                            $fee_source = 'doctor_share_procedures';
+                        } else {
+                            // Fallback to users.consultation_fee if not found in share_procedures
+                            $user = $this->User_model->get_user_by_id($doctor['user_id']);
+                            if ($user && isset($user['consultation_fee']) && $user['consultation_fee'] > 0) {
+                                $consultation_fee = floatval($user['consultation_fee']);
+                                $fee_source = 'doctor_settings';
+                            } else {
+                                $fee_source = 'doctor_settings_empty';
+                                log_message('warning', "Doctor ID {$appointment['doctor_doctor_id']} (user_id: {$doctor['user_id']}) has no consultation fee set in share_procedures or users table");
+                            }
+                        }
+                    } else {
+                        $fee_source = 'doctor_not_found';
+                        log_message('warning', "Doctor ID {$appointment['doctor_doctor_id']} not found or has no user_id");
+                    }
+                } else {
+                    $fee_source = 'no_doctor_id';
+                    log_message('warning', "Appointment {$appointment_id} has no doctor_doctor_id");
+                }
+                
+                // Log if consultation fee is 0
+                if ($consultation_fee == 0) {
+                    log_message('info', "Creating OPD bill for appointment {$appointment_id} with consultation fee ₹0 (source: {$fee_source})");
+                }
+                
+                $final_consultation_fee = $consultation_fee;
+                
+                // Create bill with consultation fee
+                $bill_data = array(
+                    'patient_id' => $appointment['patient_id'],
+                    'appointment_id' => $appointment_id,
+                    'bill_date' => date('Y-m-d'),
+                    'consultation_fee' => $final_consultation_fee,
+                    'lab_charges' => $data['lab_charges'] ?? 0.00,
+                    'radiology_charges' => $data['radiology_charges'] ?? 0.00,
+                    'medication_charges' => $data['medication_charges'] ?? 0.00,
+                    'discount' => $data['discount'] ?? 0.00,
+                    'discount_percentage' => $data['discount_percentage'] ?? 0.00,
+                    'tax_rate' => $data['tax_rate'] ?? 0.00,
+                    'insurance_covered' => $data['insurance_covered'] ?? 0.00,
+                    'notes' => $data['bill_notes'] ?? 'Payment against appointment #' . $appointment_id,
+                );
+
+                // Set created_by if user is logged in
+                if ($this->user && isset($this->user['id'])) {
+                    $bill_data['created_by'] = $this->user['id'];
+                }
+
+                try {
+                    $bill_id = $this->Opd_billing_model->create($bill_data);
+                    
+                    if (!$bill_id) {
+                        log_message('error', 'Failed to create bill - Opd_billing_model->create returned false');
+                        $this->error('Failed to create bill for appointment', 500);
+                        return;
+                    }
+                } catch (Exception $e) {
+                    log_message('error', 'Exception creating bill: ' . $e->getMessage());
+                    log_message('error', 'Bill data: ' . json_encode($bill_data));
+                    $this->error('Failed to create bill: ' . $e->getMessage(), 500);
+                    return;
+                }
+                
+                $bill = $this->Opd_billing_model->get_by_id($bill_id);
+            } else {
+                $bill_id = intval($bill['id']); // Ensure bill_id is integer
+            }
+
+            // Ensure bill_id is integer
+            $bill_id = intval($bill_id);
+
+            // Set processed_by
+            if ($this->user && isset($this->user['id'])) {
+                $data['processed_by'] = $this->user['id'];
+            }
+
+            // Ensure amount is float
+            $data['amount'] = floatval($data['amount']);
+
+            // Ensure PaymentProcessor library is loaded
+            if (!isset($this->PaymentProcessor) || $this->PaymentProcessor === null) {
+                // Check if library loader knows about it
+                if ($this->load->is_loaded('PaymentProcessor')) {
+                    // Library is loaded but property not set - manually assign
+                    if (class_exists('PaymentProcessor')) {
+                        $this->PaymentProcessor = new PaymentProcessor();
+                    }
+                } else {
+                    // Try loading the library
+                    $this->load->library('PaymentProcessor');
+                }
+                
+                // If still not set, check if class exists and manually instantiate
+                if ((!isset($this->PaymentProcessor) || $this->PaymentProcessor === null) && class_exists('PaymentProcessor')) {
+                    $this->PaymentProcessor = new PaymentProcessor();
+                }
+                
+                // Final check
+                if (!isset($this->PaymentProcessor) || $this->PaymentProcessor === null) {
+                    log_message('error', 'Appointments payment: Failed to load PaymentProcessor library');
+                    log_message('error', 'PaymentProcessor class exists: ' . (class_exists('PaymentProcessor') ? 'yes' : 'no'));
+                    log_message('error', 'PaymentProcessor is_loaded: ' . ($this->load->is_loaded('PaymentProcessor') ? 'yes' : 'no'));
+                    log_message('error', 'PaymentProcessor property exists: ' . (property_exists($this, 'PaymentProcessor') ? 'yes' : 'no'));
+                    $this->error('Payment processor not available', 500);
+                    return;
+                }
+            }
+
+            // Process payment against the bill
+            try {
+                $result = $this->PaymentProcessor->process_bill_payment('opd', $bill_id, $data);
+            } catch (Exception $e) {
+                log_message('error', 'PaymentProcessor error: ' . $e->getMessage());
+                log_message('error', 'PaymentProcessor trace: ' . $e->getTraceAsString());
+                log_message('error', 'Payment data: ' . json_encode($data));
+                log_message('error', 'Bill ID: ' . $bill_id);
+                $this->error('Payment processing failed: ' . $e->getMessage(), 500);
+                return;
+            }
+            
+            if ($result['success']) {
+                $payment = $this->Patient_payment_model->get_by_id($result['payment_id']);
+                $updated_bill = $this->Opd_billing_model->get_by_id($bill_id);
+                $updated_bill['items'] = $this->Opd_billing_model->get_bill_items($bill_id);
+                $updated_bill['total_paid'] = $this->Patient_payment_model->get_total_paid('opd', $bill_id);
+                $updated_bill['payments'] = $this->Patient_payment_model->get_by_bill('opd', $bill_id);
+                
+                $this->success(array(
+                    'payment' => $payment,
+                    'bill' => $updated_bill,
+                    'appointment' => $appointment
+                ), 'Payment collected successfully against appointment', 201);
+            } else {
+                $this->error($result['error'] ?? 'Failed to collect payment', 400);
+            }
+        } catch (Exception $e) {
+            log_message('error', 'Appointments payment error: ' . $e->getMessage());
+            log_message('error', 'Appointments payment error trace: ' . $e->getTraceAsString());
+            $this->error('Server error: ' . $e->getMessage() . ' (Line: ' . $e->getLine() . ')', 500);
+        }
+    }
+
     public function get_by_patient($patient_id = null) {
         if (!$patient_id) {
             $this->error('Patient ID required', 400);

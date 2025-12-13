@@ -12,7 +12,7 @@
  * - Document uploads
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -61,6 +61,7 @@ import {
   Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../../services/api';
 
 interface Brand {
   id: string;
@@ -112,7 +113,11 @@ interface DoctorRelation {
   referralCount: number;
 }
 
-export function AddSupplier() {
+interface AddSupplierProps {
+  onCancel?: () => void;
+}
+
+export function AddSupplier({ onCancel }: AddSupplierProps = {}) {
   const [activeTab, setActiveTab] = useState('basic');
   const [supplierName, setSupplierName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
@@ -125,37 +130,25 @@ export function AddSupplier() {
   const [isActive, setIsActive] = useState(true);
   
   // Brands Management
-  const [brands, setBrands] = useState<Brand[]>([
-    {
-      id: '1',
-      name: 'PharmaCorp International',
-      description: 'Leading pharmaceutical manufacturer',
-      isActive: true,
-      discounts: [
-        { id: 'd1', type: 'percentage', value: 15, minQuantity: 100, description: 'Bulk order discount' },
-        { id: 'd2', type: 'seasonal', value: 20, startDate: '2025-01-01', endDate: '2025-03-31', description: 'Q1 Special' }
-      ],
-      promotions: [
-        { id: 'p1', name: 'Buy 10 Get 2 Free', type: 'buy-get', description: 'Promotional offer', startDate: '2025-01-01', endDate: '2025-12-31', terms: 'Valid on select medicines', isActive: true }
-      ]
-    }
-  ]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [isBrandDialogOpen, setIsBrandDialogOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   
   // Targets
-  const [medicineTargets, setMedicineTargets] = useState<MedicineTarget[]>([
-    { id: 't1', medicineName: 'Paracetamol 500mg', category: 'Analgesics', targetQuantity: 5000, period: 'monthly', commission: 2.5, currentProgress: 3200 },
-    { id: 't2', medicineName: 'Amoxicillin 250mg', category: 'Antibiotics', targetQuantity: 3000, period: 'monthly', commission: 3.0, currentProgress: 1800 }
-  ]);
+  const [medicineTargets, setMedicineTargets] = useState<MedicineTarget[]>([]);
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   
   // Doctor Relations
-  const [doctorRelations, setDoctorRelations] = useState<DoctorRelation[]>([
-    { id: 'dr1', doctorName: 'Dr. Sarah Ahmed', specialty: 'General Physician', preferredBrands: ['PharmaCorp International'], commission: 5, referralCount: 45 },
-    { id: 'dr2', doctorName: 'Dr. Ali Khan', specialty: 'Cardiologist', preferredBrands: ['PharmaCorp International'], commission: 7, referralCount: 32 }
-  ]);
+  const [doctorRelations, setDoctorRelations] = useState<DoctorRelation[]>([]);
   const [isDoctorDialogOpen, setIsDoctorDialogOpen] = useState(false);
+  
+  // Commission Summary Data
+  const [commissionSummary, setCommissionSummary] = useState({
+    totalEarned: 0,
+    avgCommission: 0,
+    totalOrders: 0
+  });
+  const [loadingCommission, setLoadingCommission] = useState(false);
 
   // Commission Structure
   const [baseCommission, setBaseCommission] = useState('5');
@@ -165,17 +158,64 @@ export function AddSupplier() {
     { min: 500000, max: 999999999, rate: 10 }
   ]);
 
-  const handleSaveSupplier = () => {
+  // Load commission summary data
+  useEffect(() => {
+    // Load commission summary if supplier ID is available (for edit mode)
+    // For now, initialize with zeros since this is add mode
+    setCommissionSummary({
+      totalEarned: 0,
+      avgCommission: 0,
+      totalOrders: 0
+    });
+  }, []);
+
+  const handleSaveSupplier = async () => {
     if (!supplierName || !contactPerson || !phone) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    toast.success('Supplier saved successfully!', {
-      description: `${supplierName} has been added to the system`
-    });
+    try {
+      const supplierData = {
+        name: supplierName,
+        contact_person: contactPerson,
+        phone: phone,
+        email: email || undefined,
+        address: address || undefined,
+        tax_id: gstNumber || undefined,
+        credit_limit: parseFloat(creditLimit) || 0,
+        payment_terms: paymentTerms,
+        country: 'Pakistan',
+        status: isActive ? 'Active' : 'Inactive' as 'Active' | 'Inactive',
+        notes: undefined
+      };
 
-    // Reset form or navigate
+      await api.createSupplier(supplierData);
+      toast.success('Supplier saved successfully!', {
+        description: `${supplierName} has been added to the system`
+      });
+
+      // Reset form
+      setSupplierName('');
+      setContactPerson('');
+      setEmail('');
+      setPhone('');
+      setAddress('');
+      setGstNumber('');
+      setCreditLimit('');
+      setPaymentTerms('30');
+      setIsActive(true);
+      setBrands([]);
+      setMedicineTargets([]);
+      setDoctorRelations([]);
+      
+      // Navigate back
+      if (onCancel) {
+        onCancel();
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save supplier');
+    }
   };
 
   const addBrand = (brand: Brand) => {
@@ -227,7 +267,30 @@ export function AddSupplier() {
             <p className="text-gray-600">Complete supplier information, brands, targets, and relationships</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                // Reset form
+                setSupplierName('');
+                setContactPerson('');
+                setEmail('');
+                setPhone('');
+                setAddress('');
+                setGstNumber('');
+                setCreditLimit('');
+                setPaymentTerms('30');
+                setIsActive(true);
+                setBrands([]);
+                setMedicineTargets([]);
+                setDoctorRelations([]);
+                // Call onCancel callback if provided, otherwise navigate back
+                if (onCancel) {
+                  onCancel();
+                } else if (window.history.length > 1) {
+                  window.history.back();
+                }
+              }}
+            >
               <X className="w-4 h-4 mr-2" />
               Cancel
             </Button>
@@ -776,7 +839,9 @@ export function AddSupplier() {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600 mb-1">Total Earned (MTD)</p>
-                          <p className="text-xl font-bold text-gray-900">PKR 125,450</p>
+                          <p className="text-xl font-bold text-gray-900">
+                            PKR {commissionSummary.totalEarned.toLocaleString()}
+                          </p>
                         </div>
                       </div>
                     </CardContent>
@@ -790,7 +855,9 @@ export function AddSupplier() {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600 mb-1">Avg Commission</p>
-                          <p className="text-xl font-bold text-gray-900">7.5%</p>
+                          <p className="text-xl font-bold text-gray-900">
+                            {commissionSummary.avgCommission.toFixed(1)}%
+                          </p>
                         </div>
                       </div>
                     </CardContent>
@@ -804,7 +871,9 @@ export function AddSupplier() {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600 mb-1">Total Orders</p>
-                          <p className="text-xl font-bold text-gray-900">248</p>
+                          <p className="text-xl font-bold text-gray-900">
+                            {commissionSummary.totalOrders}
+                          </p>
                         </div>
                       </div>
                     </CardContent>
@@ -935,33 +1004,17 @@ export function AddSupplier() {
                   <p className="text-sm text-gray-500">Supported: PDF, DOC, DOCX, JPG, PNG (Max 5MB)</p>
                 </div>
 
-                {/* Sample Documents */}
+                {/* Uploaded Documents */}
                 <div className="space-y-2">
                   <h3 className="font-semibold text-gray-900 mb-3">Uploaded Documents</h3>
                   
-                  {[
-                    { name: 'Supply Agreement 2025.pdf', size: '2.4 MB', date: '2025-01-15', type: 'Contract' },
-                    { name: 'Business License.pdf', size: '1.8 MB', date: '2024-12-20', type: 'License' },
-                    { name: 'GST Certificate.pdf', size: '950 KB', date: '2024-11-10', type: 'Tax Document' }
-                  ].map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded bg-red-100 flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-red-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{doc.name}</p>
-                          <p className="text-xs text-gray-500">{doc.size} • Uploaded on {doc.date}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">{doc.type}</Badge>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </div>
+                  {brands.length === 0 && medicineTargets.length === 0 && doctorRelations.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                      <p>No documents uploaded yet</p>
+                      <p className="text-sm text-gray-400 mt-1">Upload documents using the area above</p>
                     </div>
-                  ))}
+                  ) : null}
                 </div>
               </div>
             </CardContent>
@@ -978,7 +1031,31 @@ export function AddSupplier() {
               <span>All changes are auto-saved</span>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" size="lg">
+              <Button 
+                variant="outline" 
+                size="lg"
+                onClick={() => {
+                  // Reset form
+                  setSupplierName('');
+                  setContactPerson('');
+                  setEmail('');
+                  setPhone('');
+                  setAddress('');
+                  setGstNumber('');
+                  setCreditLimit('');
+                  setPaymentTerms('30');
+                  setIsActive(true);
+                  setBrands([]);
+                  setMedicineTargets([]);
+                  setDoctorRelations([]);
+                  // Call onCancel callback if provided, otherwise navigate back
+                  if (onCancel) {
+                    onCancel();
+                  } else if (window.history.length > 1) {
+                    window.history.back();
+                  }
+                }}
+              >
                 <X className="w-4 h-4 mr-2" />
                 Cancel
               </Button>
